@@ -7,6 +7,7 @@
 #   tests/run.sh integration   integration tests against the local stack (no internet needed)
 #   tests/run.sh all           lint + unit + integration: must pass before a merge
 #   tests/run.sh live          tests against real trackers (needs tests/env/secrets/trackers.env)
+#   tests/run.sh staging up|down|reset|restart|logs   long-running copy for testing by hand, through the VPN
 #   tests/run.sh reach         which trackers answer from here / through the VPN
 #   tests/run.sh record <tracker> <path> <name>   save a scrubbed tracker page as a fixture
 #   tests/run.sh up            start the local stack and leave it running (http://127.0.0.1:8088)
@@ -120,6 +121,34 @@ cmd_record() {
     live exec -T app php /src/tests/tools/record.php "$1" "$2" > "$out.tmp" && mv "$out.tmp" "$out" && echo "saved $out"
 }
 
+# a long-running copy for testing by hand, through the VPN: see tests/env/staging/compose.yml
+cmd_staging() {
+    local file="$env_dir/staging/compose.yml"
+    [[ "${2:-}" == "--no-vpn" || -f "$env_dir/staging/.no-vpn" ]] && file="$env_dir/staging/compose.novpn.yml"
+    local compose=(docker compose -f "$file")
+    case "${1:-}" in
+        up)
+            build_images
+            if [[ "${2:-}" == "--no-vpn" ]]; then
+                touch "$env_dir/staging/.no-vpn"
+                "${compose[@]}" up -d
+            else
+                rm -f "$env_dir/staging/.no-vpn"
+                [[ -f "$env_dir/secrets/vpn.env" ]] || { echo "tests/env/secrets/vpn.env is missing (see vpn.env.example)"; exit 2; }
+                # the VPN only becomes healthy after the MTU keeper has lowered the tunnel MTU
+                "${compose[@]}" up -d vpn mtu
+                "${compose[@]}" up -d --wait
+            fi
+            echo "TorrentMonitor: http://<this host>:${TM_STAGING_PORT:-8090}   qBittorrent: http://<this host>:${TM_STAGING_QBT_PORT:-8091} (tm / tm-test-pass)"
+            ;;
+        down)    "${compose[@]}" down ;;
+        reset)   "${compose[@]}" down -v ;;
+        restart) "${compose[@]}" restart app ;;
+        logs)    "${compose[@]}" logs --tail 50 "${@:2}" ;;
+        *)       echo "usage: tests/run.sh staging up [--no-vpn] | down | reset | restart | logs [service]"; exit 2 ;;
+    esac
+}
+
 cmd_hooks() {
     install -m 755 "$root/tests/hooks/pre-push" "$(git -C "$root" rev-parse --git-path hooks)/pre-push"
     echo "pre-push hook installed"
@@ -136,6 +165,7 @@ case "$command" in
     record)      cmd_record "$@" ;;
     up)          build_images; remove_stack; offline up -d --wait; echo "application: http://127.0.0.1:${TM_PORT:-8088}" ;;
     down)        remove_stack; echo "stack removed" ;;
+    staging)     cmd_staging "$@" ;;
     hooks)       cmd_hooks ;;
     *)           sed -n '2,20p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 2 ;;
 esac

@@ -1,0 +1,45 @@
+# The staging copy without the VPN: same services, direct internet access.
+#   tests/run.sh staging up --no-vpn
+# Trackers see the address of this host; use the VPN variant (compose.yml) for a realistic check.
+name: tm-staging
+
+services:
+  app:
+    image: tm-tests:php${TM_PHP:-8.5}
+    restart: unless-stopped
+    environment:
+      - TM_DATA_DIR=/data
+      - TZ=${TZ:-Europe/Moscow}
+    volumes:
+      - ../../..:/src:ro
+      - ./start.sh:/start.sh:ro
+      - data:/data
+      - torrents:/app/torrents
+    command: ["/start.sh"]
+    ports:
+      - "${TM_STAGING_PORT:-8090}:80"
+
+  byparr:
+    image: ghcr.io/thephaseless/byparr:latest
+    restart: unless-stopped
+    shm_size: 2gb
+
+  qbittorrent:
+    image: lscr.io/linuxserver/qbittorrent:latest
+    restart: unless-stopped
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - WEBUI_PORT=8080
+    volumes:
+      - ./qbittorrent-init.sh:/custom-cont-init.d/10-tm-staging.sh:ro
+      - qbt:/config
+      - downloads:/downloads
+    ports:
+      - "${TM_STAGING_QBT_PORT:-8091}:8080"
+
+volumes:
+  data:
+  torrents:
+  qbt:
+  downloads:
