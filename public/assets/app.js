@@ -263,6 +263,12 @@ document.addEventListener('alpine:init', () => {
             if (await this.saveTracker()) await this.act('tracker.test', { name: this.trackerForm.name });
         },
 
+        forgetTracker(t) {
+            const used = this.topicCount(t);
+            const note = used ? ' Тем на этом трекере: ' + used + ' — они перестанут проверяться.' : '';
+            if (confirm('Удалить логин, пароль и сохранённую сессию ' + t.name + '?' + note)) this.act('tracker.forget', { name: t.name });
+        },
+
         // ---- settings
         editableSettings(s) {
             const form = Object.assign({}, s, { torrentPassword: '', clearTorrentPassword: false });

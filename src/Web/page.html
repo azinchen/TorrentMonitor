@@ -297,6 +297,7 @@
                             <button class="btn btn--primary" :disabled="!!busy">Сохранить</button>
                             <button type="button" class="btn" @click="testTracker()" :disabled="!!busy" x-text="busy == 'tracker.test' ? 'Проверяю…' : 'Сохранить и проверить вход'"></button>
                             <button type="button" class="btn" x-show="t.warnings" @click="act('warnings.clear', { source: t.name })">Сбросить ошибки</button>
+                            <button type="button" class="btn btn--danger" x-show="t.needsAccount && (t.login || t.hasPassword || t.passkey || t.hasCookie)" @click="forgetTracker(t)" :disabled="!!busy">Удалить учётные данные</button>
                         </div>
                     </div>
                     </template>

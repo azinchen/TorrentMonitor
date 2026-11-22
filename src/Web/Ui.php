@@ -468,6 +468,20 @@ final class Ui
         return array('message' => 'Сохранено.') + $this->doOverview();
     }
 
+    //removes the login, password, passkey and the saved session of the tracker; the address and proxy stay
+    private function doTrackerForget(): array
+    {
+        $name = $this->str('name');
+        if ( ! Registry::has($name))
+            $this->fail('Неизвестный трекер.');
+        Accounts::set($name, array('login' => '', 'password' => '', 'passkey' => ''));
+        Accounts::setCookie($name, '');
+        App::resetHttp();
+        Registry::reset();
+        Warnings::clear($name);
+        return array('message' => 'Учётные данные '.$name.' удалены.') + $this->doOverview();
+    }
+
     //tries to log in to the tracker with the saved credentials
     private function doTrackerTest(): array
     {

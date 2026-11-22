@@ -133,6 +133,22 @@ final class StorageTest extends IntegrationTestCase
         $this->assertSame('', $config['trackers']['rutracker.org']['password']);
     }
 
+    public function testForgettingATrackerRemovesCredentialsAndSessionOnly()
+    {
+        AppState::setCredentials('rutracker.org', 'old-login', 'Saved-Pass');
+        Env::ui('tracker.save', array('name' => 'rutracker.org', 'login' => 'old-login', 'address' => 'rutracker.example', 'cookie' => 'bb_session=abc', 'proxy' => 'off'));
+        $this->assertSame('bb_session=abc', json_decode(AppState::file('state.json'), true)['cookies']['rutracker.org']);
+
+        $forgot = Env::ui('tracker.forget', array('name' => 'rutracker.org'))['json'];
+        $this->assertTrue($forgot['ok']);
+        $config = json_decode(AppState::file('config.json'), true);
+        $this->assertSame(array('login' => '', 'password' => '', 'passkey' => '', 'address' => 'rutracker.example'), $config['trackers']['rutracker.org']);
+        $this->assertSame(array('use' => 'no'), $config['trackerProxy']['rutracker.org'], 'the proxy choice stays');
+        $this->assertSame('', json_decode(AppState::file('state.json'), true)['cookies']['rutracker.org']);
+
+        $this->assertFalse(Env::ui('tracker.forget', array('name' => 'nowhere.example'))['json']['ok']);
+    }
+
     public function testProxyForOneTrackerIsSavedAndUsed()
     {
         $this->loginToTracker();

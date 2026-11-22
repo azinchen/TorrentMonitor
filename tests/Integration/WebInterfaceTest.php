@@ -94,7 +94,7 @@ final class WebInterfaceTest extends IntegrationTestCase
         $boot = Env::uiOpen();
         $this->assertFalse($boot['json']['in']);
         $this->assertArrayNotHasKey('topics', $boot['json']);
-        foreach (array('overview', 'settings.save', 'topic.add', 'tracker.save', 'run', 'health', 'settings.showkey', 'update.install') as $action)
+        foreach (array('overview', 'settings.save', 'topic.add', 'tracker.save', 'tracker.forget', 'run', 'health', 'settings.showkey', 'update.install') as $action)
             $this->assertSame(401, Env::ui($action)['status'], $action);
 
         $this->assertFalse(Env::ui('login', array('password' => 'wrong'))['json']['ok']);
