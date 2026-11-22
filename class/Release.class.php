@@ -123,10 +123,11 @@ class Release
         return file_put_contents($target, $response['body']) !== FALSE;
     }
 
-    //кеш лежит в каталоге приложения, рядом с laststart.txt
+    //кеш лежит в каталоге данных
     private static function cacheFile()
     {
-        return dirname(__FILE__).'/../release.cache.json';
+        Storage::prepare();
+        return Storage::dir().'/release.cache.json';
     }
 
     private static function saveCache($release, $ttl)

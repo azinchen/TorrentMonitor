@@ -3,7 +3,7 @@
 ///////////TorrentMonitor///////////
 ////////////////////////////////////
 $dir = dirname(__FILE__).'/';
-include_once $dir.'config.php';
+include_once $dir.'class/Config.class.php';
 include_once $dir.'class/System.class.php';
 include_once $dir.'class/Database.class.php';
 include_once $dir.'class/Errors.class.php';
@@ -19,6 +19,9 @@ function getTimestamp()
 {
     return '['.date_format(date_create(), 'Y-m-d H:i:s').'] ';
 }
+
+if (Sys::legacyDatabaseNotice() !== NULL)
+    die(Sys::legacyDatabaseNotice()."\r\n");
 
 $debug = Database::getSetting('debug');
 $autoUpdate = Database::getSetting('autoUpdate');

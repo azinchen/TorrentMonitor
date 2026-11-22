@@ -29,7 +29,7 @@ if (! empty($news)) {
     }
 }
 
-$lastStart = @file_get_contents(dirname(__FILE__).'/../laststart.txt');
+$lastStart = Database::getLastStart();
 if (! empty($lastStart)) {
     $date = explode('-', $lastStart);
     $lastStartTime =  $date[0].' '.Sys::dateNumToString($date[1]).' '.$date[2];

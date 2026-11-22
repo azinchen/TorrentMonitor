@@ -1,1176 +1,175 @@
 <?php
-$dir = dirname(__FILE__)."/../";
-include_once $dir."config.php";
-include_once $dir."class/Crypto.class.php";
+include_once dirname(__FILE__).'/Storage.class.php';
 
+//Доступ к данным TorrentMonitor. Имя класса и методы остались от версий с базой данных,
+//но данные теперь лежат в JSON-файлах (см. Storage): база данных не используется.
 class Database
 {
-    private $dbh;
-    private $dbType;
-    private static $instance;
+    // ------------------------------------------------------------------ helpers
 
-    private function __construct()
+    private static function now()
     {
-        $this->dbType = Config::read('db.type');
-
-        switch ($this->dbType)
-        {
-            case 'mysql':
-                $dsn = "mysql:host=".Config::read('db.host').";dbname=".Config::read('db.basename');
-                $username = Config::read('db.user');
-                $password = Config::read('db.password');
-                $options = array();
-                // Handle charset setting for MySQL
-                $charset = Config::read('db.charset');
-                if (!empty($charset)) {
-                    $options[PDO::MYSQL_ATTR_INIT_COMMAND] = "SET NAMES " . $charset;
-                }
-                break;
-			case 'sqlite':
-				$dsn = "sqlite:".Config::read('db.basename');
-				$options = array(PDO::ATTR_PERSISTENT => true);
-				break;
-			case 'sqlite2':
-				$dsn = "sqlite2:".Config::read('db.basename');
-				$options = array(PDO::ATTR_PERSISTENT => true);
-				break;
-            case 'pgsql':
-                $dsn = "pgsql:host=".Config::read('db.host').";port=".Config::read('db.port').";dbname=".Config::read('db.basename').";user=".Config::read('db.user').";password=".Config::read('db.password');
-                break;
-            default:
-                throw new Exception('Unsupported database type: ' . $this->dbType);
-        }
-
-        try {
-            if ($this->dbType == 'pgsql')
-               $this->dbh = new PDO($dsn);
-            elseif ($this->dbType == 'sqlite')
-               $this->dbh = new PDO($dsn, NULL, NULL, $options);
-            elseif ($this->dbType == 'mysql')
-               $this->dbh = new PDO($dsn, $username, $password, $options);
-        } catch (PDOException $e) {
-            throw new RuntimeException('DB connection failed: '.$e->getMessage(), 0, $e);
-        }
+        return date('Y-m-d H:i:s');
     }
 
-    public static function getInstance()
+    //индекс элемента списка с заданным id или NULL
+    private static function indexById(array $list, $id)
     {
-        if ( ! isset(self::$instance))
-        {
-            $object = __CLASS__;
-            self::$instance = new $object;
-        }
-        return self::$instance;
+        foreach ($list as $i => $item)
+            if ($item['id'] == $id)
+                return $i;
+        return NULL;
     }
 
-    public static function getDbType()
+    private static function topic($id)
     {
-        return Database::getInstance()->dbType;
+        $data = Storage::torrents()->read();
+        $i = self::indexById($data['torrents'], $id);
+        return $i === NULL ? NULL : $data['torrents'][$i];
     }
 
-    public static function newStatement($request)
+    //изменяет поля темы; возвращает TRUE, если тема найдена
+    private static function changeTopic($id, array $fields)
     {
-        if (empty($request)) {
-            throw new InvalidArgumentException('SQL request cannot be empty');
-        }
-        if (self::getDbType() == 'pgsql')
-            $request = str_replace('`','"',$request);
-	    return self::getInstance()->dbh->prepare($request);
+        $found = FALSE;
+        Storage::torrents()->update(function (&$data) use ($id, $fields, &$found) {
+            $i = Database::indexById($data['torrents'], $id);
+            if ($i === NULL)
+                return FALSE;
+            $found = TRUE;
+            $before = $data['torrents'][$i];
+            $data['torrents'][$i] = Database::withActivity($before, $fields);
+            return $data['torrents'][$i] !== $before;
+        });
+        return $found;
     }
 
-    public static function updateQuery($request)
+    //применяет изменения к теме; смена даты раздачи считается её обновлением
+    private static function withActivity(array $topic, array $fields)
     {
-        $stmt = self::newStatement($request);
-        if ($stmt->execute())
-        {
-            foreach ($stmt as $row)
-            {
-                return $row['val'];
-            }
-        }
-        else
-        {
-            $error = $stmt->errorInfo();
-            return 'Ошибка при выполнении запроса: '.$request.'<br>'.$error[2];
-        }
+        if (isset($fields['timestamp']) && $fields['timestamp'] != $topic['timestamp'])
+            $fields['lastActivityAt'] = self::now();
+        return array_merge($topic, $fields);
     }
 
-    //Перешифровывает значение(я) колонки, если они ещё хранятся в виде, унаследованном
-    //от версии без шифрования (нет префикса Crypto::PREFIX). Используется как переходный
-    //механизм при переносе старой базы: расшифровка читает старое значение как есть,
-    //а эта функция на лету переводит его в новый зашифрованный формат при первом обращении.
-    private static function reencryptIfLegacy($table, $idColumn, $idValue, array $columns)
+    private static function newTopic(array $fields)
     {
-        $set = array();
-        $params = array(':idval' => $idValue);
-        foreach ($columns as $column => $rawValue)
-        {
-            if ($rawValue === '' || $rawValue === NULL || Crypto::isEncrypted($rawValue))
-                continue;
-            $set[] = "`$column` = :$column";
-            $params[":$column"] = Crypto::encrypt($rawValue);
-        }
-        if (empty($set))
-            return;
-        $stmt = self::newStatement("UPDATE `$table` SET ".implode(', ', $set)." WHERE `$idColumn` = :idval");
-        $stmt->execute($params);
+        return $fields + array(
+            'tracker'        => '',
+            'name'           => '',
+            'hd'             => 0,
+            'path'           => '',
+            'torrent_id'     => '',
+            'ep'             => '',
+            'timestamp'      => '0000-00-00 00:00:00',
+            'auto_update'    => 0,
+            'hash'           => '',
+            'script'         => '',
+            'pause'          => 0,
+            'error'          => 0,
+            'closed'         => 0,
+            'category'       => '',
+            'addedAt'        => self::now(),
+            'lastActivityAt' => '',
+        );
     }
+
+    private static function addTopic(array $fields)
+    {
+        Storage::torrents()->update(function (&$data) use ($fields) {
+            $data['torrents'][] = array('id' => $data['nextId']++) + Database::newTopic($fields);
+        });
+        return TRUE;
+    }
+
+    //части даты для вывода в интерфейсе
+    private static function dateParts($timestamp, $timeFormat = 'H:i')
+    {
+        $time = (empty($timestamp) || strpos($timestamp, '0000') === 0) ? FALSE : strtotime($timestamp);
+        if ($time === FALSE)
+            return array('day' => NULL, 'month' => NULL, 'year' => NULL, 'time' => NULL);
+        return array('day' => date('d', $time), 'month' => date('m', $time), 'year' => date('Y', $time), 'time' => date($timeFormat, $time));
+    }
+
+    //учётные данные трекера с учётом значений по умолчанию; NULL для неизвестного трекера
+    private static function trackerAccount($tracker)
+    {
+        $catalog = Catalog::trackers();
+        if ( ! isset($catalog[$tracker]))
+            return NULL;
+        $config = Storage::config()->read();
+        $state = Storage::state()->read();
+        $saved = isset($config['trackers'][$tracker]) ? $config['trackers'][$tracker] : array();
+        //трекерам без авторизации исторически записывался пробел: так движок считает их настроенными
+        $blank = $catalog[$tracker]['necessarily'] ? '' : ' ';
+        return array(
+            'id'          => $catalog[$tracker]['id'],
+            'tracker'     => $tracker,
+            'login'       => isset($saved['login']) ? $saved['login'] : $blank,
+            'password'    => isset($saved['password']) ? $saved['password'] : $blank,
+            'passkey'     => isset($saved['passkey']) ? $saved['passkey'] : '',
+            'cookie'      => isset($state['cookies'][$tracker]) ? $state['cookies'][$tracker] : '',
+            'necessarily' => $catalog[$tracker]['necessarily'],
+            'type'        => $catalog[$tracker]['type'],
+        );
+    }
+
+    // ----------------------------------------------------------------- settings
 
     public static function getSetting($param)
     {
-        $stmt = self::newStatement("SELECT `val` FROM `settings` WHERE `key` = :param");
-        $stmt->bindParam(':param', $param);
-        if ($stmt->execute())
-        {
-            foreach ($stmt as $row)
-            {
-                if ($param == 'torrentPassword')
-                {
-                    self::reencryptIfLegacy('settings', 'key', $param, array('val' => $row['val']));
-                    return Crypto::decrypt($row['val']);
-                }
-                return $row['val'];
-            }
-        }
+        $state = Storage::state()->read();
+        if (array_key_exists($param, Storage::stateSettingsDefaults()))
+            return isset($state['settings'][$param]) ? (string)$state['settings'][$param] : Storage::stateSettingsDefaults()[$param];
+
+        $config = Storage::config()->read();
+        if (isset($config['settings'][$param]))
+            return (string)$config['settings'][$param];
+        $defaults = Storage::settingsDefaults();
+        return isset($defaults[$param]) ? $defaults[$param] : NULL;
     }
 
+    //список вида array(array(ключ => значение), ...), как его ждут torrent-клиенты и страница настроек
     public static function getAllSetting()
     {
-        $stmt = self::newStatement("SELECT * FROM `settings`");
-        if ($stmt->execute())
-        {
-            foreach ($stmt as $row)
-            {
-                $val = $row['val'];
-                if ($row['key'] == 'torrentPassword')
-                {
-                    self::reencryptIfLegacy('settings', 'key', $row['key'], array('val' => $val));
-                    $val = Crypto::decrypt($val);
-                }
-                $resultArray[] = array("{$row['key']}" => "{$val}");
-            }
-            if ( ! empty($resultArray))
-                return $resultArray;
-        }
-    }
-
-    public static function getPaths()
-    {
-        $stmt = self::newStatement("SELECT DISTINCT(`path`) AS `path` FROM `torrent`");
-        if ($stmt->execute())
-        {
-            $i = 0;
-            foreach ($stmt as $row)
-            {
-                if ( ! empty($row['path']))
-                {
-                    $resultArray[$i]['path'] = $row['path'];
-                    $i++;
-                }
-            }
-            if ( ! empty($resultArray))
-                return $resultArray;
-        }
-    }
-
-    public static function getTorrentDownloadPath($id)
-    {
-        $stmt = self::newStatement("SELECT `path` FROM `torrent` WHERE `id` = :id");
-        $stmt->bindParam(':id', $id);
-        if ($stmt->execute())
-        {
-            foreach ($stmt as $row)
-            {
-                return $row['path'];
-            }
-        }
-    }
-
-    public static function getTorrentCategory($id)
-    {
-        $stmt = self::newStatement("SELECT `category` FROM `torrent` WHERE `id` = :id");
-        $stmt->bindParam(':id', $id);
-        if ($stmt->execute())
-            foreach ($stmt as $row)
-                return (string)$row['category'];
-        return '';
-    }
-
-    public static function getDistinctCategories()
-    {
-        $stmt = self::newStatement("SELECT DISTINCT `category` FROM `torrent` WHERE `category` != '' ORDER BY `category`");
-        $stmt->execute();
-        return $stmt->fetchAll(PDO::FETCH_COLUMN, 0) ?: array();
+        $config = Storage::config()->read();
+        $state = Storage::state()->read();
+        $all = array_merge(
+            Storage::settingsDefaults(), $config['settings'],
+            Storage::stateSettingsDefaults(), $state['settings']
+        );
+        $result = array();
+        foreach ($all as $key => $val)
+            $result[] = array($key => (string)$val);
+        return $result;
     }
 
     public static function updateSettings($setting, $val)
     {
-        if ($setting == 'torrentPassword')
-            $val = Crypto::encrypt($val);
-        $stmt = self::newStatement("UPDATE `settings` SET `val` = :val WHERE `key` = :setting");
-        $stmt->bindParam(':setting', $setting);
-        $stmt->bindParam(':val', $val);
-        if ( ! $stmt->execute())
-            return $stmt->errorInfo();
-
-        // строки могло не быть, если настройка добавлена в схему уже после разворачивания
-        // этой установки и не попала в update.xml-миграцию (UPDATE такое молча пропускает)
-        if ($stmt->rowCount() == 0)
-        {
-            $insertStmt = self::newStatement("INSERT INTO `settings` (`key`, `val`) VALUES (:setting, :val)");
-            $insertStmt->bindParam(':setting', $setting);
-            $insertStmt->bindParam(':val', $val);
-            if ( ! $insertStmt->execute())
-                return $insertStmt->errorInfo();
-        }
-
-        return TRUE;
-    }
-
-    public static function updateAddress($type, $service, $address)
-    {
-        $stmt = self::newStatement("UPDATE `notifications` SET `address` = :address WHERE `id` = :service AND `type` = :type");
-        $stmt->bindParam(':address', $address);
-        $stmt->bindParam(':service', $service);
-        $stmt->bindParam(':type', $type);
-        if ($stmt->execute())
+        $val = (string)$val;
+        $store = array_key_exists($setting, Storage::stateSettingsDefaults()) ? Storage::state() : Storage::config();
+        $store->update(function (&$data) use ($setting, $val) {
+            if (isset($data['settings'][$setting]) && $data['settings'][$setting] === $val)
+                return FALSE;
+            $data['settings'][$setting] = $val;
             return TRUE;
-        else
-            return $stmt->errorInfo();
+        });
+        return TRUE;
     }
 
     public static function setUpdateNotification($param)
     {
-        $stmt = self::newStatement("UPDATE `settings` SET `val` = :val WHERE `key` = 'sentUpdateNotification'");
-        $stmt->bindParam(':val', $param);
-        if ($stmt->execute())
-            return TRUE;
-        else
-            return $stmt->errorInfo();
+        return self::updateSettings('sentUpdateNotification', $param ? '1' : '0');
     }
 
     public static function getUpdateNotification()
     {
-        $stmt = self::newStatement("SELECT `val` FROM `settings` WHERE `key` = 'sentUpdateNotification'");
-        if ($stmt->execute())
-        {
-            foreach ($stmt as $row)
-            {
-                if ($row['val'] == 1)
-                    return TRUE;
-                else
-                    return FALSE;
-            }
-        }
-    }
-
-    public static function getCredentials($tracker)
-    {
-        $stmt = self::newStatement("SELECT `log`, `pass`, `passkey` FROM `credentials` WHERE `tracker` = :tracker");
-        $stmt->bindParam(':tracker', $tracker);
-        if ($stmt->execute())
-        {
-            foreach ($stmt as $row)
-            {
-                if ($row['log'] != "" && $row['pass'] != "")
-                {
-                    self::reencryptIfLegacy('credentials', 'tracker', $tracker, array('pass' => $row['pass'], 'passkey' => $row['passkey']));
-                    $resultArray['login'] = $row['log'];
-                    $resultArray['password'] = Crypto::decrypt($row['pass']);
-                    $resultArray['passkey'] = Crypto::decrypt($row['passkey']);
-                }
-                else
-                    return FALSE;
-            }
-            if ( ! empty($resultArray))
-                return $resultArray;
-        }
-    }
-
-    public static function getAllCredentials()
-    {
-        $stmt = self::newStatement("SELECT `id`, `tracker`, `log`, `pass`, `passkey`, `cookie`, `necessarily` FROM `credentials` ORDER BY `tracker`");
-        if ($stmt->execute())
-        {
-            $i = 0;
-            foreach ($stmt as $row)
-            {
-                self::reencryptIfLegacy('credentials', 'tracker', $row['tracker'], array('pass' => $row['pass'], 'passkey' => $row['passkey']));
-                $resultArray[$i]['id'] = $row['id'];
-                $resultArray[$i]['tracker'] = $row['tracker'];
-                $resultArray[$i]['login'] = $row['log'];
-                $resultArray[$i]['password'] = Crypto::decrypt($row['pass']);
-                $resultArray[$i]['passkey'] = Crypto::decrypt($row['passkey']);
-                $resultArray[$i]['cookie'] = Crypto::decrypt($row['cookie']);
-                $resultArray[$i]['necessarily'] = $row['necessarily'];
-                $i++;
-            }
-            if ( ! empty($resultArray))
-                return $resultArray;
-        }
-    }
-
-    public static function countCredentials($password)
-    {
-        $stmt = self::newStatement("SELECT COUNT(*) AS count FROM settings WHERE `key` = 'password' AND `val` = :password");
-        $stmt->bindParam(':password', $password);
-        if ($stmt->execute())
-        {
-            foreach ($stmt as $row)
-            {
-                if ($row['count'] == '1')
-                    return TRUE;
-                else
-                    return FALSE;
-            }
-        }
-    }
-
-    public static function updateCredentials($password)
-    {
-        $stmt = self::newStatement("UPDATE `settings` SET `val` = :password WHERE `key` = 'password'");
-        $stmt->bindParam(':password', $password);
-        if ($stmt->execute())
-            return TRUE;
-        else
-            return FALSE;
-    }
-
-    public static function setCredentials($id, $login, $password, $passkey)
-    {
-        $password = Crypto::encrypt($password);
-        $passkey = Crypto::encrypt($passkey);
-        $stmt = self::newStatement("UPDATE `credentials` SET `log` = :login, `pass` = :password, `passkey` = :passkey WHERE `id` = :id");
-        $stmt->bindParam(':id', $id);
-        $stmt->bindParam(':login', $login);
-        $stmt->bindParam(':password', $password);
-        $stmt->bindParam(':passkey', $passkey);
-        if ($stmt->execute())
-            return TRUE;
-        else
-            return FALSE;
-    }
-
-    public static function checkTrackersCredentialsExist($tracker)
-    {
-        $stmt = self::newStatement("SELECT `log`, `pass`, `cookie` FROM `credentials` WHERE `tracker` = :tracker");
-        $stmt->bindParam(':tracker', $tracker);
-        if ($stmt->execute())
-        {
-            foreach ($stmt as $row)
-            {
-                if (( ! empty($row['log']) && ! empty($row['pass'])) || ! empty($row['cookie']))
-                    return TRUE;
-                else
-                    return FALSE;
-            }
-        }
-    }
-
-    public static function getTrackersList()
-    {
-        $stmt = self::newStatement("SELECT `id`, `tracker` FROM `credentials` ORDER BY `tracker`");
-        if ($stmt->execute())
-        {
-            $i = 0;
-            foreach ($stmt as $row)
-            {
-                $resultArray[$i] = $row['tracker'];
-                $i++;
-            }
-            if ( ! empty($resultArray))
-                return $resultArray;
-        }
-    }
-
-    public static function getTorrentsList($order, $dir = 'ASC')
-    {
-    	if ($order == 'date')
-    		$order = 't.timestamp ' . $dir;
-    	else
-    		$order = 't.tracker, t.name ' . $dir . ', t.hd';
-
-        if (Database::getDbType() == 'pgsql')
-        {
-            $stmt = Database::getInstance()->dbh->prepare("SELECT t.id, t.tracker, t.name, t.hd, t.path, t.torrent_id, t.ep, t.timestamp, t.auto_update, t.script, t.pause,
-                            to_char(t.timestamp, 'dd') AS day,
-                            to_char(t.timestamp, 'mm') AS month,
-                            to_char(t.timestamp, 'YYYY') AS year,
-                            to_char(t.timestamp, 'HH24:MI:SS') AS time,
-                            t.hash, t.error, t.closed, c.type
-                            FROM torrent t
-                            INNER JOIN credentials c ON c.tracker = t.tracker
-                            ORDER BY {$order}");
-        }
-        elseif (Database::getDbType() == 'mysql')
-        {
-            $stmt = Database::getInstance()->dbh->prepare("SELECT `t`.`id`, `t`.`tracker`, `t`.`name`, `t`.`hd`, `t`.`path`, `t`.`torrent_id`, `t`.`ep`, `t`.`timestamp`, `t`.`auto_update`, `t`.`script`, `t`.`pause`,
-                            DATE_FORMAT(`t`.`timestamp`, '%d') AS `day`,
-                            DATE_FORMAT(`t`.`timestamp`, '%m') AS `month`,
-                            DATE_FORMAT(`t`.`timestamp`, '%Y') AS `year`,
-                            DATE_FORMAT(`t`.`timestamp`, '%T') AS `time`,
-                            `t`.`hash`, `t`.`error`, `t`.`closed`, `c`.`type`
-                            FROM `torrent` t
-                            INNER JOIN `credentials` c ON `c`.`tracker` = `t`.`tracker`
-                            ORDER BY {$order}");
-        }
-        elseif (Database::getDbType() == 'sqlite')
-        {
-            $stmt = Database::getInstance()->dbh->prepare("SELECT `t`.`id`, `t`.`tracker`, `t`.`name`, `t`.`hd`, `t`.`path`, `t`.`torrent_id`, `t`.`ep`, `t`.`timestamp`, `t`.`auto_update`, `t`.`script`, `t`.`pause`,
-                            strftime('%d', `t`.`timestamp`) AS `day`,
-                            strftime('%m', `t`.`timestamp`) AS `month`,
-                            strftime('%Y', `t`.`timestamp`) AS `year`,
-                            strftime('%H:%M', `t`.`timestamp`) AS `time`,
-                            `t`.`hash`, `t`.`error`, `t`.`closed`, `c`.`type`
-                            FROM `torrent` t
-                            INNER JOIN `credentials` c ON `c`.`tracker` = `t`.`tracker`
-                            ORDER BY {$order}");
-        }
-        if ($stmt->execute())
-        {
-            $i = 0;
-            foreach ($stmt as $row)
-            {
-                $resultArray[$i]['id'] = $row['id'];
-                $resultArray[$i]['tracker'] = $row['tracker'];
-                $resultArray[$i]['name'] = $row['name'];
-                $resultArray[$i]['hd'] = $row['hd'];
-                $resultArray[$i]['path'] = $row['path'];
-                $resultArray[$i]['torrent_id'] = $row['torrent_id'];
-                $resultArray[$i]['ep'] = $row['ep'];
-                $resultArray[$i]['timestamp'] = $row['timestamp'];
-                $resultArray[$i]['auto_update'] = $row['auto_update'];
-                $resultArray[$i]['script'] = $row['script'];
-                $resultArray[$i]['pause'] = $row['pause'];
-                $resultArray[$i]['day'] = $row['day'];
-                $resultArray[$i]['month'] = $row['month'];
-                $resultArray[$i]['year'] = $row['year'];
-                $resultArray[$i]['time'] = $row['time'];
-                $resultArray[$i]['hash'] = $row['hash'];
-                $resultArray[$i]['error'] = $row['error'];
-                $resultArray[$i]['closed'] = $row['closed'];
-                $resultArray[$i]['type'] = $row['type'];
-                $i++;
-            }
-            if ( ! empty($resultArray))
-                return $resultArray;
-        }
-        else
-        {
-            $error = $stmt->errorInfo();
-            return 'Ошибка в функции: '.__CLASS__.'::'.__FUNCTION__.': '.$error[2];
-        }
-    }
-
-    public static function getTorrent($id)
-    {
-        $stmt = self::newStatement("SELECT `id`, `tracker`, `name`, `hd`, `path`, `torrent_id`, `auto_update`, `script`, `pause`, `closed`, `hash`, `category` FROM `torrent` WHERE `id` = :id");
-        $stmt->bindParam(':id', $id);
-        if ($stmt->execute())
-        {
-            $i = 0;
-            foreach ($stmt as $row)
-            {
-                $resultArray[$i]['id'] = $row['id'];
-                $resultArray[$i]['tracker'] = $row['tracker'];
-                $resultArray[$i]['name'] = $row['name'];
-                $resultArray[$i]['hd'] = $row['hd'];
-                $resultArray[$i]['path'] = $row['path'];
-                $resultArray[$i]['torrent_id'] = $row['torrent_id'];
-                $resultArray[$i]['auto_update'] = $row['auto_update'];
-                $resultArray[$i]['script'] = $row['script'];
-                $resultArray[$i]['pause'] = $row['pause'];
-                $resultArray[$i]['closed'] = $row['closed'];
-                $resultArray[$i]['hash'] = $row['hash'];
-                $resultArray[$i]['category'] = $row['category'];
-                $i++;
-            }
-            if ( ! empty($resultArray))
-                return $resultArray;
-        }
-    }
-
-    public static function getTorrentFull($id)
-    {
-        $stmt = self::newStatement("SELECT `id`, `tracker`, `name`, `hd`, `path`, `torrent_id`, `ep`, `timestamp`, `auto_update`, `script`, `pause`, `closed`, `hash`, `error`, `category` FROM `torrent` WHERE `id` = :id");
-        $stmt->bindParam(':id', $id);
-        if ($stmt->execute())
-        {
-            foreach ($stmt as $row)
-            {
-                return [
-                    'id'          => (int)$row['id'],
-                    'tracker'     => $row['tracker'],
-                    'name'        => $row['name'],
-                    'hd'          => (int)$row['hd'],
-                    'path'        => $row['path'],
-                    'torrent_id'  => $row['torrent_id'],
-                    'ep'          => $row['ep'],
-                    'timestamp'   => $row['timestamp'],
-                    'auto_update' => (int)$row['auto_update'],
-                    'script'      => $row['script'],
-                    'pause'       => (int)$row['pause'],
-                    'closed'      => (int)$row['closed'],
-                    'hash'        => $row['hash'],
-                    'error'       => (int)$row['error'],
-                    'category'    => $row['category'],
-                ];
-            }
-        }
-        return null;
-    }
-
-    public static function getUserToWatch()
-    {
-        $stmt = self::newStatement("SELECT `id`, `tracker`, `name` FROM `watch` ORDER BY `tracker`");
-        if ($stmt->execute())
-        {
-            $i = 0;
-            foreach ($stmt as $row)
-            {
-                $resultArray[$i]['id'] = $row['id'];
-                $resultArray[$i]['tracker'] = $row['tracker'];
-                $resultArray[$i]['name'] = $row['name'];
-                $i++;
-            }
-            if ( ! empty($resultArray))
-                return $resultArray;
-        }
-    }
-
-    public static function checkUserExist($tracker, $name)
-    {
-        $stmt = self::newStatement("SELECT COUNT(*) AS count FROM `watch` WHERE `tracker` = :tracker AND `name` = :name");
-        $stmt->bindParam(':tracker', $tracker);
-        $stmt->bindParam(':name', $name);
-        if ($stmt->execute())
-        {
-            foreach ($stmt as $row)
-            {
-                if ($row['count'] == 0)
-                    return TRUE;
-                else
-                    return FALSE;
-            }
-        }
-    }
-
-    public static function setUser($tracker, $name)
-    {
-        $stmt = self::newStatement("INSERT INTO `watch` (`tracker`, `name`) VALUES (:tracker, :name)");
-        $stmt->bindParam(':tracker', $tracker);
-        $stmt->bindParam(':name', $name);
-        if ($stmt->execute())
-            return TRUE;
-        else
-            return FALSE;
-    }
-
-    public static function deletUser($id)
-    {
-        $stmt = self::newStatement("DELETE FROM `watch` WHERE `id` = :id");
-        $stmt->bindParam(':id', $id);
-        if ($stmt->execute())
-        {
-            $stmt = self::newStatement("DELETE FROM `buffer` WHERE `user_id` = :id");
-            $stmt->bindParam(':id', $id);
-            if ($stmt->execute())
-                return TRUE;
-            else
-                return FALSE;
-        }
-        else
-            return FALSE;
-    }
-
-
-    public static function addThremeToBuffer($user_id, $section, $threme_id, $threme, $timestamp, $tracker)
-    {
-        $stmt = self::newStatement("SELECT COUNT(*) AS count FROM `buffer` WHERE `user_id` = :user_id AND `threme_id` = :threme_id");
-        $stmt->bindParam(':user_id', $user_id);
-        $stmt->bindParam(':threme_id', $threme_id);
-        if ($stmt->execute())
-        {
-            foreach ($stmt as $row)
-            {
-                if ($row['count'] == 0)
-                {
-                    $stmt = self::newStatement("INSERT INTO buffer (user_id, section, threme_id, threme, timestamp, tracker) VALUES (:user_id, :section, :threme_id, :threme, :timestamp, :tracker)");
-                    $stmt->bindParam(':user_id', $user_id);
-                    //section/threme приходят регэкспом из сырого HTML страницы трекера и могут
-                    //содержать HTML-сущности (&#039; и т.п.) — раскодируем их здесь, до
-                    //htmlspecialchars() на выводе, иначе получим двойное кодирование
-                    $section = html_entity_decode($section, ENT_QUOTES, 'UTF-8');
-                    $stmt->bindParam(':section', $section);
-                    $stmt->bindParam(':threme_id', $threme_id);
-                    $threme = preg_replace('/<wbr>/', '', $threme);
-                    $threme = html_entity_decode($threme, ENT_QUOTES, 'UTF-8');
-                    $stmt->bindParam(':threme', $threme);
-                    $stmt->bindParam(':timestamp', $timestamp);
-                    $stmt->bindParam(':tracker', $tracker);
-                    if ($stmt->execute())
-                        return TRUE;
-                    else
-                        return FALSE;
-                }
-            }
-        }
-        else
-            return FALSE;
-    }
-
-    public static function getThremesFromBuffer($user_id)
-    {
-        $stmt = self::newStatement("SELECT `id`, `section`, `threme_id`, `threme`, `timestamp`, `tracker` FROM `buffer` WHERE `user_id` = :user_id AND `new` = '1' ORDER BY `threme_id` DESC");
-        $stmt->bindParam(':user_id', $user_id);
-        if ($stmt->execute())
-        {
-            $i=0;
-            foreach ($stmt as $row)
-            {
-                $resultArray[$i]['id'] = $row['id'];
-                //html_entity_decode на случай записей, сохранённых до фикса парсинга
-                //заголовков (старые строки могли остаться с необработанной сущностью)
-                $resultArray[$i]['section'] = html_entity_decode($row['section'], ENT_QUOTES, 'UTF-8');
-                $resultArray[$i]['threme_id'] = $row['threme_id'];
-                $resultArray[$i]['threme'] = html_entity_decode($row['threme'], ENT_QUOTES, 'UTF-8');
-                $resultArray[$i]['timestamp'] = $row['timestamp'];
-                $resultArray[$i]['tracker'] = $row['tracker'];
-                $i++;
-            }
-            if ( ! empty($resultArray))
-                return $resultArray;
-        }
-    }
-
-    public static function transferFromBuffer($id)
-    {
-        $stmt = self::newStatement("SELECT `buffer`.`threme_id`, `buffer`.`threme`, `watch`.`tracker` FROM `buffer` LEFT JOIN `watch` ON `buffer`.`user_id` = `watch`.`id` WHERE `buffer`.`id` = :id");
-        $stmt->bindParam(':id', $id);
-        if ($stmt->execute())
-        {
-            foreach ($stmt as $row)
-            {
-                $threme = $row['threme_id'];
-                $name = $row['threme'];
-                $tracker = $row['tracker'];
-                Database::setThreme($tracker, $name, '', $threme, 0);
-                Database::deleteFromBuffer($id);
-            }
-        }
-    }
-
-    public static function deleteFromBuffer($id)
-    {
-        $stmt = self::newStatement("UPDATE `buffer` SET `new` = '0' WHERE `id` = :id");
-        $stmt->bindParam(':id', $id);
-        if ($stmt->execute())
-            return TRUE;
-        else
-            return FALSE;
-    }
-
-    public static function thremesClear($user_id)
-    {
-        $stmt = self::newStatement("UPDATE `buffer` SET `new` = '0' WHERE `user_id` = :user_id");
-        $stmt->bindParam(':user_id', $user_id);
-        if ($stmt->execute())
-            return TRUE;
-        else
-            return FALSE;
-    }
-
-    public static function selectAllFromBuffer()
-    {
-        $stmt = self::newStatement("SELECT `id` FROM `buffer` WHERE `accept` = '0' AND `new` = '1'");
-        if ($stmt->execute())
-        {
-            $i=0;
-            foreach ($stmt as $row)
-            {
-                $resultArray[$i]['id'] = $row['id'];
-                $i++;
-            }
-            if ( ! empty($resultArray))
-                return $resultArray;
-        }
-    }
-
-    public static function updateThremesToDownload($id)
-    {
-        $stmt = self::newStatement("UPDATE `buffer` SET `accept` = '1', `new` = '0' WHERE `id` = :id");
-        $stmt->bindParam(':id', $id);
-        if ($stmt->execute())
-            return TRUE;
-        else
-            return FALSE;
-    }
-
-    public static function takeToDownload($tracker)
-    {
-        $stmt = self::newStatement("SELECT `id`, `threme_id`, `threme` FROM `buffer` WHERE `accept` = '1' AND `downloaded` = '0' AND `tracker` = :tracker");
-        $stmt->bindParam(':tracker', $tracker);
-        if ($stmt->execute())
-        {
-            $i=0;
-            foreach ($stmt as $row)
-            {
-                $resultArray[$i]['id'] = $row['id'];
-                $resultArray[$i]['threme_id'] = $row['threme_id'];
-                $resultArray[$i]['threme'] = $row['threme'];
-                $i++;
-            }
-            if ( ! empty($resultArray))
-                return $resultArray;
-        }
-    }
-
-    public static function setDownloaded($id)
-    {
-        $stmt = self::newStatement("UPDATE `buffer` SET `downloaded` = '1' WHERE `id` = :id");
-        $stmt->bindParam(':id', $id);
-        if ($stmt->execute())
-            return TRUE;
-        else
-            return FALSE;
-    }
-
-    public static function checkSerialExist($tracker, $name, $hd)
-    {
-        $stmt = self::newStatement("SELECT COUNT(*) AS `count` FROM `torrent` WHERE `tracker` = :tracker AND `name` = :name AND `hd` = :hd");
-        $stmt->bindParam(':tracker', $tracker);
-        $stmt->bindParam(':name', $name);
-        $stmt->bindParam(':hd', $hd);
-        if ($stmt->execute())
-        {
-            foreach ($stmt as $row)
-            {
-                if ($row['count'] == 0)
-                    return TRUE;
-                else
-                    return FALSE;
-            }
-        }
-    }
-
-    public static function checkThremExist($tracker, $id)
-    {
-        $stmt = self::newStatement("SELECT COUNT(*) AS `count` FROM `torrent` WHERE `tracker` = :tracker AND `torrent_id` = :id");
-        $stmt->bindParam(':tracker', $tracker);
-        $stmt->bindParam(':id', $id);
-        if ($stmt->execute())
-        {
-            foreach ($stmt as $row)
-            {
-                if ($row['count'] == 0)
-                    return TRUE;
-                else
-                    return FALSE;
-            }
-        }
-    }
-
-    public static function setSerial($tracker, $name, $path, $hd=FALSE, $category = '')
-    {
-        $stmt = self::newStatement("INSERT INTO `torrent` (`tracker`, `name`, `path`, `hd`, `category`) VALUES (:tracker, :name, :path, :hd, :category)");
-        $stmt->bindParam(':tracker', $tracker);
-        $stmt->bindParam(':name', $name);
-        $stmt->bindParam(':path', $path);
-        $stmt->bindParam(':hd', $hd);
-        $stmt->bindParam(':category', $category);
-        if ($stmt->execute())
-            return TRUE;
-        else
-            return FALSE;
-    }
-
-    public static function setThreme($tracker, $name, $path, $threme, $update_header, $category = '')
-    {
-        $stmt = self::newStatement("INSERT INTO `torrent` (`tracker`, `name`, `path`, `torrent_id`, `auto_update`, `category`) VALUES (:tracker, :name, :path, :threme, :update_header, :category)");
-        $stmt->bindParam(':tracker', $tracker);
-        $stmt->bindParam(':name', $name);
-        $stmt->bindParam(':path', $path);
-        $stmt->bindParam(':threme', $threme);
-        $stmt->bindParam(':update_header', $update_header);
-        $stmt->bindParam(':category', $category);
-        if ($stmt->execute())
-            return TRUE;
-        else
-            return FALSE;
-    }
-
-    public static function setNewDate($id, $date)
-    {
-        $stmt = self::newStatement("UPDATE `torrent` SET `timestamp` = :date WHERE `id` = :id");
-        $stmt->bindParam(':date', $date);
-        $stmt->bindParam(':id', $id);
-        if ($stmt->execute())
-            return TRUE;
-        else
-            return FALSE;
-    }
-
-    public static function setNewName($id, $name)
-    {
-        $stmt = self::newStatement("UPDATE `torrent` SET `name` = :name WHERE `id` = :id");
-        $stmt->bindParam(':name', $name);
-        $stmt->bindParam(':id', $id);
-        if ($stmt->execute())
-            return TRUE;
-        else
-            return FALSE;
-    }
-
-    public static function setNewEpisode($id, $ep)
-    {
-        $stmt = self::newStatement("UPDATE `torrent` SET `ep` = :ep WHERE `id` = :id");
-        $stmt->bindParam(':ep', $ep);
-        $stmt->bindParam(':id', $id);
-        if ($stmt->execute())
-            return TRUE;
-        else
-            return FALSE;
-    }
-
-    public static function updateSerial($id, $name, $path, $hd, $reset, $script, $pause)
-    {
-        if ($reset)
-            $stmt = self::newStatement("UPDATE `torrent` SET `name` = :name, `path` = :path, `hd` = :hd, `ep` = '', `timestamp` = '2000-01-01 00:00:00', `hash` = '', `script` = :script, `pause` = :pause WHERE `id` = :id");
-        else
-            $stmt = self::newStatement("UPDATE `torrent` SET `name` = :name, `path` = :path, `hd` = :hd, `script` = :script, `pause` = :pause WHERE `id` = :id");
-        $stmt->bindParam(':name', $name);
-        $stmt->bindParam(':path', $path);
-        $stmt->bindParam(':script', $script);
-        $stmt->bindParam(':hd', $hd);
-        $stmt->bindParam(':id', $id);
-        $stmt->bindParam(':pause', $pause);
-        if ($stmt->execute())
-            return TRUE;
-        else
-            return FALSE;
-    }
-
-    public static function updateThreme($id, $name, $path, $threme, $update, $reset, $script, $pause, $category = '')
-    {
-        $stmt = self::newStatement("UPDATE `torrent` SET `name` = :name, `path` = :path, `torrent_id` = :torrent_id, `auto_update`= :auto_update, `script` = :script, `pause` = :pause, `category` = :category WHERE `id` = :id");
-        $stmt->bindParam(':name', $name);
-        $stmt->bindParam(':path', $path);
-        $stmt->bindParam(':script', $script);
-        $stmt->bindParam(':torrent_id', $threme);
-	    $stmt->bindParam(':auto_update', $update);
-        $stmt->bindParam(':id', $id);
-        $stmt->bindParam(':pause', $pause);
-        $stmt->bindParam(':category', $category);
-        $stmt->execute();
-
-        if ($reset)
-        {
-            $stmt = self::newStatement("UPDATE `torrent` SET `timestamp` = '2000-01-01 00:00:00', `hash` = '' WHERE `id` = :id");
-            $stmt->bindParam(':id', $id);
-        }
-        if ($stmt->execute())
-            return TRUE;
-        else
-            return FALSE;
-
-    }
-
-    public static function updateHash($id, $hash)
-    {
-        $stmt = self::newStatement("UPDATE `torrent` SET `hash` = :hash WHERE `id` = :id");
-        $stmt->bindParam(':hash', $hash);
-        $stmt->bindParam(':id', $id);
-        if ($stmt->execute())
-            return TRUE;
-        else
-            return FALSE;
-    }
-
-    public static function deletItem($id)
-    {
-        $stmt = self::newStatement("DELETE FROM `torrent` WHERE `id` = :id");
-        $stmt->bindParam(':id', $id);
-        if ($stmt->execute())
-            return TRUE;
-        else
-            return FALSE;
-    }
-
-    public static function getWarningsCount()
-    {
-        $stmt = self::newStatement("SELECT `where`, COUNT(*) AS `count` FROM `warning` GROUP BY `where`");
-        if ($stmt->execute())
-        {
-            $i=0;
-            foreach ($stmt as $row)
-            {
-                $resultArray[$i]['where'] = $row['where'];
-                $resultArray[$i]['count'] = $row['count'];
-                $i++;
-            }
-            if ( ! empty($resultArray))
-                return $resultArray;
-        }
-    }
-
-    public static function getWarningsCountSimple()
-    {
-        $stmt = self::newStatement("SELECT COUNT(*) AS `count` FROM `warning`");
-        if ($stmt->execute())
-        {
-            foreach ($stmt as $row)
-            {
-                $resultArray['count'] = $row['count'];
-            }
-            if ( ! empty($resultArray))
-                return $resultArray;
-        }
-    }
-
-    public static function getNewsCount()
-    {
-        $stmt = self::newStatement("SELECT COUNT(*) AS `count` FROM `news` WHERE `new` = 1");
-        if ($stmt->execute())
-        {
-            foreach ($stmt as $row)
-            {
-                $resultArray['count'] = $row['count'];
-            }
-            if ( ! empty($resultArray))
-                return $resultArray;
-        }
-    }
-
-    public static function getWarningsList($tracker)
-    {
-        if (Database::getDbType() == 'pgsql')
-        {
-            $stmt = Database::getInstance()->dbh->prepare("SELECT \"time\", \"reason\", \"where\", \"t_id\",
-                            to_char(time, 'dd') AS day,
-                            to_char(time, 'mm') AS month,
-                            to_char(time, 'YYYY') AS year,
-                            to_char(time, 'HH24:MI') AS hours
-                            FROM warning
-                            WHERE \"where\" = :tracker
-                            ORDER BY time DESC");
-        }
-        elseif (Database::getDbType() == 'mysql')
-        {
-            $stmt = Database::getInstance()->dbh->prepare("SELECT `time`, `reason`, `where`, `t_id`,
-                            DATE_FORMAT(`time`, '%d') as 'day',
-                            DATE_FORMAT(`time`, '%m') as 'month',
-                            DATE_FORMAT(`time`, '%Y') as 'year',
-                            DATE_FORMAT(`time`, '%H:%i') as 'hours'
-                            FROM `warning`
-                            WHERE `where` = :tracker
-                            ORDER BY `time` DESC");
-        }
-        elseif (Database::getDbType() == 'sqlite')
-        {
-            $stmt = Database::getInstance()->dbh->prepare("SELECT `time`, `reason`, `where`, `t_id`,
-                            strftime('%d', `time`) as 'day',
-                            strftime('%m', `time`) as 'month',
-                            strftime('%Y', `time`) as 'year',
-                            strftime('%H:%M', `time`) as 'hours'
-                            FROM `warning`
-                            WHERE `where` = :tracker
-                            ORDER BY `time` DESC");
-        }
-        $stmt->bindParam(':tracker', $tracker);
-        if ($stmt->execute())
-        {
-            $i=0;
-            foreach ($stmt as $row)
-            {
-                $resultArray[$i]['time'] = $row['time'];
-                $resultArray[$i]['reason'] = $row['reason'];
-                $resultArray[$i]['where'] = $row['where'];
-                $resultArray[$i]['id'] = $row['t_id'];
-                $resultArray[$i]['day'] = $row['day'];
-                $resultArray[$i]['month'] = $row['month'];
-                $resultArray[$i]['year'] = $row['year'];
-                $resultArray[$i]['time'] = $row['hours'];
-                $i++;
-            }
-            if ( ! empty($resultArray))
-                return $resultArray;
-        }
-    }
-
-    public static function getAllWarningsList()
-    {
-        if (Database::getDbType() == 'pgsql')
-        {
-            $stmt = Database::getInstance()->dbh->prepare("SELECT \"time\", \"reason\", \"where\", \"t_id\" FROM warning ORDER BY time DESC");
-        }
-        else
-        {
-            $stmt = Database::getInstance()->dbh->prepare("SELECT `time`, `reason`, `where`, `t_id` FROM `warning` ORDER BY `time` DESC");
-        }
-        if ($stmt->execute())
-        {
-            $i = 0;
-            foreach ($stmt as $row)
-            {
-                $resultArray[$i]['time']    = $row['time'];
-                $resultArray[$i]['reason']  = $row['reason'];
-                $resultArray[$i]['tracker'] = $row['where'];
-                $resultArray[$i]['id']      = $row['t_id'];
-                $i++;
-            }
-            if ( ! empty($resultArray))
-                return $resultArray;
-        }
-        return [];
-    }
-
-    public static function getWarningsByTorrentId($torrentId)
-    {
-        if (Database::getDbType() == 'pgsql')
-        {
-            $stmt = Database::getInstance()->dbh->prepare("SELECT \"time\", \"reason\", \"where\", \"t_id\" FROM warning WHERE \"t_id\" = :id ORDER BY time DESC");
-        }
-        else
-        {
-            $stmt = Database::getInstance()->dbh->prepare("SELECT `time`, `reason`, `where`, `t_id` FROM `warning` WHERE `t_id` = :id ORDER BY `time` DESC");
-        }
-        $stmt->bindParam(':id', $torrentId);
-        if ($stmt->execute())
-        {
-            $i = 0;
-            foreach ($stmt as $row)
-            {
-                $resultArray[$i]['time']    = $row['time'];
-                $resultArray[$i]['reason']  = $row['reason'];
-                $resultArray[$i]['tracker'] = $row['where'];
-                $resultArray[$i]['id']      = $row['t_id'];
-                $i++;
-            }
-            if ( ! empty($resultArray))
-                return $resultArray;
-        }
-        return [];
-    }
-
-    public static function setWarnings($date, $tracker, $message, $id)
-    {
-        $stmt = self::newStatement("INSERT INTO `warning` (`time`, `where`, `reason`, `t_id`) VALUES (:date, :tracker, :message, :id)");
-        $stmt->bindParam(':date', $date);
-        $stmt->bindParam(':tracker', $tracker);
-        $stmt->bindParam(':message', $message);
-        $stmt->bindParam(':id', $id);
-        if ($stmt->execute())
-            return TRUE;
-        else
-            return FALSE;
-    }
-
-    public static function setErrorToThreme($id, $value)
-    {
-        $stmt = self::newStatement("UPDATE `torrent` SET `error` = :error WHERE `id` = :id");
-        $stmt->bindParam(':id', $id);
-        $stmt->bindParam(':error', $value);
-        if ($stmt->execute())
-            return TRUE;
-        else
-            return FALSE;
-    }
-
-    public static function setClosedThreme($id, $closed)
-    {
-        $stmt = self::newStatement("UPDATE `torrent` SET `closed` = :closed WHERE `id` = :id");
-        $stmt->bindParam(':id', $id);
-        $stmt->bindParam(':closed', $closed);
-        if ($stmt->execute())
-            return TRUE;
-        else
-            return FALSE;
-    }
-
-    //пакетное обновление строк `torrent` одной транзакцией
-    //$updates = [ $id => ['timestamp'=>..., 'name'=>..., 'ep'=>..., 'error'=>0, 'closed'=>0], ... ]
-    //присутствуют только реально изменившиеся колонки для данной строки
-    public static function batchUpdateTorrents(array $updates)
-    {
-        if (empty($updates))
-            return;
-
-        $allowedColumns = array('timestamp', 'name', 'ep', 'error', 'closed');
-        $dbh = self::getInstance()->dbh;
-
-        $dbh->beginTransaction();
-        try
-        {
-            foreach ($updates as $id => $fields)
-            {
-                $set = array();
-                $params = array(':id' => $id);
-                foreach ($fields as $column => $value)
-                {
-                    if ( ! in_array($column, $allowedColumns, true))
-                        continue;
-
-                    $set[] = "`$column` = :$column";
-                    $params[":$column"] = $value;
-                }
-
-                if (empty($set))
-                    continue;
-
-                $stmt = self::newStatement("UPDATE `torrent` SET ".implode(', ', $set)." WHERE `id` = :id");
-                if ( ! $stmt->execute($params))
-                    throw new PDOException('batchUpdateTorrents: failed to update torrent id '.$id);
-            }
-            $dbh->commit();
-        }
-        catch (PDOException $e)
-        {
-            $dbh->rollBack();
-        }
-    }
-
-
-    public static function clearWarnings($tracker)
-    {
-        $stmt = self::newStatement("DELETE FROM `warning` WHERE `where` = :tracker");
-        $stmt->bindParam(':tracker', $tracker);
-        if ($stmt->execute())
-            return TRUE;
-        else
-            return FALSE;
-    }
-
-    public static function getCookie($tracker)
-    {
-        $stmt = self::newStatement("SELECT `cookie` FROM `credentials` WHERE `tracker` = :tracker");
-        $stmt->bindParam(':tracker', $tracker);
-        if ($stmt->execute())
-        {
-            foreach ($stmt as $row)
-            {
-                self::reencryptIfLegacy('credentials', 'tracker', $tracker, array('cookie' => $row['cookie']));
-                return Crypto::decrypt($row['cookie']);
-            }
-            return NULL;
-        }
-    }
-
-    public static function setCookie($tracker, $cookie)
-    {
-        $stmt = self::newStatement("UPDATE `credentials` SET `cookie` = :cookie WHERE `tracker` = :tracker");
-        $cookie = Crypto::encrypt($cookie);
-        $stmt->bindParam(':cookie', $cookie);
-        $stmt->bindParam(':tracker', $tracker);
-        if ($stmt->execute())
-            return TRUE;
-        else
-            return FALSE;
+        return self::getSetting('sentUpdateNotification') == 1;
     }
 
     public static function getCfUserAgent()
     {
-        $val = self::getSetting('cf_userAgent');
-        return $val !== null ? $val : '';
+        return (string)self::getSetting('cf_userAgent');
     }
 
     public static function setCfUserAgent($useragent)
@@ -1178,205 +177,704 @@ class Database
         return self::updateSettings('cf_userAgent', $useragent);
     }
 
-    public static function saveToTemp($id, $name, $path, $tracker, $date)
+    public static function getProxy()
     {
-        if (Database::getDbType() == 'pgsql') {
-            $sql = "INSERT INTO `temp` (`id`, `name`, `path`, `tracker`, `date`) VALUES (:id, :name, :path, :tracker, :date) ON CONFLICT (`id`) DO UPDATE SET `name`=EXCLUDED.`name`, `path`=EXCLUDED.`path`, `tracker`=EXCLUDED.`tracker`, `date`=EXCLUDED.`date`";
-        } elseif (Database::getDbType() == 'mysql') {
-            $sql = "INSERT INTO `temp` (`id`, `name`, `path`, `tracker`, `date`) VALUES (:id, :name, :path, :tracker, :date) ON DUPLICATE KEY UPDATE `name`=VALUES(`name`), `path`=VALUES(`path`), `tracker`=VALUES(`tracker`), `date`=VALUES(`date`)";
-        } elseif (Database::getDbType() == 'sqlite') {
-            $sql = "INSERT OR REPLACE INTO `temp` (`id`, `name`, `path`, `tracker`, `date`) VALUES (:id, :name, :path, :tracker, :date)";
-        }
-        $stmt = self::newStatement($sql);
-        $stmt->bindParam(':id', $id);
-        $stmt->bindParam(':name', $name);
-        $stmt->bindParam(':path', $path);
-        $stmt->bindParam(':tracker', $tracker);
-        $stmt->bindParam(':date', $date);
-        if ($stmt->execute())
-            return TRUE;
-        else
-            return FALSE;
+        $result = array();
+        foreach (array('proxy', 'proxyAddress', 'proxyType') as $key)
+            $result[] = array('key' => $key, 'val' => self::getSetting($key));
+        return $result;
     }
 
-    public static function getAllFromTemp()
+    //прокси для отдельных трекеров: трекер => array('use' => 'yes'|'no', 'address' => ..., 'type' => ...)
+    public static function getTrackerProxy()
     {
-        $stmt = self::newStatement("SELECT `id`, `name`, `path`, `tracker`, `date` FROM `temp`");
-        if ($stmt->execute())
+        $config = Storage::config()->read();
+        return is_array($config['trackerProxy']) ? $config['trackerProxy'] : array();
+    }
+
+    public static function setTrackerProxy(array $proxy)
+    {
+        Storage::config()->update(function (&$data) use ($proxy) {
+            $data['trackerProxy'] = $proxy;
+        });
+        return TRUE;
+    }
+
+    //время последнего запуска движка
+    public static function setLastStart($date)
+    {
+        Storage::state()->update(function (&$data) use ($date) {
+            $data['lastStart'] = $date;
+        });
+    }
+
+    public static function getLastStart()
+    {
+        $state = Storage::state()->read();
+        return (string)$state['lastStart'];
+    }
+
+    //пароль на вход в веб-интерфейс
+    public static function countCredentials($password)
+    {
+        return self::getSetting('password') === (string)$password;
+    }
+
+    public static function updateCredentials($password)
+    {
+        return self::updateSettings('password', $password);
+    }
+
+    // ------------------------------------------------------------ notifications
+
+    public static function getServiceList($type)
+    {
+        $config = Storage::config()->read();
+        $result = array();
+        foreach (Catalog::notifications() as $id => $service)
         {
-            $i=0;
-            foreach ($stmt as $row)
-            {
-                $resultArray[$i]['id'] = $row['id'];
-                $resultArray[$i]['name'] = $row['name'];
-                $resultArray[$i]['path'] = $row['path'];
-                $resultArray[$i]['tracker'] = $row['tracker'];
-                $resultArray[$i]['date_str'] = $row['date'];
-                $i++;
-            }
-            if ( ! empty($resultArray))
-                return $resultArray;
+            if ($service['type'] != $type)
+                continue;
+            $result[] = array(
+                'id'      => $id,
+                'service' => $service['service'],
+                'address' => isset($config['notifications'][$id]) ? $config['notifications'][$id] : '',
+            );
         }
+        return empty($result) ? NULL : $result;
     }
 
-    public static function deleteFromTemp($id)
+    //сервис, выбранный в настройке $type (sendUpdateService или sendWarningService)
+    public static function getService($type)
     {
-        $stmt = self::newStatement("DELETE FROM `temp` WHERE `id` = :id");
-        $stmt->bindParam(':id', $id);
-        if ($stmt->execute())
-            return TRUE;
-        else
-            return FALSE;
+        $id = self::getSetting($type);
+        $catalog = Catalog::notifications();
+        if ( ! isset($catalog[$id]))
+            return array('service' => NULL, 'address' => NULL);
+        $config = Storage::config()->read();
+        return array(
+            'service' => $catalog[$id]['service'],
+            'address' => isset($config['notifications'][$id]) ? $config['notifications'][$id] : '',
+        );
     }
+
+    public static function updateAddress($type, $service, $address)
+    {
+        $catalog = Catalog::notifications();
+        if ( ! isset($catalog[$service]) || $catalog[$service]['type'] != $type)
+            return TRUE;
+        Storage::config()->update(function (&$data) use ($service, $address) {
+            $data['notifications'][(string)$service] = (string)$address;
+        });
+        return TRUE;
+    }
+
+    // ----------------------------------------------------- tracker credentials
+
+    public static function getCredentials($tracker)
+    {
+        $account = self::trackerAccount($tracker);
+        if ($account === NULL)
+            return NULL;
+        if ($account['login'] == '' || $account['password'] == '')
+            return FALSE;
+        return array('login' => $account['login'], 'password' => $account['password'], 'passkey' => $account['passkey']);
+    }
+
+    public static function getAllCredentials()
+    {
+        $trackers = array_keys(Catalog::trackers());
+        sort($trackers);
+        $result = array();
+        foreach ($trackers as $tracker)
+        {
+            $account = self::trackerAccount($tracker);
+            unset($account['type']);
+            $result[] = $account;
+        }
+        return $result;
+    }
+
+    public static function setCredentials($id, $login, $password, $passkey)
+    {
+        $tracker = Catalog::trackerById($id);
+        if ($tracker === NULL)
+            return FALSE;
+        Storage::config()->update(function (&$data) use ($tracker, $login, $password, $passkey) {
+            $data['trackers'][$tracker] = array('login' => (string)$login, 'password' => (string)$password, 'passkey' => (string)$passkey);
+        });
+        return TRUE;
+    }
+
+    public static function checkTrackersCredentialsExist($tracker)
+    {
+        $account = self::trackerAccount($tracker);
+        if ($account === NULL)
+            return NULL;
+        return ( ! empty($account['login']) && ! empty($account['password'])) || ! empty($account['cookie']);
+    }
+
+    public static function getTrackersList()
+    {
+        $trackers = array_keys(Catalog::trackers());
+        sort($trackers);
+        return $trackers;
+    }
+
+    public static function getCookie($tracker)
+    {
+        $account = self::trackerAccount($tracker);
+        return $account === NULL ? NULL : $account['cookie'];
+    }
+
+    public static function setCookie($tracker, $cookie)
+    {
+        $cookie = (string)$cookie;
+        Storage::state()->update(function (&$data) use ($tracker, $cookie) {
+            if (isset($data['cookies'][$tracker]) && $data['cookies'][$tracker] === $cookie)
+                return FALSE;
+            $data['cookies'][$tracker] = $cookie;
+            return TRUE;
+        });
+        return TRUE;
+    }
+
+    // -------------------------------------------------------------------- topics
+
+    public static function getTorrentsList($order, $dir = 'ASC')
+    {
+        $data = Storage::torrents()->read();
+        $catalog = Catalog::trackers();
+        $desc = strtoupper($dir) == 'DESC' ? -1 : 1;
+
+        $list = array();
+        foreach ($data['torrents'] as $topic)
+        {
+            if ( ! isset($catalog[$topic['tracker']]))
+                continue;
+            $list[] = $topic + self::dateParts($topic['timestamp']) + array('type' => $catalog[$topic['tracker']]['type']);
+        }
+
+        usort($list, function ($a, $b) use ($order, $desc) {
+            if ($order == 'date')
+                return $desc * strcmp($a['timestamp'], $b['timestamp']) ?: $a['id'] - $b['id'];
+            return strcmp($a['tracker'], $b['tracker'])
+                ?: $desc * strcmp(mb_strtolower($a['name']), mb_strtolower($b['name']))
+                ?: $a['hd'] - $b['hd']
+                ?: $a['id'] - $b['id'];
+        });
+
+        return empty($list) ? NULL : $list;
+    }
+
+    public static function getTorrent($id)
+    {
+        $topic = self::topic($id);
+        return $topic === NULL ? NULL : array($topic);
+    }
+
+    public static function getTorrentFull($id)
+    {
+        $topic = self::topic($id);
+        if ($topic === NULL)
+            return NULL;
+        return array(
+            'id'          => (int)$topic['id'],
+            'tracker'     => $topic['tracker'],
+            'name'        => $topic['name'],
+            'hd'          => (int)$topic['hd'],
+            'path'        => $topic['path'],
+            'torrent_id'  => $topic['torrent_id'],
+            'ep'          => $topic['ep'],
+            'timestamp'   => $topic['timestamp'],
+            'auto_update' => (int)$topic['auto_update'],
+            'script'      => $topic['script'],
+            'pause'       => (int)$topic['pause'],
+            'closed'      => (int)$topic['closed'],
+            'hash'        => $topic['hash'],
+            'error'       => (int)$topic['error'],
+            'category'    => $topic['category'],
+        );
+    }
+
+    public static function getPaths()
+    {
+        $data = Storage::torrents()->read();
+        $result = array();
+        foreach (array_unique(array_column($data['torrents'], 'path')) as $path)
+            if ( ! empty($path))
+                $result[] = array('path' => $path);
+        return empty($result) ? NULL : $result;
+    }
+
+    public static function getTorrentDownloadPath($id)
+    {
+        $topic = self::topic($id);
+        return $topic === NULL ? NULL : $topic['path'];
+    }
+
+    public static function getTorrentCategory($id)
+    {
+        $topic = self::topic($id);
+        return $topic === NULL ? '' : (string)$topic['category'];
+    }
+
+    public static function getDistinctCategories()
+    {
+        $data = Storage::torrents()->read();
+        $categories = array_values(array_unique(array_filter(array_column($data['torrents'], 'category'), 'strlen')));
+        sort($categories);
+        return $categories;
+    }
+
+    public static function getScript($id)
+    {
+        $topic = self::topic($id);
+        return $topic === NULL ? NULL : array('script' => $topic['script']);
+    }
+
+    //TRUE, если такого сериала ещё нет
+    public static function checkSerialExist($tracker, $name, $hd)
+    {
+        $data = Storage::torrents()->read();
+        foreach ($data['torrents'] as $topic)
+            if ($topic['tracker'] == $tracker && $topic['name'] == $name && $topic['hd'] == $hd)
+                return FALSE;
+        return TRUE;
+    }
+
+    //TRUE, если такой темы ещё нет
+    public static function checkThremExist($tracker, $id)
+    {
+        $data = Storage::torrents()->read();
+        foreach ($data['torrents'] as $topic)
+            if ($topic['tracker'] == $tracker && $topic['torrent_id'] == $id)
+                return FALSE;
+        return TRUE;
+    }
+
+    public static function setSerial($tracker, $name, $path, $hd = FALSE, $category = '')
+    {
+        return self::addTopic(array('tracker' => $tracker, 'name' => (string)$name, 'path' => (string)$path, 'hd' => (int)$hd, 'category' => (string)$category));
+    }
+
+    public static function setThreme($tracker, $name, $path, $threme, $update_header, $category = '')
+    {
+        return self::addTopic(array(
+            'tracker' => $tracker, 'name' => (string)$name, 'path' => (string)$path, 'torrent_id' => (string)$threme,
+            'auto_update' => (int)$update_header, 'category' => (string)$category,
+        ));
+    }
+
+    public static function setNewDate($id, $date)
+    {
+        return self::changeTopic($id, array('timestamp' => $date));
+    }
+
+    public static function setNewName($id, $name)
+    {
+        return self::changeTopic($id, array('name' => $name));
+    }
+
+    public static function setNewEpisode($id, $ep)
+    {
+        return self::changeTopic($id, array('ep' => $ep));
+    }
+
+    public static function updateSerial($id, $name, $path, $hd, $reset, $script, $pause)
+    {
+        $fields = array('name' => (string)$name, 'path' => (string)$path, 'hd' => (int)$hd, 'script' => (string)$script, 'pause' => (int)$pause);
+        if ($reset)
+            $fields += array('ep' => '', 'timestamp' => '2000-01-01 00:00:00', 'hash' => '');
+        return self::changeTopic($id, $fields);
+    }
+
+    public static function updateThreme($id, $name, $path, $threme, $update, $reset, $script, $pause, $category = '')
+    {
+        $fields = array(
+            'name' => (string)$name, 'path' => (string)$path, 'torrent_id' => (string)$threme, 'auto_update' => (int)$update,
+            'script' => (string)$script, 'pause' => (int)$pause, 'category' => (string)$category,
+        );
+        if ($reset)
+            $fields += array('timestamp' => '2000-01-01 00:00:00', 'hash' => '');
+        return self::changeTopic($id, $fields);
+    }
+
+    public static function updateHash($id, $hash)
+    {
+        return self::changeTopic($id, array('hash' => (string)$hash));
+    }
+
+    public static function setErrorToThreme($id, $value)
+    {
+        return self::changeTopic($id, array('error' => (int)$value));
+    }
+
+    public static function setClosedThreme($id, $closed)
+    {
+        return self::changeTopic($id, array('closed' => (int)$closed));
+    }
+
+    //изменение нескольких тем одной записью файла
+    //$updates = [ $id => ['timestamp'=>..., 'name'=>..., 'ep'=>..., 'error'=>0, 'closed'=>0], ... ]
+    public static function batchUpdateTorrents(array $updates)
+    {
+        if (empty($updates))
+            return;
+
+        $allowed = array('timestamp' => 1, 'name' => 1, 'ep' => 1, 'error' => 1, 'closed' => 1);
+        Storage::torrents()->update(function (&$data) use ($updates, $allowed) {
+            $changed = FALSE;
+            foreach ($updates as $id => $fields)
+            {
+                $i = Database::indexById($data['torrents'], $id);
+                $fields = array_intersect_key((array)$fields, $allowed);
+                if ($i === NULL || empty($fields))
+                    continue;
+                $before = $data['torrents'][$i];
+                $data['torrents'][$i] = Database::withActivity($before, $fields);
+                $changed = $changed || $data['torrents'][$i] !== $before;
+            }
+            return $changed;
+        });
+    }
+
+    public static function deletItem($id)
+    {
+        Storage::torrents()->update(function (&$data) use ($id) {
+            $i = Database::indexById($data['torrents'], $id);
+            if ($i === NULL)
+                return FALSE;
+            array_splice($data['torrents'], $i, 1);
+            return TRUE;
+        });
+        return TRUE;
+    }
+
+    // ------------------------------------------------- watched users and buffer
+
+    public static function getUserToWatch()
+    {
+        $data = Storage::torrents()->read();
+        $users = $data['users'];
+        usort($users, function ($a, $b) { return strcmp($a['tracker'], $b['tracker']) ?: $a['id'] - $b['id']; });
+        return empty($users) ? NULL : $users;
+    }
+
+    //TRUE, если такой пользователь ещё не отслеживается
+    public static function checkUserExist($tracker, $name)
+    {
+        $data = Storage::torrents()->read();
+        foreach ($data['users'] as $user)
+            if ($user['tracker'] == $tracker && $user['name'] == $name)
+                return FALSE;
+        return TRUE;
+    }
+
+    public static function setUser($tracker, $name)
+    {
+        Storage::torrents()->update(function (&$data) use ($tracker, $name) {
+            $data['users'][] = array('id' => $data['nextUserId']++, 'tracker' => $tracker, 'name' => (string)$name);
+        });
+        return TRUE;
+    }
+
+    public static function deletUser($id)
+    {
+        Storage::torrents()->update(function (&$data) use ($id) {
+            $i = Database::indexById($data['users'], $id);
+            if ($i === NULL)
+                return FALSE;
+            array_splice($data['users'], $i, 1);
+            return TRUE;
+        });
+        Storage::state()->update(function (&$data) use ($id) {
+            $before = count($data['buffer']);
+            $data['buffer'] = array_values(array_filter($data['buffer'], function ($item) use ($id) { return $item['user_id'] != $id; }));
+            return count($data['buffer']) != $before;
+        });
+        return TRUE;
+    }
+
+    public static function addThremeToBuffer($user_id, $section, $threme_id, $threme, $timestamp, $tracker)
+    {
+        //section/threme приходят регэкспом из сырого HTML страницы трекера и могут
+        //содержать HTML-сущности (&#039; и т.п.) — раскодируем их здесь, до
+        //htmlspecialchars() на выводе, иначе получим двойное кодирование
+        $section = html_entity_decode($section, ENT_QUOTES, 'UTF-8');
+        $threme = html_entity_decode(preg_replace('/<wbr>/', '', $threme), ENT_QUOTES, 'UTF-8');
+
+        return Storage::state()->update(function (&$data) use ($user_id, $section, $threme_id, $threme, $timestamp, $tracker) {
+            foreach ($data['buffer'] as $item)
+                if ($item['user_id'] == $user_id && $item['threme_id'] == $threme_id)
+                    return FALSE;
+            $data['buffer'][] = array(
+                'id' => $data['nextBufferId']++, 'user_id' => (int)$user_id, 'section' => $section, 'threme_id' => (int)$threme_id,
+                'threme' => $threme, 'timestamp' => $timestamp, 'accept' => 0, 'downloaded' => 0, 'new' => 1, 'tracker' => $tracker,
+            );
+            return TRUE;
+        }) ? TRUE : NULL;
+    }
+
+    //элементы буфера, прошедшие фильтр, или NULL
+    private static function bufferItems($filter)
+    {
+        $state = Storage::state()->read();
+        $items = array_values(array_filter($state['buffer'], $filter));
+        return empty($items) ? NULL : $items;
+    }
+
+    //изменяет элементы буфера, прошедшие фильтр
+    private static function changeBuffer($filter, array $fields)
+    {
+        Storage::state()->update(function (&$data) use ($filter, $fields) {
+            $changed = FALSE;
+            foreach ($data['buffer'] as $i => $item)
+            {
+                if ( ! $filter($item))
+                    continue;
+                $data['buffer'][$i] = array_merge($item, $fields);
+                $changed = $changed || $data['buffer'][$i] !== $item;
+            }
+            return $changed;
+        });
+        return TRUE;
+    }
+
+    public static function getThremesFromBuffer($user_id)
+    {
+        $items = self::bufferItems(function ($item) use ($user_id) { return $item['user_id'] == $user_id && $item['new'] == 1; });
+        if ($items === NULL)
+            return NULL;
+        usort($items, function ($a, $b) { return $b['threme_id'] - $a['threme_id']; });
+        $result = array();
+        foreach ($items as $item)
+            $result[] = array(
+                'id' => $item['id'], 'section' => $item['section'], 'threme_id' => $item['threme_id'],
+                'threme' => $item['threme'], 'timestamp' => $item['timestamp'], 'tracker' => $item['tracker'],
+            );
+        return $result;
+    }
+
+    public static function transferFromBuffer($id)
+    {
+        $items = self::bufferItems(function ($item) use ($id) { return $item['id'] == $id; });
+        if ($items === NULL)
+            return;
+        $users = Storage::torrents()->read()['users'];
+        $u = self::indexById($users, $items[0]['user_id']);
+        self::setThreme($u === NULL ? NULL : $users[$u]['tracker'], $items[0]['threme'], '', $items[0]['threme_id'], 0);
+        self::deleteFromBuffer($id);
+    }
+
+    public static function deleteFromBuffer($id)
+    {
+        return self::changeBuffer(function ($item) use ($id) { return $item['id'] == $id; }, array('new' => 0));
+    }
+
+    public static function thremesClear($user_id)
+    {
+        return self::changeBuffer(function ($item) use ($user_id) { return $item['user_id'] == $user_id; }, array('new' => 0));
+    }
+
+    public static function selectAllFromBuffer()
+    {
+        $items = self::bufferItems(function ($item) { return $item['accept'] == 0 && $item['new'] == 1; });
+        return $items === NULL ? NULL : array_map(function ($item) { return array('id' => $item['id']); }, $items);
+    }
+
+    public static function updateThremesToDownload($id)
+    {
+        return self::changeBuffer(function ($item) use ($id) { return $item['id'] == $id; }, array('accept' => 1, 'new' => 0));
+    }
+
+    public static function takeToDownload($tracker)
+    {
+        $items = self::bufferItems(function ($item) use ($tracker) {
+            return $item['accept'] == 1 && $item['downloaded'] == 0 && $item['tracker'] == $tracker;
+        });
+        return $items === NULL ? NULL : array_map(function ($item) {
+            return array('id' => $item['id'], 'threme_id' => $item['threme_id'], 'threme' => $item['threme']);
+        }, $items);
+    }
+
+    public static function setDownloaded($id)
+    {
+        return self::changeBuffer(function ($item) use ($id) { return $item['id'] == $id; }, array('downloaded' => 1));
+    }
+
+    // ----------------------------------------------------------------- warnings
+
+    //ошибки от новых к старым
+    private static function warnings($filter = NULL)
+    {
+        $state = Storage::state()->read();
+        $list = $filter === NULL ? $state['warnings'] : array_values(array_filter($state['warnings'], $filter));
+        usort($list, function ($a, $b) { return strcmp($b['time'], $a['time']) ?: $b['id'] - $a['id']; });
+        return $list;
+    }
+
+    public static function getWarningsCount()
+    {
+        $counts = array();
+        foreach (Storage::state()->read()['warnings'] as $warning)
+            $counts[$warning['where']] = (isset($counts[$warning['where']]) ? $counts[$warning['where']] : 0) + 1;
+        ksort($counts);
+        $result = array();
+        foreach ($counts as $where => $count)
+            $result[] = array('where' => $where, 'count' => $count);
+        return empty($result) ? NULL : $result;
+    }
+
+    public static function getWarningsCountSimple()
+    {
+        return array('count' => count(Storage::state()->read()['warnings']));
+    }
+
+    public static function getWarningsList($tracker)
+    {
+        $result = array();
+        foreach (self::warnings(function ($w) use ($tracker) { return $w['where'] == $tracker; }) as $w)
+        {
+            $parts = self::dateParts($w['time']);
+            $result[] = array('time' => $parts['time'], 'reason' => $w['reason'], 'where' => $w['where'], 'id' => $w['t_id'],
+                'day' => $parts['day'], 'month' => $parts['month'], 'year' => $parts['year']);
+        }
+        return empty($result) ? NULL : $result;
+    }
+
+    public static function getAllWarningsList()
+    {
+        return array_map(function ($w) {
+            return array('time' => $w['time'], 'reason' => $w['reason'], 'tracker' => $w['where'], 'id' => $w['t_id']);
+        }, self::warnings());
+    }
+
+    public static function getWarningsByTorrentId($torrentId)
+    {
+        return array_map(function ($w) {
+            return array('time' => $w['time'], 'reason' => $w['reason'], 'tracker' => $w['where'], 'id' => $w['t_id']);
+        }, self::warnings(function ($w) use ($torrentId) { return $w['t_id'] !== NULL && $w['t_id'] == $torrentId; }));
+    }
+
+    public static function setWarnings($date, $tracker, $message, $id)
+    {
+        Storage::state()->update(function (&$data) use ($date, $tracker, $message, $id) {
+            $data['warnings'][] = array(
+                'id' => $data['nextWarningId']++, 'time' => $date, 'where' => (string)$tracker,
+                'reason' => (string)$message, 't_id' => $id === NULL ? NULL : (int)$id,
+            );
+        });
+        return TRUE;
+    }
+
+    public static function clearWarnings($tracker)
+    {
+        Storage::state()->update(function (&$data) use ($tracker) {
+            $before = count($data['warnings']);
+            $data['warnings'] = array_values(array_filter($data['warnings'], function ($w) use ($tracker) { return $w['where'] != $tracker; }));
+            return count($data['warnings']) != $before;
+        });
+        return TRUE;
+    }
+
+    // --------------------------------------------------------------------- news
 
     public static function getNews()
     {
-        $stmt = self::newStatement("SELECT `id`, `text`, `new` FROM `news` ORDER BY `id` DESC");
-        if ($stmt->execute())
-        {
-            $i = 0;
-            foreach ($stmt as $row)
-            {
-                $resultArray[$i]['id'] = $row['id'];
-                $resultArray[$i]['text'] = $row['text'];
-                $resultArray[$i]['new'] = $row['new'];
-                $i++;
-            }
-            if ( ! empty($resultArray))
-                return $resultArray;
-        }
+        $news = Storage::state()->read()['news'];
+        usort($news, function ($a, $b) { return strcmp($b['id'], $a['id']); });
+        return empty($news) ? NULL : $news;
+    }
+
+    public static function getNewsCount()
+    {
+        $new = array_filter(Storage::state()->read()['news'], function ($item) { return $item['new'] == 1; });
+        return array('count' => count($new));
     }
 
     public static function checkNewsExist($id)
     {
-        $stmt = self::newStatement("SELECT `id` FROM `news` WHERE `id` = :id");
-        $stmt->bindParam(':id', $id);
-        if ($stmt->execute())
-        {
-            foreach ($stmt as $row)
-            {
-                if ( ! empty($row['id']))
-                    return TRUE;
-                else
-                    return FALSE;
-            }
-        }
+        foreach (Storage::state()->read()['news'] as $item)
+            if ($item['id'] === (string)$id)
+                return TRUE;
+        return NULL;
     }
 
     public static function insertNews($id, $text)
     {
-        if (Database::getDbType() == 'pgsql') {
-            $sql = "INSERT INTO `news` (`id`, `text`) VALUES (:id, :text) ON CONFLICT (`id`) DO UPDATE SET `text`=EXCLUDED.`text`";
-        } elseif (Database::getDbType() == 'mysql') {
-            $sql = "INSERT INTO `news` (`id`, `text`) VALUES (:id, :text) ON DUPLICATE KEY UPDATE `text`=VALUES(`text`)";
-        } elseif (Database::getDbType() == 'sqlite') {
-            $sql = "INSERT OR REPLACE INTO `news` (`id`, `text`) VALUES (:id, :text)";
-        }
-        $stmt = self::newStatement($sql);
-        $stmt->bindParam(':id', $id);
-        $stmt->bindParam(':text', $text);
-        if ($stmt->execute())
+        $id = (string)$id;
+        Storage::state()->update(function (&$data) use ($id, $text) {
+            foreach ($data['news'] as $i => $item)
+            {
+                if ($item['id'] === $id)
+                {
+                    $data['news'][$i]['text'] = (string)$text;
+                    return TRUE;
+                }
+            }
+            $data['news'][] = array('id' => $id, 'text' => (string)$text, 'new' => 1);
             return TRUE;
-        else
-            return FALSE;
+        });
+        return TRUE;
     }
 
     //Помечаем новость как прочитанную
     public static function markNews($id)
     {
-        $stmt = self::newStatement("UPDATE `news` SET `new` = 0 WHERE `id` = :id");
-        $stmt->bindParam(':id', $id);
-        if ($stmt->execute())
-            return TRUE;
-        else
+        $id = (string)$id;
+        Storage::state()->update(function (&$data) use ($id) {
+            foreach ($data['news'] as $i => $item)
+            {
+                if ($item['id'] === $id && $item['new'] != 0)
+                {
+                    $data['news'][$i]['new'] = 0;
+                    return TRUE;
+                }
+            }
             return FALSE;
+        });
+        return TRUE;
     }
 
-    //
-    public static function getScript($id)
+    // ------------------------------------- torrents waiting for the torrent client
+
+    public static function saveToTemp($id, $name, $path, $tracker, $date)
     {
-        $stmt = self::newStatement("SELECT `script` FROM `torrent` WHERE `id` = :id");
-        $stmt->bindParam(':id', $id);
-        if ($stmt->execute())
-        {
-            foreach ($stmt as $row)
-            {
-                $resultArray['script'] = $row['script'];
-            }
-            if ( ! empty($resultArray))
-                return $resultArray;
-        }
+        Storage::state()->update(function (&$data) use ($id, $name, $path, $tracker, $date) {
+            $data['temp'][(string)$id] = array('name' => (string)$name, 'path' => (string)$path, 'tracker' => (string)$tracker, 'date' => (string)$date);
+        });
+        return TRUE;
     }
 
-    public static function getServiceList($type)
+    public static function getAllFromTemp()
     {
-        $stmt = self::newStatement("SELECT `id`, `service`, `address` FROM `notifications` WHERE `type` = :type");
-        $stmt->bindParam(':type', $type);
-        if ($stmt->execute())
-        {
-            $i = 0;
-            foreach ($stmt as $row)
-            {
-                $resultArray[$i]['id'] = $row['id'];
-                $resultArray[$i]['service'] = $row['service'];
-                $resultArray[$i]['address'] = $row['address'];
-                $i++;
-            }
-            if ( ! empty($resultArray))
-                return $resultArray;
-        }
-        else
-            return $stmt->errorInfo();
+        $result = array();
+        foreach (Storage::state()->read()['temp'] as $id => $item)
+            $result[] = array('id' => (int)$id, 'name' => $item['name'], 'path' => $item['path'], 'tracker' => $item['tracker'], 'date_str' => $item['date']);
+        return empty($result) ? NULL : $result;
     }
 
-    public static function getService($type)
+    public static function deleteFromTemp($id)
     {
-        $stmt = self::newStatement("SELECT `service`, `address` FROM `settings` LEFT JOIN `notifications` ON `settings`.`val` = ".(Database::getDbType() == "pgsql" ? "cast(`notifications`.`id` as text)" : "`notifications`.`id`")." WHERE `settings`.`key` = :type");
-        $stmt->bindParam(':type', $type);
-        if ($stmt->execute())
-        {
-            foreach ($stmt as $row)
-            {
-                $resultArray['service'] = $row['service'];
-                $resultArray['address'] = $row['address'];
-            }
-            if ( ! empty($resultArray))
-                return $resultArray;
-        }
-        else
-            return $stmt->errorInfo();
+        Storage::state()->update(function (&$data) use ($id) {
+            if ( ! isset($data['temp'][(string)$id]))
+                return FALSE;
+            unset($data['temp'][(string)$id]);
+            return TRUE;
+        });
+        return TRUE;
     }
 
-    public static function getProxy()
-    {
-        static $cache = null;
-        if ($cache !== null)
-            return $cache;
-
-        $stmt = self::newStatement("SELECT `key`, `val` FROM `settings` WHERE `key` LIKE 'proxy%' ORDER BY `id`");
-        if ($stmt->execute())
-        {
-            $i=0;
-            foreach ($stmt as $row)
-            {
-                $resultArray[$i]['key'] = $row['key'];
-                $resultArray[$i]['val'] = $row['val'];
-                $i++;
-            }
-            if ( ! empty($resultArray))
-                return $cache = $resultArray;
-        }
-        else
-            return $stmt->errorInfo();
-    }
-    
     public static function clearTemp()
     {
-        $stmt = self::newStatement("DELETE FROM `temp`");
-        if ($stmt->execute())
+        Storage::state()->update(function (&$data) {
+            if (empty($data['temp']))
+                return FALSE;
+            $data['temp'] = array();
             return TRUE;
-        else
-            return FALSE;
+        });
+        return TRUE;
     }
 }
 ?>

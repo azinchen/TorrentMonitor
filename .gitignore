@@ -2,11 +2,8 @@
 
 # local configuration and data
 /config.php
-/laststart.txt
-/release.cache.json
+/data/
 /torrents/*.torrent
-/*.sqlite
-/*.sqlite-journal
 /logs/
 /tmp/
 /update.zip

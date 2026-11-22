@@ -4,7 +4,6 @@
 // Run with: tests/run.sh reach
 require '/src/tests/bootstrap.php';
 chdir('/app');
-include_once '/app/config.php';
 include_once '/app/class/System.class.php';
 include_once '/app/class/Database.class.php';
 

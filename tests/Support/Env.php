@@ -65,11 +65,11 @@ class Env
 
     // ---- application under test ----
 
-    // fresh database, fresh copy of the code, empty torrents/ and downloads
+    // fresh data directory, fresh copy of the code, empty torrents/
     public static function resetApp()
     {
         self::sh('/src/tests/env/app/sync.sh');
-        self::sh('php /src/tests/env/app/reset-db.php');
+        self::sh('/src/tests/env/app/reset-data.sh');
         foreach (glob('/app/torrents/*.torrent') as $file)
             unlink($file);
         if ( ! self::isLive())

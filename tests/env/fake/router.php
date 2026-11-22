@@ -216,7 +216,7 @@ if ($path == '/github/release.zip')
     $zip = new ZipArchive;
     $zip->open($file, ZipArchive::CREATE);
     $prefix = 'TorrentMonitor-'.$version.'/';
-    $skip = array('.git', '.github', '.claude', 'tests', 'tools', 'wiki', 'dist', 'config.php');
+    $skip = array('.git', '.github', '.claude', 'tests', 'tools', 'wiki', 'dist', 'config.php', 'data');
     $iterator = new RecursiveIteratorIterator(new RecursiveCallbackFilterIterator(
         new RecursiveDirectoryIterator('/src', FilesystemIterator::SKIP_DOTS),
         function ($current) use ($skip) {
@@ -228,8 +228,6 @@ if ($path == '/github/release.zip')
         $relative = substr($item->getPathname(), strlen('/src/'));
         if ($relative == 'version.txt')
             $zip->addFromString($prefix.$relative, json_encode(array('system' => $version, 'database' => $version)));
-        elseif ($relative == 'config.xml')
-            $zip->addFromString($prefix.$relative, '<config><from-release/></config>');
         else
             $zip->addFile($item->getPathname(), $prefix.$relative);
     }

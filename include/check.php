@@ -4,7 +4,7 @@ include_once $dir."class/System.class.php";
 include_once $dir."class/Database.class.php";
 include_once $dir."class/CurlMultiFetcher.class.php";
 
-//если БД недоступна, Sys::checkAuth() выбросит исключение — в этом случае
+//если файлы данных недоступны или повреждены, Sys::checkAuth() выбросит исключение — в этом случае
 //не можем подтвердить авторизацию и закрываем доступ (как и раньше для всех страниц)
 try
 {
@@ -86,17 +86,8 @@ if ($dbOk)
 <?php } ?>
 
 <?php
-$dbType = Config::read('db.type') ?: 'mysql';
-$pdoExtMap = array(
-    'mysql'  => array('pdo_mysql',  'PDO MySQL'),
-    'sqlite' => array('pdo_sqlite', 'PDO SQLite'),
-    'pgsql'  => array('pdo_pgsql',  'PDO PostgreSQL'),
-);
-$pdoEntry = isset($pdoExtMap[$dbType]) ? $pdoExtMap[$dbType] : $pdoExtMap['mysql'];
-
 $requiredExtensions = array(
     'curl'          => 'cURL',
-    $pdoEntry[0]    => $pdoEntry[1],
     'mbstring'      => 'mbstring',
     'simplexml'     => 'SimpleXML',
     'zip'           => 'Zip',
@@ -141,9 +132,9 @@ if ($memoryLimitBytes > 0 && $memoryLimitBytes < 64 * 1024 * 1024) { ?>
     <div class="check-title">Основные настройки</div>
 
 <?php if ($dbOk) { ?>
-    <div class="check-item">Подключение к базе данных установлено.</div>
+    <div class="check-item">Файлы данных читаются.</div>
 <?php } else { ?>
-    <div class="check-item --error">БД недоступна: <?= htmlspecialchars($dbError, ENT_QUOTES) ?></div>
+    <div class="check-item --error">Файлы данных недоступны: <?= htmlspecialchars($dbError, ENT_QUOTES) ?></div>
 <?php }
 
 if ($dbOk) {
@@ -154,17 +145,31 @@ if ($internetOk) { ?>
 <?php }
 } ?>
 
-<?php if (Sys::checkConfigExist()) { ?>
-    <div class="check-item">Конфигурационный файл существует.</div>
+<?php
+$dataDir = Storage::dir();
+if (Storage::prepare()) { ?>
+    <div class="check-item">Запись в каталог данных <strong><?= htmlspecialchars($dataDir, ENT_QUOTES) ?></strong> разрешена.</div>
 <?php } else { ?>
-    <div class="check-item --error">Для корректной работы необходимо внести изменения в конфигурационный файл.</div>
-<?php } ?>
+    <div class="check-item --error">Нет прав на запись в каталог данных <strong><?= htmlspecialchars($dataDir, ENT_QUOTES) ?></strong> — настройки и темы не сохраняются.</div>
+<?php }
 
-<?php if ( ! empty(Config::read('encryption.key'))) { ?>
-    <div class="check-item">Ключ шифрования (encryption.key) задан, пароли трекеров и torrent-клиента хранятся в БД в зашифрованном виде.</div>
-<?php } else { ?>
-    <div class="check-item --error">Ключ шифрования (encryption.key) не задан в config.php — пароли трекеров и torrent-клиента хранятся в БД в открытом виде. Чтобы включить шифрование, выполните <strong>php -r "echo bin2hex(random_bytes(32));"</strong> и добавьте в config.php строку <strong>Config::write('encryption.key', '&lt;результат&gt;');</strong> — после этого существующие пароли автоматически перешифруются при первом же обращении к ним (открытие «Учётные данные»/«Настройки» или очередной запуск engine.php), без ручного ввода заново.</div>
-<?php } ?>
+//каталог данных содержит пароли: веб-сервер не должен его отдавать
+$appRoot = rtrim(str_replace('\\', '/', realpath($dir)), '/');
+$dataReal = rtrim(str_replace('\\', '/', (string)realpath($dataDir)), '/');
+$serverAddress = $dbOk ? (string)Database::getSetting('serverAddress') : '';
+if ($dataReal !== '' && strpos($dataReal.'/', $appRoot.'/') === 0 && $serverAddress !== '')
+{
+    $probeUrl = rtrim($serverAddress, '/').substr($dataReal, strlen($appRoot)).'/.htaccess';
+    $probe = curl_init($probeUrl);
+    curl_setopt_array($probe, array(CURLOPT_RETURNTRANSFER => 1, CURLOPT_TIMEOUT => 5, CURLOPT_NOBODY => 1, CURLOPT_SSL_VERIFYPEER => false));
+    curl_exec($probe);
+    $probeCode = (int)curl_getinfo($probe, CURLINFO_RESPONSE_CODE);
+    if ($probeCode == 200) { ?>
+    <div class="check-item --error">Каталог данных доступен из браузера по адресу <strong><?= htmlspecialchars(dirname($probeUrl).'/', ENT_QUOTES) ?></strong> — в нём лежат пароли. Закройте его в настройках веб-сервера или перенесите за пределы каталога сайта (переменная окружения TM_DATA_DIR или Config::write('data.dir', ...) в config.php).</div>
+    <?php } elseif ($probeCode > 0) { ?>
+    <div class="check-item">Каталог данных закрыт от доступа из браузера.</div>
+    <?php }
+} ?>
 
 <?php
 $torrentPath = str_replace('class/../', '', $dir).'torrents/';

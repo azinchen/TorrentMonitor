@@ -29,6 +29,8 @@ services:
       - downloads:/downloads
     environment:
       - TM_UPDATE_API=${TM_UPDATE_API:-http://fake:8080/github}
+      # data lives outside the application folder, as recommended for real installations
+      - TM_DATA_DIR=/data
     ports:
       - "127.0.0.1:${TM_PORT:-8088}:80"
     healthcheck:

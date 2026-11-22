@@ -1,12 +1,20 @@
 <?php
 $dir = dirname(__FILE__)."/../";
-include_once $dir."config.php";
+include_once $dir."class/Config.class.php";
 include_once $dir."class/System.class.php";
 include_once $dir."class/Database.class.php";
 if ( ! Sys::checkAuth())
     die(header('Location: ../'));
 
 $credentials = Database::getAllCredentials();
+//сохранённые пароли и cookies в браузер не передаются
+foreach ($credentials as $i => $row)
+{
+    $credentials[$i]['hasPassword'] = trim((string)$row['password']) !== '';
+    $credentials[$i]['hasCookie'] = (string)$row['cookie'] !== '';
+    $credentials[$i]['password'] = '';
+    $credentials[$i]['cookie'] = '';
+}
 $trackers = Database::getTrackersList();
 ?>
 <div class="top-bar mb-2">
@@ -41,7 +49,8 @@ $trackers = Database::getTrackersList();
             <label class="row" x-show="tracker.tracker != 'nnmclub.to'">
                 <div class="col --2:lg mb-1">Пароль:</div>
                 <div class="col --5:lg  mb-2">
-                    <input type="password" name="pass" x-model="tracker.pass" :required="tracker.tracker != 'nnmclub.to'">
+                    <input type="password" name="pass" x-model="tracker.pass" :required="tracker.tracker != 'nnmclub.to' && !tracker.hasPassword"
+                        :placeholder="tracker.hasPassword ? 'сохранён — оставьте пустым, чтобы не менять' : ''">
                 </div>
             </label>
 
@@ -59,7 +68,7 @@ $trackers = Database::getTrackersList();
                     <label class="row">
                         <div class="col --2:lg mb-1">Cookie</div>
                         <div class="col --5:lg mb-2">
-                            <textarea name="cookie" x-model="tracker.cookie" rows="3" style="font-size:11px;font-family:monospace" placeholder="phpbb2mysql_4_data=...; phpbb2mysql_4_sid=..."></textarea>
+                            <textarea name="cookie" x-model="tracker.cookie" rows="3" style="font-size:11px;font-family:monospace" :placeholder="tracker.hasCookie ? 'cookie сохранён — оставьте пустым, чтобы не менять' : 'phpbb2mysql_4_data=...; phpbb2mysql_4_sid=...'"></textarea>
                             <div style="font-size:11px;color:var(--color-muted,#888);margin-top:4px">Вставьте куки из браузера после ручной авторизации на nnm-club.to</div>
                         </div>
                     </label>

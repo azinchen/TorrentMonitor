@@ -1,6 +1,6 @@
 <?php
 $dir = dirname(__FILE__).'/';
-include_once $dir.'config.php';
+include_once $dir.'class/Config.class.php';
 include_once $dir.'class/Database.class.php';
 include_once $dir.'class/Errors.class.php';
 include_once $dir.'class/Notification.class.php';
@@ -471,7 +471,15 @@ if (isset($_POST['action']))
 	{
     	if ( ! isset($_POST['passkey']))
     	    $_POST['passkey'] = '';
-		Database::setCredentials($_POST['id'], $_POST['log'], $_POST['pass'], $_POST['passkey']);
+		//сохранённый пароль в браузер не передаётся: пустое поле означает "не менять"
+		$password = (string)($_POST['pass'] ?? '');
+		if ($password === '')
+		{
+			$saved = Database::getCredentials(Catalog::trackerById($_POST['id']));
+			if (is_array($saved))
+				$password = $saved['password'];
+		}
+		Database::setCredentials($_POST['id'], $_POST['log'], $password, $_POST['passkey']);
 		if ( ! empty($_POST['cookie']) && ! empty($_POST['tracker']))
 		    Database::setCookie($_POST['tracker'], $_POST['cookie']);
     	$return['error'] = FALSE;
@@ -501,16 +509,19 @@ if (isset($_POST['action']))
 		Database::updateSettings('httpTimeout', (int) $_POST['httpTimeout']);
 		Database::updateSettings('flaresolverrUrl', trim($_POST['flaresolverrUrl']));
 
-		$config = Config::read('ext_filename') ?: dirname(__FILE__).'/config.xml';
-		if (file_put_contents($config, $_POST['settings']))
+		//прокси для отдельных трекеров, в виде JSON
+		$text = trim((string)($_POST['settings'] ?? ''));
+		$proxy = $text === '' ? array() : json_decode($text, TRUE);
+		if (is_array($proxy))
 		{
+			Database::setTrackerProxy($proxy);
 			$return['error'] = FALSE;
 			$return['msg'] = 'Расширенные настройки сохранены.';
 		}
 		else
 		{
 			$return['error'] = TRUE;
-			$return['msg'] = 'Не удалось сохранить расширенные настройки.';
+			$return['msg'] = 'Прокси для трекеров не сохранены: это не корректный JSON.';
 		}
 		echo json_encode($return);
 	}
@@ -585,7 +596,9 @@ if (isset($_POST['action']))
         Database::updateSettings('torrentClient', $_POST['torrentClient']);
         Database::updateSettings('torrentAddress', Sys::checkUrl($_POST['torrentAddress']));
         Database::updateSettings('torrentLogin', $_POST['torrentLogin']);
-        Database::updateSettings('torrentPassword', $_POST['torrentPassword']);
+        //сохранённый пароль в браузер не передаётся: пустое поле означает "не менять"
+        if (($_POST['torrentPassword'] ?? '') !== '')
+            Database::updateSettings('torrentPassword', $_POST['torrentPassword']);
         Database::updateSettings('pathToDownload', Sys::checkPath($_POST['pathToDownload']));
         Database::updateSettings('deleteDistribution', Sys::strBoolToInt($_POST['deleteDistribution']));
         Database::updateSettings('deleteOldFiles', Sys::strBoolToInt($_POST['deleteOldFiles']));

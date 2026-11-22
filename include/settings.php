@@ -1,6 +1,6 @@
 <?php
 $dir = dirname(__FILE__)."/../";
-include_once $dir."config.php";
+include_once $dir."class/Config.class.php";
 include_once $dir."class/System.class.php";
 include_once $dir."class/Database.class.php";
 if ( ! Sys::checkAuth())
@@ -21,9 +21,11 @@ foreach ($settings as $key => $row)
     $csettings[key($row)] = $row[key($row)];
     extract($row);
 }
-$config = Config::read('ext_filename') ?: dirname(__FILE__).'/../config.xml';
-if (file_exists($config))
-    $csettings['settings'] = file_get_contents($config);
+//пароли в браузер не передаются
+unset($csettings['password']);
+$csettings['torrentPassword'] = '';
+$trackerProxy = Database::getTrackerProxy();
+$csettings['settings'] = empty($trackerProxy) ? '' : json_encode($trackerProxy, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 ?>
 
 <div x-data='settings(<?= json_encode($csettings, JSON_NUMERIC_CHECK) ?>)' class="settings row">
@@ -304,7 +306,7 @@ if (file_exists($config))
                     <div class="col --2:lg mb-1">Пароль:</div>
                     <div class="col --5:lg mb-2">
                         <input type="password" name="torrentPassword" x-model="options.torrentPassword" placeholder="Pa$$w0rd">
-                        <div class="form-help">Например: Pa$$w0rd</div>
+                        <div class="form-help">Сохранённый пароль не показывается. Оставьте поле пустым, чтобы не менять его</div>
                     </div>
                 </label>
 
@@ -393,7 +395,9 @@ if (file_exists($config))
 
         <div class="row">
             <div class="col --8:lg mb-2">
-                <textarea name="settings" x-model="options.settings" cols="30" rows="20"></textarea>
+                <div class="mb-1">Прокси для отдельных трекеров (JSON):</div>
+                <textarea name="settings" x-model="options.settings" cols="30" rows="12" placeholder='{"rutracker.org": {"use": "yes", "type": "SOCKS5", "address": "192.168.1.220:9050"}}'></textarea>
+                <div class="form-help">use: "yes" — ходить на трекер через прокси, "no" — всегда напрямую. Если address не указан, используется общий прокси из вкладки «Прокси». type: SOCKS5 или HTTP.</div>
             </div>
         </div>
 

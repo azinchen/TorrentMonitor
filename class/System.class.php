@@ -1,4 +1,5 @@
 <?php
+include_once dirname(__FILE__).'/Database.class.php';
 include_once dirname(__FILE__).'/Release.class.php';
 
 class Sys
@@ -12,15 +13,16 @@ class Sys
     public static $lastCfCookies = '';
     public static $lastCfUserAgent = '';
 
-    //проверяем есть ли конфигурационный файл
-    public static function checkConfigExist()
+    //Сообщение для установки, перенесённой с версии с базой данных, данные которой
+    //ещё не преобразованы; NULL, если всё в порядке.
+    public static function legacyDatabaseNotice()
     {
-        $dir = dirname(__FILE__);
-        $dir = str_replace('class', '', $dir);
-        if (file_exists($dir.'/config.php'))
-            return TRUE;
-        else
-            return FALSE;
+        if (Storage::initialized() || empty(Config::read('db.type')))
+            return NULL;
+        return 'В config.php найдены настройки базы данных от предыдущей версии TorrentMonitor, '
+            .'а каталог данных '.Storage::dir().' пуст. Эта версия хранит данные в JSON-файлах и с базой данных не работает. '
+            .'Перенесите данные командой: php tools/convert-db.php (подробности: php tools/convert-db.php --help). '
+            .'Чтобы начать с чистой установки, удалите строки db.* из config.php.';
     }
 
     //проверяем установлено ли расширение CURL
@@ -149,7 +151,7 @@ class Sys
             $proxyType = $settingProxy[2]['val'];
         }
 
-        $ext_proxy = Config::read('ext_proxy');
+        $ext_proxy = Database::getTrackerProxy();
         if ( ! empty($ext_proxy))
         {
             $urlParts = parse_url($url);
@@ -159,10 +161,10 @@ class Sys
                 if ($ext_proxy[$tracker]['use'] == 'yes')
                 {
                     $proxy = TRUE;
-                    if (count($ext_proxy[$tracker]) == 3)
+                    if ( ! empty($ext_proxy[$tracker]['address']))
                     {
                         $proxyAddress = $ext_proxy[$tracker]['address'];
-                        $proxyType = $ext_proxy[$tracker]['type'];
+                        $proxyType = strtoupper(isset($ext_proxy[$tracker]['type']) ? $ext_proxy[$tracker]['type'] : '');
                     }
                     else
                     {
@@ -723,10 +725,7 @@ class Sys
     //записываем время последнего запуска системы
     public static function lastStart()
     {
-        $dir = dirname(__FILE__);
-        $dir = str_replace('class', '', $dir);
-        $date = date('d-m-Y H:i:s');
-        file_put_contents($dir.'/laststart.txt', $date);
+        Database::setLastStart(date('d-m-Y H:i:s'));
     }
 
     //проверяем что файл является torrent-файлом (ну пытаемся)

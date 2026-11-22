@@ -1,6 +1,6 @@
 <?php
 $dir = dirname(__FILE__).'/../';
-include_once $dir.'config.php';
+include_once $dir.'class/Config.class.php';
 include_once $dir.'class/Database.class.php';
 include_once $dir.'class/System.class.php';
 include_once $dir.'class/Errors.class.php';
@@ -99,6 +99,9 @@ function body()
         return json_decode(file_get_contents('php://input'), true) ?? [];
     return $_POST;
 }
+
+if (Sys::legacyDatabaseNotice() !== null)
+    api_respond(false, Sys::legacyDatabaseNotice(), null, 503);
 
 // ---- Auth ------------------------------------------------------------------
 

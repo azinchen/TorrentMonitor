@@ -47,7 +47,7 @@ final class UpdateTest extends IntegrationTestCase
     {
         $this->release('ok');
         $config = file_get_contents('/app/config.php');
-        $extConfig = file_get_contents('/app/config.xml');
+        AppState::setSettings(array('userAgent' => 'kept across the update'));
 
         $page = Env::uiGet('/include/update.php');
 
@@ -56,7 +56,7 @@ final class UpdateTest extends IntegrationTestCase
         $this->assertSame('9.9.9', AppState::version());
         $this->assertFileExists('/app/class/AddedByRelease.php', 'files from the archive are installed');
         $this->assertSame($config, file_get_contents('/app/config.php'), 'config.php is kept');
-        $this->assertSame($extConfig, file_get_contents('/app/config.xml'), 'config.xml is kept');
+        $this->assertSame('kept across the update', AppState::setting('userAgent'), 'data is kept');
         $this->assertFileDoesNotExist('/app/update.zip');
         $this->assertDirectoryDoesNotExist('/app/tmp_update');
         $this->assertSame('updated_9.9.9', AppState::news()[0]['id']);
