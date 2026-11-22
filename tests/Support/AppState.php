@@ -4,18 +4,18 @@
 // the same behaviour.
 //
 // Data is JSON files in TM_DATA_DIR; they are read and written through the
-// application's own Storage class, so that locking and file format stay correct.
+// application's own storage classes, so that locking and file format stay correct.
 class AppState
 {
     private static function storage()
     {
-        require_once TM_ROOT.'/class/Storage.class.php';
+        require_once TM_ROOT.'/src/bootstrap.php';
     }
 
     private static function read($store)
     {
         self::storage();
-        return Storage::$store()->read();
+        return \TorrentMonitor\Storage\Files::$store()->read();
     }
 
     // settings every integration test starts from
@@ -32,7 +32,7 @@ class AppState
     public static function setSettings($values)
     {
         self::storage();
-        Storage::config()->update(function (&$data) use ($values) {
+        \TorrentMonitor\Storage\Files::config()->update(function (&$data) use ($values) {
             foreach ($values as $key => $value)
                 $data['settings'][$key] = (string)$value;
         });
@@ -47,10 +47,10 @@ class AppState
     public static function setCredentials($tracker, $login, $password)
     {
         self::storage();
-        Storage::config()->update(function (&$data) use ($tracker, $login, $password) {
+        \TorrentMonitor\Storage\Files::config()->update(function (&$data) use ($tracker, $login, $password) {
             $data['trackers'][$tracker] = array('login' => $login, 'password' => $password, 'passkey' => '');
         });
-        Storage::state()->update(function (&$data) use ($tracker) {
+        \TorrentMonitor\Storage\Files::state()->update(function (&$data) use ($tracker) {
             unset($data['cookies'][$tracker]);
         });
     }
@@ -90,14 +90,17 @@ class AppState
 
     public static function topics()
     {
-        return self::read('torrents')['torrents'];
+        // new field names, plus the names the tests have always used
+        return array_map(function ($t) {
+            return $t + array('torrent_id' => $t['topicId'], 'timestamp' => $t['updatedAt'], 'ep' => $t['episode'], 'pause' => (int)$t['paused']);
+        }, self::read('torrents')['topics']);
     }
 
     // list of array('where' => tracker or component, 'reason' => code, 't_id' => topic id)
     public static function warnings()
     {
         return array_map(function ($w) {
-            return array('where' => $w['where'], 'reason' => $w['reason'], 't_id' => $w['t_id']);
+            return array('where' => $w['source'], 'reason' => $w['code'], 't_id' => $w['topicId']);
         }, self::read('state')['warnings']);
     }
 

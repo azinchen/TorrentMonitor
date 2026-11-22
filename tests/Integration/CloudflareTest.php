@@ -16,8 +16,15 @@ final class CloudflareTest extends IntegrationTestCase
 
         $solved = Env::fakeRequests('/solver/v1');
         $this->assertNotEmpty($solved, 'solver was used');
+        // the solver only opens pages; the login POST goes directly with the clearance cookie
+        // (Byparr loses POST data, so the login must not depend on the solver's request.post)
         $commands = array_map(function ($r) { return json_decode($r['body'], true)['cmd']; }, $solved);
-        $this->assertContains('request.post', $commands, 'login is a POST and must stay a POST through the solver');
+        $this->assertNotContains('request.post', $commands);
+        $this->assertCount(1, $solved, 'one solution serves all requests of the run');
+        $logins = Env::fakeRequests('/forum/login.php');
+        $login = end($logins);
+        $this->assertStringContainsString('cf_clearance=fake-clearance', $login['cookie']);
+        $this->assertStringContainsString('FakeSolver', $login['userAgent']);
 
         $topic = AppState::topic($id);
         $this->assertSame('2026-03-11 09:15:00', $topic['timestamp']);

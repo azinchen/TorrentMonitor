@@ -1,8 +1,9 @@
 <?php
 use PHPUnit\Framework\TestCase;
 
-require_once TM_ROOT.'/class/Config.class.php';
-require_once TM_ROOT.'/class/System.class.php';
+require_once TM_ROOT.'/src/bootstrap.php';
+
+use TorrentMonitor\Update\Release;
 
 final class ReleaseTest extends TestCase
 {

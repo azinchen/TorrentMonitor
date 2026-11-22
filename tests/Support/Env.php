@@ -83,6 +83,15 @@ class Env
         return self::sh('cd /app && php engine.php 2>&1');
     }
 
+    // a run that is expected to refuse to work: returns its output, fails if it reports success
+    public static function runEngineExpectingFailure()
+    {
+        exec('cd /app && php engine.php 2>&1', $output, $code);
+        if ($code === 0)
+            throw new RuntimeException("engine was expected to fail but succeeded:\n".implode("\n", $output));
+        return implode("\n", $output);
+    }
+
     public static function sh($command)
     {
         exec($command, $output, $code);

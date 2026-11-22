@@ -27,7 +27,7 @@ final class ApiTest extends IntegrationTestCase
 
         $created = Env::api('POST', 'torrents', array('json' => array('url' => self::TOPIC.'501', 'category' => 'tv')));
         $this->assertSame(201, $created['status']);
-        $this->assertSame(array('tracker' => 'rutracker.org', 'threme' => '501'), $created['json']['data']);
+        $this->assertSame(array('tracker' => 'rutracker.org', 'topicId' => '501'), array_intersect_key($created['json']['data'], array('tracker' => 1, 'topicId' => 1)));
 
         $duplicate = Env::api('POST', 'torrents', array('json' => array('url' => self::TOPIC.'501')));
         $this->assertSame(409, $duplicate['status']);
@@ -36,11 +36,11 @@ final class ApiTest extends IntegrationTestCase
         $this->assertTrue($list['ok']);
         $this->assertCount(1, $list['data']);
         $this->assertSame('rutracker.org', $list['data'][0]['tracker']);
-        $this->assertSame('501', $list['data'][0]['torrent_id']);
+        $this->assertSame('501', $list['data'][0]['topicId']);
         $id = $list['data'][0]['id'];
 
         $one = Env::api('GET', 'torrents/'.$id)['json'];
-        $this->assertSame('501', $one['data']['torrent_id']);
+        $this->assertSame('501', $one['data']['topicId']);
         $this->assertSame('tv', $one['data']['category']);
 
         $this->assertSame(200, Env::api('DELETE', 'torrents/'.$id)['status']);

@@ -1,7 +1,10 @@
 <?php
 use PHPUnit\Framework\TestCase;
 
-require_once TM_ROOT.'/class/JsonStore.class.php';
+require_once TM_ROOT.'/src/autoload.php';
+
+use TorrentMonitor\Storage\JsonStore;
+use TorrentMonitor\Storage\StorageException;
 
 final class JsonStoreTest extends TestCase
 {
@@ -218,11 +221,11 @@ final class JsonStoreTest extends TestCase
     public function testParallelWritersDoNotLoseUpdates()
     {
         $script = $this->dir.'/writer.php';
-        file_put_contents($script, '<?php require $argv[1]; $s = new JsonStore($argv[2], array("items" => array()), 1, array(), false);'
+        file_put_contents($script, '<?php require $argv[1]; $s = new \TorrentMonitor\Storage\JsonStore($argv[2], array("items" => array()), 1, array(), false);'
             .'for ($i = 0; $i < 40; $i++) $s->update(function (&$d) use ($argv, $i) { $d["items"][] = $argv[3]."-".$i; });');
         $processes = array();
         for ($w = 0; $w < 5; $w++)
-            $processes[] = proc_open(array(PHP_BINARY, $script, TM_ROOT.'/class/JsonStore.class.php', $this->file, 'w'.$w), array(), $pipes);
+            $processes[] = proc_open(array(PHP_BINARY, $script, TM_ROOT.'/src/autoload.php', $this->file, 'w'.$w), array(), $pipes);
         foreach ($processes as $process)
             $this->assertSame(0, proc_close($process));
         unlink($script);

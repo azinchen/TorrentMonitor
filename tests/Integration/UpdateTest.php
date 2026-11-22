@@ -54,7 +54,7 @@ final class UpdateTest extends IntegrationTestCase
         $this->assertStringContainsString('Обновление до версии: 9.9.9 выполнено успешно.', $page['body']);
         $this->assertStringContainsString('пункт &lt;b&gt;один&lt;/b&gt;', $page['body'], 'release notes are shown escaped');
         $this->assertSame('9.9.9', AppState::version());
-        $this->assertFileExists('/app/class/AddedByRelease.php', 'files from the archive are installed');
+        $this->assertFileExists('/app/src/AddedByRelease.php', 'files from the archive are installed');
         $this->assertSame($config, file_get_contents('/app/config.php'), 'config.php is kept');
         $this->assertSame('kept across the update', AppState::setting('userAgent'), 'data is kept');
         $this->assertFileDoesNotExist('/app/update.zip');

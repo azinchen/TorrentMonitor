@@ -1,42 +1,17 @@
 <?php
-// Setup libxml for PHP version compatibility
-// libxml_disable_entity_loader() was deprecated in PHP 8.0
-if (PHP_VERSION_ID < 80000 && function_exists('libxml_disable_entity_loader')) {
-    libxml_disable_entity_loader(true);
-}
-
-$dir = dirname(__FILE__)."/";
-include_once $dir."class/Config.class.php";
-include_once $dir."class/Database.class.php";
-include_once $dir."class/System.class.php";
-
-//данные от версии с базой данных ещё не перенесены, либо файлы данных недоступны
-try
-{
-    $storageProblem = Sys::legacyDatabaseNotice();
-    if ($storageProblem === NULL)
-        Database::checkStorage();
-}
-catch (StorageException $e)
-{
-    $storageProblem = $e->getMessage();
-}
-if ($storageProblem !== NULL)
-{
-    http_response_code(503);
-    header('Content-Type: text/html; charset=utf-8');
-    die('<!doctype html><meta charset="utf-8"><title>TorrentMonitor</title><body style="font-family:sans-serif;max-width:46em;margin:3em auto;line-height:1.5">'
-        .'<h1>TorrentMonitor не может начать работу</h1><p>'.htmlspecialchars($storageProblem).'</p></body>');
-}
-
-if (session_status() !== PHP_SESSION_ACTIVE)
-    session_start();
-
-if (empty($_SESSION['csrf_token']))
-    $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
-
-if (Sys::checkAuth())
-    require_once "pages/main.php";
-else
-    require_once "pages/auth.php";
+//Этот файл виден, только если корень сайта указывает на каталог программы, а не на public,
+//и веб-сервер не выполняет .htaccess (nginx и другие).
+http_response_code(503);
+header('Content-Type: text/html; charset=utf-8');
 ?>
+<!doctype html><meta charset="utf-8"><title>TorrentMonitor</title>
+<body style="font-family:sans-serif;max-width:46em;margin:3em auto;line-height:1.5">
+<h1>Нужно изменить корень сайта</h1>
+<p>Начиная с версии 4.0 корнем сайта TorrentMonitor должен быть каталог <b><?= htmlspecialchars(__DIR__.DIRECTORY_SEPARATOR.'public') ?></b>.
+Так настройки, пароли и данные программы недоступны из браузера.</p>
+<p>Измените в настройках веб-сервера путь к сайту (root в nginx, DocumentRoot в Apache) на этот каталог
+и направьте все запросы к несуществующим файлам на <code>index.php</code>. Пример для nginx:</p>
+<pre>root <?= htmlspecialchars(__DIR__.'/public') ?>;
+location / { try_files $uri /index.php$is_args$args; }</pre>
+<p>Подробности — в вики, раздел «Обновление».</p>
+</body>

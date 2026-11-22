@@ -243,7 +243,7 @@ final class ConverterTest extends IntegrationTestCase
         $this->assertSame(503, $page['status']);
         $this->assertStringContainsString('php tools/convert-db.php', $page['body']);
         $this->assertSame(503, Env::api('GET', 'torrents')['status']);
-        $this->assertStringContainsString('php tools/convert-db.php', Env::runEngine());
+        $this->assertStringContainsString('php tools/convert-db.php', Env::runEngineExpectingFailure());
         $this->assertSame(array(), glob(getenv('TM_DATA_DIR').'/*.json'), 'nothing is created before the conversion');
 
         // no arguments: everything is taken from the old config.php
@@ -253,7 +253,7 @@ final class ConverterTest extends IntegrationTestCase
 
         $this->assertSame(200, Http::get(Env::APP.'/')['status']);
         $list = Env::api('GET', 'torrents')['json']['data'];
-        $this->assertSame(array('', '801'), array_column($list, 'torrent_id'));
+        $this->assertSame(array('', '801'), array_column($list, 'topicId'));
         $this->assertSame(
             array('lostfilm.tv' => array('use' => 'yes', 'address' => '192.168.1.220:8118', 'type' => 'SOCKS5'), 'rutor.is' => array('use' => 'no')),
             json_decode(AppState::file('config.json'), true)['trackerProxy']

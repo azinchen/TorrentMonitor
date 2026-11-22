@@ -26,6 +26,7 @@ function default_state()
             'password'   => 'tm-pass',
             'session'    => 'fake-session-0001',
             'cloudflare' => false,       // true = answer with a Cloudflare challenge page
+            'cloudflareStrict' => false, // true = the clearance cookie does not help: only the solver's browser passes
             'down'       => false,       // true = answer 502 with an empty body
             // topic id => array('title' => ..., 'date' => '21-Ноя-26 10:00', 'revision' => 1)
             'topics'     => array(),
@@ -78,7 +79,7 @@ function rutracker_response($state, $method, $path, $query, $cookie, $post, $via
     if ( ! empty($rt['down']))
         return array(502, array(), '');
 
-    if ( ! empty($rt['cloudflare']) && ! $viaSolver && strpos($cookie, CF_COOKIE) === false)
+    if ( ! empty($rt['cloudflare']) && ! $viaSolver && ( ! empty($rt['cloudflareStrict']) || strpos($cookie, CF_COOKIE) === false))
     {
         $body = '<html><head><title>Just a moment...</title></head><body>Checking your browser before accessing. Cloudflare</body></html>';
         return array(403, array('Content-Type: text/html; charset=UTF-8'), $body);
@@ -162,7 +163,7 @@ if (strpos($path, '/__control/') === 0)
     if ($path == '/__control/requests')
     {
         $rows = array();
-        foreach ((array)@file(LOG_FILE, FILE_IGNORE_NEW_LINES) as $line)
+        foreach (is_file(LOG_FILE) ? file(LOG_FILE, FILE_IGNORE_NEW_LINES) : array() as $line)
             $rows[] = json_decode($line, true);
         return send_json($rows);
     }
@@ -231,7 +232,7 @@ if ($path == '/github/release.zip')
         else
             $zip->addFile($item->getPathname(), $prefix.$relative);
     }
-    $zip->addFromString($prefix.'class/AddedByRelease.php', "<?php // file that exists only in the fake release\n");
+    $zip->addFromString($prefix.'src/AddedByRelease.php', "<?php // file that exists only in the fake release\n");
     $zip->close();
     header('Content-Type: application/zip');
     readfile($file);

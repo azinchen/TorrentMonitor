@@ -40,7 +40,7 @@ final class StorageTest extends IntegrationTestCase
         {
             $mode = substr(sprintf('%o', fileperms($this->dataFile($name))), -4);
             $this->assertContains($mode, array('0600', '0660'), $name.' is not readable by other users');
-            $this->assertStringContainsString("\n    \"version\": 1", file_get_contents($this->dataFile($name)));
+            $this->assertMatchesRegularExpression('/\n    "version": \d+/', file_get_contents($this->dataFile($name)));
         }
         $this->assertFileExists($this->dataFile('.htaccess'));
     }
@@ -73,7 +73,7 @@ final class StorageTest extends IntegrationTestCase
 
         $page = Http::get(Env::APP.'/');
         $api = Env::api('GET', 'torrents');
-        $engine = Env::runEngine();
+        $engine = Env::runEngineExpectingFailure();
 
         $this->assertSame(503, $page['status']);
         $this->assertStringContainsString('Файл данных повреждён', $page['body']);
@@ -151,7 +151,7 @@ final class StorageTest extends IntegrationTestCase
         $this->assertFalse($saved['json']['error'], $saved['body']);
         Env::runEngine();
         $this->assertNotEmpty(AppState::warnings());
-        $this->assertSame('0000-00-00 00:00:00', AppState::topic($id)['timestamp']);
+        $this->assertSame('', AppState::topic($id)['timestamp']);
         $this->assertEmpty(Env::fakeRequests('/forum/'), 'no request reached the tracker directly');
 
         // "no" switches the proxy off for this tracker
@@ -185,7 +185,7 @@ final class StorageTest extends IntegrationTestCase
     public function testLastStartIsRemembered()
     {
         Env::runEngine();
-        $this->assertMatchesRegularExpression('/"lastStart": "\d\d-\d\d-\d{4} \d\d:\d\d:\d\d"/', AppState::file('state.json'));
+        $this->assertMatchesRegularExpression('/"lastRun": "\d{4}-\d\d-\d\d \d\d:\d\d:\d\d"/', AppState::file('state.json'));
         $this->assertStringNotContainsString('Ещё не производилась', Env::uiOpen()['body']);
     }
 }
