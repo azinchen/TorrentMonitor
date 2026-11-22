@@ -162,31 +162,38 @@ final class Client
                 return $retry;
         }
 
-        //страницу открываем в браузере решателя; файл или POST - сначала получаем cookie на обычной странице сайта
+        //Браузер решателя открывает адрес, закрытый проверкой: сам адрес запроса (и для POST тоже -
+        //сайты часто закрывают не все страницы, и на открытой странице cookie не выдаётся).
+        //Файл в браузере открыть нельзя: для него берётся страница, с которой он скачивается.
         $page = ($request->method == 'GET' && ! $request->binary);
-        $target = $page ? $request->url : ($request->referer !== NULL ? $request->referer : $request->origin().'/');
-        $this->log('Cloudflare: '.$host.' запрашивает проверку, обращаюсь к решателю ('.$target.')');
-        $solution = $this->solver->request('GET', $target, $ownCookie, '', $solverProxy);
+        $targets = $request->binary ? array_filter(array($request->referer, $request->origin().'/')) : array($request->url);
+        $solution = NULL;
+        foreach ($targets as $target)
+        {
+            $this->log('Cloudflare: '.$host.' запрашивает проверку, обращаюсь к решателю ('.$target.')');
+            $solution = $this->solver->request('GET', $target, $ownCookie, '', $solverProxy);
+            if ($solution === NULL)
+                continue;
+            $passed = array();
+            foreach ($solution['cookies'] as $name => $value)
+                if (Cookies::isCloudflare($name))
+                    $passed[$name] = $value;
+            if ($this->clearance === NULL || empty($passed) || $solution['userAgent'] === '')
+                continue;
+
+            $this->clearance->set($host, Cookies::build($passed), $solution['userAgent']);
+            $retry = $this->transfer(array($request))[0];
+            if ( ! $this->isChallenge($retry))
+                return $retry;
+            $this->log('Cloudflare: cookie решателя не подошли для прямого запроса к '.$host.' (другой IP-адрес?)');
+            break;
+        }
         if ($solution === NULL)
         {
             $this->log('Cloudflare: решатель не справился с '.$host);
             if ($this->clearance !== NULL)
                 $this->clearance->forget($host);
             return $blocked;
-        }
-
-        $passed = array();
-        foreach ($solution['cookies'] as $name => $value)
-            if (Cookies::isCloudflare($name))
-                $passed[$name] = $value;
-        if ($this->clearance !== NULL && ! empty($passed) && $solution['userAgent'] !== '')
-        {
-            $this->clearance->set($host, Cookies::build($passed), $solution['userAgent']);
-
-            $retry = $this->transfer(array($request))[0];
-            if ( ! $this->isChallenge($retry))
-                return $retry;
-            $this->log('Cloudflare: cookie решателя не подошли для прямого запроса к '.$host.' (другой IP-адрес?)');
         }
 
         //прямой запрос не проходит: берём то, что увидел браузер решателя

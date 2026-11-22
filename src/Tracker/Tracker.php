@@ -79,11 +79,12 @@ abstract class Tracker
             return;
         if (static::NEEDS_ACCOUNT)
         {
-            if ( ! Accounts::filled($this->name))
-                throw new TrackerException('credential_miss');
+            //cookie могла быть вставлена пользователем вручную (вход с капчей): тогда логин и пароль не нужны
             $saved = Accounts::cookie($this->name);
             if ($saved !== '' && $this->sessionAlive($saved))
                 $this->session = $saved;
+            elseif ( ! Accounts::filled($this->name))
+                throw new TrackerException($saved !== '' ? ($this->blocked ? 'cloudflare' : 'credential_wrong') : 'credential_miss');
             else
             {
                 try

@@ -6,8 +6,5 @@ https://github.com/ElizarovEugene/TorrentMonitor
 
 Bundled third-party code:
 
-- class/TransmissionRPC.class.php - Transmission bittorrent client/daemon
-  RPC communication class, copyright (c) 2010 Johan Adriaans, Bryce Chidester,
-  licensed under the GNU General Public License v3 or later.
-- assets/css/style.min.css, assets/js/scripts.min.js - interface by
+- public/assets/css/style.min.css, public/assets/js/scripts.min.js - interface by
   Dark Preacher.

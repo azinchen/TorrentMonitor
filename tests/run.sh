@@ -8,7 +8,7 @@
 #   tests/run.sh all           lint + unit + integration: must pass before a merge
 #   tests/run.sh live          tests against real trackers (needs tests/env/secrets/trackers.env)
 #   tests/run.sh reach         which trackers answer from here / through the VPN
-#   tests/run.sh record <tracker> <url> <name>   save a scrubbed tracker page as a fixture
+#   tests/run.sh record <tracker> <path> <name>   save a scrubbed tracker page as a fixture
 #   tests/run.sh up            start the local stack and leave it running (http://127.0.0.1:8088)
 #   tests/run.sh down          remove the stack and its data
 #   tests/run.sh hooks         install the pre-push hook that blocks pushing secrets
@@ -113,7 +113,7 @@ cmd_reach() {
 }
 
 cmd_record() {
-    [[ $# -eq 3 ]] || { echo "usage: tests/run.sh record <tracker> <url> <name>"; exit 2; }
+    [[ $# -eq 3 ]] || { echo "usage: tests/run.sh record <tracker> <path> <name>"; exit 2; }
     local out="$root/tests/Fixtures/$1/$3.html"
     mkdir -p "$(dirname "$out")"
     # needs a running live stack in which the tracker session already exists (run the live tests with TM_KEEP=1 first)

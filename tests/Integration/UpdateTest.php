@@ -48,6 +48,14 @@ final class UpdateTest extends IntegrationTestCase
         $this->release('ok');
         $config = file_get_contents('/app/config.php');
         AppState::setSettings(array('userAgent' => 'kept across the update'));
+        // leftovers of the previous version and the user's own files
+        @mkdir('/app/class');
+        @mkdir('/app/trackers');
+        file_put_contents('/app/class/Old.class.php', '<?php');
+        file_put_contents('/app/trackers/old.engine.php', '<?php');
+        file_put_contents('/app/src/Tracker/RemovedTracker.php', '<?php');
+        file_put_contents('/app/scripts/mine.sh', '#!/bin/sh');
+        file_put_contents('/app/torrents/keep.torrent', 'x');
 
         $page = Env::uiGet('/include/update.php');
 
@@ -57,6 +65,13 @@ final class UpdateTest extends IntegrationTestCase
         $this->assertFileExists('/app/src/AddedByRelease.php', 'files from the archive are installed');
         $this->assertSame($config, file_get_contents('/app/config.php'), 'config.php is kept');
         $this->assertSame('kept across the update', AppState::setting('userAgent'), 'data is kept');
+        $this->assertDirectoryDoesNotExist('/app/class', 'folders of the previous version are removed');
+        $this->assertDirectoryDoesNotExist('/app/trackers');
+        $this->assertFileDoesNotExist('/app/src/Tracker/RemovedTracker.php', 'files that left the program are removed');
+        $this->assertFileExists('/app/scripts/mine.sh', 'user scripts are kept');
+        $this->assertFileExists('/app/torrents/keep.torrent', 'torrent files are kept');
+        unlink('/app/scripts/mine.sh');
+        unlink('/app/torrents/keep.torrent');
         $this->assertFileDoesNotExist('/app/update.zip');
         $this->assertDirectoryDoesNotExist('/app/tmp_update');
         $this->assertSame('updated_9.9.9', AppState::news()[0]['id']);

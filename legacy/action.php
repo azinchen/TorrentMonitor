@@ -262,6 +262,10 @@ if (isset($_POST['action']))
 	{
 		Database::updateSettings('httpTimeout', (int) $_POST['httpTimeout']);
 		Database::updateSettings('flaresolverrUrl', trim($_POST['flaresolverrUrl']));
+		if (isset($_POST['stopAfterDays']))
+			Database::updateSettings('stopAfterDays', max(0, (int)$_POST['stopAfterDays']));
+		if (isset($_POST['removeOnSeriesDelete']))
+			Database::updateSettings('removeOnSeriesDelete', Sys::strBoolToInt($_POST['removeOnSeriesDelete']));
 
 		//прокси для отдельных трекеров, в виде JSON
 		$text = trim((string)($_POST['settings'] ?? ''));

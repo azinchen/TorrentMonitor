@@ -66,10 +66,10 @@ final class Registry
         return isset(self::TRACKERS[$name]) && constant(self::TRACKERS[$name][0].'::NEEDS_ACCOUNT');
     }
 
-    //можно ли работать с трекером: учётные данные заданы или не нужны
+    //можно ли работать с трекером: учётные данные (или cookie сессии) заданы или не нужны
     public static function ready(string $name): bool
     {
-        return self::has($name) && ( ! self::needsAccount($name) || Accounts::filled($name));
+        return self::has($name) && ( ! self::needsAccount($name) || Accounts::filled($name) || Accounts::cookie($name) !== '');
     }
 
     //умеет ли трекер показывать темы пользователя

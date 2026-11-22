@@ -203,13 +203,11 @@ final class CoreFeaturesTest extends IntegrationTestCase
         $item = Env::uiGet('/action.php?action=item_data&id='.$topic['id'])['json'];
         $this->assertSame('https://rutracker.org/forum/viewtopic.php?t=810', $item['url']);
 
-        foreach (array('/include/show_table.php', '/include/credentials.php', '/include/check.php', '/include/show_warnings.php', '/include/show_watching.php', '/include/news.php') as $page)
+        foreach (array('/include/show_table.php', '/include/credentials.php', '/include/check.php', '/include/show_warnings.php', '/include/show_watching.php', '/include/news.php', '/include/settings.php', '/include/execution.php') as $page)
         {
             $response = Env::uiGet($page);
             $this->assertSame(200, $response['status'], $page);
-            $this->assertStringNotContainsString('Warning', $response['body'], $page);
-            $this->assertStringNotContainsString('Fatal', $response['body'], $page);
-            $this->assertStringNotContainsString('Deprecated', $response['body'], $page);
+            $this->assertDoesNotMatchRegularExpression('~(Warning|Notice|Deprecated|Fatal error|Parse error)</b>:|Uncaught ~', $response['body'], $page);
         }
         $this->assertStringContainsString('Своё имя', Env::uiGet('/include/show_table.php')['body']);
     }

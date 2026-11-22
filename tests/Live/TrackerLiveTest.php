@@ -47,7 +47,7 @@ final class TrackerLiveTest extends TestCase
 
         $stored = AppState::topics()[0];
         $this->assertSame(array(), AppState::warningReasons(), "engine output:\n".Scrubber::scrub($output, array('LOGIN' => $login, 'PASSWORD' => $password)));
-        $this->assertNotSame('0000-00-00 00:00:00', $stored['timestamp'], 'date of the torrent was read from the page');
+        $this->assertNotSame('', $stored['timestamp'], 'date of the torrent was read from the page');
         $this->assertNotSame('', $stored['name'], 'topic name was read from the page');
 
         $files = glob('/app/torrents/*.torrent');

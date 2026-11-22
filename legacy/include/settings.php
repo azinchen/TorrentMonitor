@@ -385,7 +385,26 @@ $csettings['settings'] = empty($trackerProxy) ? '' : json_encode($trackerProxy, 
             <div class="col --2:lg mb-1">FlareSolverr URL:</div>
             <div class="col --5:lg mb-2">
                 <input type="url" name="flaresolverrUrl" x-model="options.flaresolverrUrl" placeholder="http://flaresolverr:8191">
-                <div class="form-help">Адрес FlareSolverr для обхода Cloudflare. Оставьте пустым, если не используется.</div>
+                <div class="form-help">Адрес FlareSolverr или Byparr для обхода Cloudflare. Оставьте пустым, если не используется.</div>
+            </div>
+        </label>
+
+        <label class="row">
+            <div class="col --2:lg mb-1">Прекращать проверку через:</div>
+            <div class="col --5:lg mb-2">
+                <input type="number" name="stopAfterDays" x-model="options.stopAfterDays" min="0" required>
+                <div class="form-help">Дней без обновлений, после которых тема больше не проверяется. 0 — проверять всегда.</div>
+            </div>
+        </label>
+
+        <label class="row">
+            <div class="col --2:lg mb-1">Удаление сериала в Sonarr:</div>
+            <div class="col --5:lg mb-2">
+                <select name="removeOnSeriesDelete" x-model="options.removeOnSeriesDelete">
+                    <option value="0">Ничего не делать</option>
+                    <option value="1">Удалять темы сериала и их раздачи</option>
+                </select>
+                <div class="form-help">Действует для тем, добавленных через webhook Sonarr.</div>
             </div>
         </label>
 
@@ -438,7 +457,7 @@ $csettings['settings'] = empty($trackerProxy) ? '' : json_encode($trackerProxy, 
                     Авторизация: заголовок <code>Authorization: Bearer API_KEY</code><br><br>
                     <b>GET /api/torrents</b> — список тем. Параметр: <code>?tracker=</code> (опционально).<br>
                     <b>GET /api/torrents/{id}</b> — все поля одной темы по ID.<br>
-                    <b>POST /api/torrents</b> — добавить. Форумный трекер: <code>url</code>. RSS-трекер: <code>tracker</code> + <code>name</code> [+ <code>hd</code>: 0=SD, 1=720p, 2=1080p].<br>
+                    <b>POST /api/torrents</b> — добавить. Форумный трекер: <code>url</code>. RSS-трекер: <code>tracker</code> + <code>name</code> [+ <code>quality</code>: sd, 720, 1080].<br>
                     <b>DELETE /api/torrents/{id}</b> — удалить тему по ID.<br>
                     <b>POST /api/run</b> — запустить движок вручную (асинхронно, возвращает 202).<br>
                     <b>GET /api/errors</b> — список ошибок. Параметр: <code>?tracker=</code> (опционально).<br>

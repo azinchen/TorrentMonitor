@@ -61,6 +61,14 @@ $trackers = Database::getTrackersList();
                 </label>
             </template>
 
+            <label class="row">
+                <div class="col --2:lg mb-1">Адрес</div>
+                <div class="col --5:lg mb-2">
+                    <input type="text" name="address" x-model="tracker.address" placeholder="необязательно">
+                    <div class="form-help">Другой адрес (зеркало) этого трекера, например https://rutracker.net. Несколько адресов через запятую: используется первый доступный.</div>
+                </div>
+            </label>
+
             <template x-if="tracker.tracker == 'nnmclub.to'">
                 <div>
                     <label class="row">

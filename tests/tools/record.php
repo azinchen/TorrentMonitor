@@ -1,41 +1,30 @@
 <?php
-// Fetches a tracker page with the session TorrentMonitor already has and prints
-// it with account data removed, to be saved as a test fixture.
-// Run with: tests/run.sh record <tracker> <url> <fixture-name>
+// Saves a scrubbed copy of a tracker page, to build fixtures for parser tests.
+// Run with: tests/run.sh record <tracker> <path on the site, e.g. /forum/viewtopic.php?t=1> <fixture name>
+// The tracker account must be saved in the running test stack (tests/run.sh up, then the live test or the UI).
 require '/src/tests/bootstrap.php';
-chdir('/app');
-include_once '/app/class/System.class.php';
-include_once '/app/class/Database.class.php';
+require '/app/src/bootstrap.php';
 
-list(, $tracker, $url) = $argv + array(null, null, null);
-if (empty($tracker) || empty($url))
+use TorrentMonitor\App;
+use TorrentMonitor\Data\Accounts;
+use TorrentMonitor\Http\Request;
+use TorrentMonitor\Tracker\Registry;
+
+list(, $name, $path) = $argv + array(null, '', '/');
+if ( ! Registry::has($name))
+    exit("unknown tracker: $name\n");
+$tracker = Registry::get($name);
+try
 {
-    fwrite(STDERR, "usage: record.php <tracker> <url>\n");
-    exit(2);
+    $tracker->login();
 }
-
-$cookie = (string)Database::getCookie($tracker);
-$page = Sys::getUrlContent(array(
-    'type'           => 'GET',
-    'returntransfer' => 1,
-    'url'            => $url,
-    'cookie'         => $cookie,
-));
-if (empty($page))
+catch (Throwable $e)
 {
-    fwrite(STDERR, "empty answer from $url\n");
-    exit(1);
+    fwrite(STDERR, 'login failed: '.$e->getMessage()."\n");
 }
-
-$secrets = Env::secrets('trackers');
-if ($cookie !== '')
-    $secrets['SESSION_COOKIE'] = $cookie;
-$clean = Scrubber::scrub($page, $secrets);
-
-$leaks = Scrubber::leaks($clean, $secrets);
-if ($leaks)
-{
-    fwrite(STDERR, 'refusing to output: still contains '.implode(', ', $leaks)."\n");
-    exit(1);
-}
-echo $clean;
+$charset = constant(get_class($tracker).'::CHARSET');
+$response = App::http()->send(Request::get($tracker->base().$path)->cookie(Accounts::cookie($name))->charset($charset)->tracker($name)->follow());
+$account = Accounts::get($name);
+$body = Scrubber::scrub($response->body, array('LOGIN' => $account['login'], 'PASSWORD' => $account['password']));
+fwrite(STDERR, 'HTTP '.$response->status.', '.strlen($body)." bytes\n");
+echo $body;

@@ -13,8 +13,6 @@
   - animelayer.ru
   - baibako.tv
   - booktracker.org
-  - casstudio.tv
-  - hamsterstudio.org
   - kinozal.me
   - lostfilm.tv
   - newstudio.tv
@@ -22,25 +20,27 @@
   - pornolab.net
   - riperam.org
   - rustorka.com
-  - rutor.info
+  - rutor.is
   - rutracker.org
   - tfile.cc
 - Слежение за релизерами
   - booktracker.org
-  - nnm-club.ru
+  - nnmclub.to
   - pornolab.net
   - rutracker.org
-  - tfile.me
+  - tfile.cc
 - Поиск новых серий (SD/HD 720/HD 1080 версии на выбор)
   - baibako.tv 
-  - hamsterstudio.org
-  - lostfilm.tv (+ собственное заркало)
+  - lostfilm.tv (+ собственное зеркало)
   - newstudio.tv
-- Работа через proxy (SOCKS5/HTTP)
+- Работа через proxy (SOCKS5/HTTP), зеркала трекеров, FlareSolverr/Byparr для Cloudflare
 - Управление торрент-клиентами (добавление/удаление раздач и файлов)
-  - Transmission (через XML-RPC)
-  - Deluge (через deluge-console)
+  - Transmission
+  - Deluge
   - qBittorrent
+  - Synology Download Station
+  - TorrServer
+- REST API и webhook для Sonarr
 - Сервисы уведомлений:
   - E-mail
   - Prowl
@@ -52,7 +52,7 @@
 - Выполенение собственных скриптов после обновления раздачи
 
 ### Требования для установки:
-* Веб-сервер (Apache, nginx, lighttpd)
+* Веб-сервер (Apache, nginx, lighttpd); корень сайта — каталог `public/`
 * PHP 8.0 или выше с расширениями cURL, mbstring, SimpleXML и zip
 * База данных не нужна: настройки и темы хранятся в JSON-файлах в каталоге `data/`
 
