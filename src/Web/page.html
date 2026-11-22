@@ -1,0 +1,591 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>TorrentMonitor</title>
+<link rel="icon" href="img/favicon.svg">
+<link rel="stylesheet" href="assets/app.css?v={{version}}">
+<script src="assets/app.js?v={{version}}"></script>
+<script defer src="assets/vendor/alpine.min.js?v={{version}}"></script>
+</head>
+<body x-data="app" x-cloak>
+
+<!-- сообщения -->
+<div class="toasts" aria-live="polite">
+    <template x-for="t in toasts" :key="t.id">
+        <div class="toast" :class="t.error && 'toast--error'" x-text="t.text" @click="toasts = toasts.filter(x => x.id !== t.id)"></div>
+    </template>
+</div>
+
+<div class="center" x-show="loading"><p class="muted">Загрузка…</p></div>
+
+<div class="center" x-show="fatal">
+    <div class="card card--narrow">
+        <h1>TorrentMonitor не может начать работу</h1>
+        <p x-text="fatal"></p>
+    </div>
+</div>
+
+<!-- ================================================= первоначальная настройка -->
+<div class="center" x-show="!loading && !fatal && mode == 'setup'">
+    <form class="card card--narrow" @submit.prevent="doSetup()">
+        <h1>Настройка TorrentMonitor</h1>
+        <p class="muted">Три шага, всё можно изменить позже на странице «Настройки».</p>
+
+        <h2>1. Пароль для входа</h2>
+        <div x-show="!setup.noPassword">
+            <label class="field"><span>Пароль</span>
+                <input type="password" x-model="setup.password" autocomplete="new-password" :required="!setup.noPassword" minlength="4"></label>
+            <label class="field"><span>Ещё раз</span>
+                <input type="password" x-model="setup.password2" autocomplete="new-password" :required="!setup.noPassword"></label>
+        </div>
+        <label class="check"><input type="checkbox" x-model="setup.noPassword"> Не защищать паролем (доступ есть только у меня)</label>
+
+        <h2>2. Адрес TorrentMonitor</h2>
+        <label class="field"><span>Адрес</span>
+            <input type="url" x-model="setup.serverAddress" required>
+            <small>По этому адресу TorrentMonitor открывается в браузере. Он используется в ссылках RSS-ленты и на torrent-файлы.</small></label>
+
+        <h2>3. Torrent-клиент</h2>
+        <label class="field"><span>Клиент</span>
+            <select x-model="setup.torrentClient">
+                <option value="">Не использовать: только сохранять torrent-файлы</option>
+                <option>qBittorrent</option><option>Transmission</option><option>Deluge</option><option>SynologyDS</option><option>TorrServer</option>
+            </select></label>
+        <div x-show="setup.torrentClient">
+            <label class="field"><span>Адрес клиента</span>
+                <input type="text" x-model="setup.torrentAddress" placeholder="http://192.168.1.10:8080" :required="!!setup.torrentClient"></label>
+            <label class="field" x-show="setup.torrentClient != 'Deluge'"><span>Логин</span>
+                <input type="text" x-model="setup.torrentLogin" autocomplete="off"></label>
+            <label class="field"><span>Пароль</span>
+                <input type="password" x-model="setup.torrentPassword" autocomplete="new-password"></label>
+            <label class="field"><span>Каталог загрузки</span>
+                <input type="text" x-model="setup.pathToDownload" placeholder="/downloads/">
+                <small>Путь так, как его видит torrent-клиент. Пусто — каталог клиента по умолчанию.</small></label>
+        </div>
+
+        <div class="actions">
+            <button class="btn btn--primary" :disabled="!!busy">Начать работу</button>
+        </div>
+    </form>
+</div>
+
+<!-- ===================================================================== вход -->
+<div class="center" x-show="!loading && !fatal && mode == 'login'">
+    <form class="card card--login" @submit.prevent="doLogin()">
+        <h1>TorrentMonitor</h1>
+        <label class="field"><span>Пароль</span>
+            <input type="password" x-model="login.password" autocomplete="current-password" required x-effect="mode == 'login' && $nextTick(() => $el.focus())"></label>
+        <label class="check"><input type="checkbox" x-model="login.remember"> Запомнить меня на этом устройстве</label>
+        <div class="actions"><button class="btn btn--primary" :disabled="!!busy">Войти</button></div>
+    </form>
+</div>
+
+<!-- =============================================================== приложение -->
+<div class="layout" x-show="!loading && !fatal && mode == 'app'">
+
+<nav class="nav">
+    <div class="nav__brand">TorrentMonitor</div>
+    <template x-for="p in pages" :key="p.id">
+        <a class="nav__link" :href="'#' + p.id" :class="page == p.id && 'nav__link--active'" @click.prevent="open(p.id)">
+            <span x-text="p.title"></span>
+            <span class="count" x-show="badge(p.id)" x-text="badge(p.id)"></span>
+        </a>
+    </template>
+    <div class="nav__foot">
+        <button class="link" @click="nextTheme()" x-text="themeTitle()"></button>
+        <a class="link" :href="status.wiki" target="_blank" rel="noopener">Справка</a>
+        <button class="link" x-show="status.authRequired" @click="doLogout()">Выйти</button>
+        <span class="muted" x-text="'версия ' + status.version"></span>
+    </div>
+</nav>
+
+<main class="main">
+
+<!-- строка состояния над каждой страницей -->
+<div class="runbar">
+    <span class="muted" x-show="!status.running">
+        <span x-show="status.lastRun">Последняя проверка: <span x-text="date(status.lastRun)"></span></span>
+        <span x-show="!status.lastRun">Проверка ещё не запускалась</span>
+    </span>
+    <span x-show="status.running" class="running">Идёт проверка…</span>
+    <button class="btn btn--small" @click="run()" :disabled="status.running || busy == 'run'">Проверить сейчас</button>
+</div>
+
+<div class="banner" x-show="status.update && page != 'status'">
+    Доступна версия <b x-text="status.update && status.update.version"></b>.
+    <a href="#status" @click.prevent="open('status')">Подробнее</a>
+</div>
+
+<!-- ------------------------------------------------------------- Торренты -->
+<section x-show="page == 'topics'">
+    <header class="head">
+        <h1>Торренты</h1>
+        <div class="head__actions">
+            <button class="btn btn--primary" @click="newTopic('topic')">Добавить тему</button>
+            <button class="btn" @click="newTopic('series')" x-show="seriesTrackers.length">Добавить сериал</button>
+        </div>
+    </header>
+
+    <div class="filters" x-show="topics.length > 5">
+        <input type="search" x-model="filter.text" placeholder="Поиск по названию">
+        <select x-model="filter.tracker">
+            <option value="">Все трекеры</option>
+            <template x-for="name in usedTrackers" :key="name"><option x-text="name"></option></template>
+        </select>
+        <select x-model="filter.state">
+            <option value="">Все</option>
+            <option value="error">С ошибками</option>
+            <option value="paused">На паузе</option>
+            <option value="stopped">Проверка прекращена</option>
+        </select>
+    </div>
+
+    <div class="empty" x-show="!topics.length">
+        <p>Пока ничего не отслеживается.</p>
+        <p class="muted">Тема — раздача на форумном трекере: TorrentMonitor следит за её страницей и скачивает torrent-файл заново, когда раздачу обновляют.
+            Сериал — новые серии ищутся по названию в ленте трекера.</p>
+    </div>
+    <div class="empty" x-show="topics.length && !shownTopics.length"><p class="muted">Ничего не найдено.</p></div>
+
+    <ul class="list">
+        <template x-for="t in shownTopics" :key="t.id">
+            <li class="row" :class="{ 'row--dim': t.paused || t.stopped }">
+                <img class="row__icon" :src="icon(t.tracker)" alt="" width="16" height="16" loading="lazy" @error="$el.style.visibility = 'hidden'">
+                <div class="row__body">
+                    <div class="row__title">
+                        <a x-show="t.url" :href="t.url" target="_blank" rel="noopener" x-text="t.name || t.url"></a>
+                        <span x-show="!t.url" x-text="t.name"></span>
+                    </div>
+                    <div class="row__meta">
+                        <span x-text="t.tracker"></span>
+                        <span x-show="t.kind == 'series'" x-text="quality(t.quality) + (t.episode ? ' · ' + t.episode : '')"></span>
+                        <span x-show="t.updatedAt" x-text="'обновлена ' + date(t.updatedAt)"></span>
+                        <span x-show="!t.updatedAt">ещё не скачивалась</span>
+                        <span x-show="t.category" x-text="t.category"></span>
+                        <span x-show="t.path" x-text="t.path"></span>
+                    </div>
+                    <div class="row__flags">
+                        <span class="tag tag--bad" x-show="!t.supported">трекер не поддерживается</span>
+                        <span class="tag tag--bad" x-show="t.error && t.supported">ошибка</span>
+                        <span class="tag" x-show="t.paused">пауза</span>
+                        <span class="tag" x-show="t.stopped && !t.paused" title="Тема давно не обновлялась">проверка прекращена</span>
+                        <span class="tag tag--warn" x-show="t.waiting">ждёт torrent-клиент</span>
+                    </div>
+                    <template x-for="w in topicWarnings(t)" :key="w.id">
+                        <div class="row__error" x-text="w.text"></div>
+                    </template>
+                </div>
+                <div class="row__actions">
+                    <button class="btn btn--small" @click="checkTopic(t)" :disabled="status.running" title="Проверить эту тему сейчас">Проверить</button>
+                    <button class="btn btn--small" @click="togglePause(t)" x-text="t.paused ? 'Возобновить' : 'Пауза'"></button>
+                    <button class="btn btn--small" @click="editTopic(t)">Изменить</button>
+                    <button class="btn btn--small btn--danger" @click="askDelete(t)">Удалить</button>
+                </div>
+            </li>
+        </template>
+    </ul>
+</section>
+
+<!-- --------------------------------------------------------- Пользователи -->
+<section x-show="page == 'users'">
+    <header class="head"><h1>Пользователи</h1></header>
+    <p class="muted">TorrentMonitor следит за новыми раздачами пользователя трекера. Найденную раздачу можно скачать один раз или поставить на постоянное отслеживание.</p>
+
+    <form class="inline" @submit.prevent="addUser()" x-show="userTrackers.length">
+        <select x-model="userForm.tracker" x-init="userForm.tracker = userTrackers.length ? userTrackers[0].name : ''">
+            <template x-for="t in userTrackers" :key="t.name"><option x-text="t.name"></option></template>
+        </select>
+        <input type="text" x-model="userForm.name" placeholder="Имя пользователя на трекере" required>
+        <button class="btn btn--primary" :disabled="!!busy">Следить</button>
+    </form>
+
+    <div class="empty" x-show="!users.length"><p class="muted">Пользователи не отслеживаются.</p></div>
+
+    <template x-for="u in users" :key="u.id">
+        <div class="card">
+            <div class="card__head">
+                <img :src="icon(u.tracker)" alt="" width="16" height="16" @error="$el.style.visibility = 'hidden'">
+                <b x-text="u.name"></b> <span class="muted" x-text="u.tracker"></span>
+                <span class="spacer"></span>
+                <button class="btn btn--small" x-show="u.found.length" @click="act('found.clear', { userId: u.id })">Скрыть все</button>
+                <button class="btn btn--small btn--danger" @click="deleteUser(u)">Не следить</button>
+            </div>
+            <p class="muted" x-show="!u.found.length">Новых раздач нет.</p>
+            <ul class="list list--plain">
+                <template x-for="f in u.found" :key="f.id">
+                    <li class="row">
+                        <div class="row__body">
+                            <div class="row__title"><a :href="f.url" target="_blank" rel="noopener" x-text="f.title"></a></div>
+                            <div class="row__meta"><span x-text="f.section"></span><span x-text="date(f.date)"></span></div>
+                        </div>
+                        <div class="row__actions">
+                            <button class="btn btn--small" @click="act('found.download', { id: f.id })">Скачать</button>
+                            <button class="btn btn--small" @click="act('found.track', { id: f.id })">Отслеживать</button>
+                            <button class="btn btn--small" @click="act('found.dismiss', { id: f.id })">Скрыть</button>
+                        </div>
+                    </li>
+                </template>
+            </ul>
+        </div>
+    </template>
+</section>
+
+<!-- -------------------------------------------------------------- Трекеры -->
+<section x-show="page == 'trackers'">
+    <header class="head"><h1>Трекеры</h1></header>
+    <p class="muted">Учётные данные нужны только для трекеров, которыми вы пользуетесь. Пароли хранятся на сервере и в браузер не передаются.</p>
+
+    <ul class="list">
+        <template x-for="t in trackers" :key="t.name">
+            <li class="tracker" :class="openTracker == t.name && 'tracker--open'">
+                <button class="tracker__head" @click="toggleTracker(t)" :aria-expanded="openTracker == t.name">
+                    <img :src="icon(t.name)" alt="" width="16" height="16" @error="$el.style.visibility = 'hidden'">
+                    <span class="tracker__name" x-text="t.name"></span>
+                    <span class="muted" x-text="t.kind == 'series' ? 'сериалы' : 'темы'"></span>
+                    <span class="muted" x-show="topicCount(t)" x-text="'отслеживается: ' + topicCount(t)"></span>
+                    <span class="spacer"></span>
+                    <span class="tag" :class="'tag--' + trackerState(t).kind" x-text="trackerState(t).text"></span>
+                </button>
+
+                <form class="tracker__form" x-show="openTracker == t.name" @submit.prevent="saveTracker()">
+                    <template x-if="openTracker == t.name">
+                    <div>
+                        <div x-show="t.needsAccount">
+                            <label class="field"><span>Логин</span>
+                                <input type="text" x-model="trackerForm.login" autocomplete="off"></label>
+                            <label class="field"><span>Пароль</span>
+                                <input type="password" x-model="trackerForm.password" autocomplete="new-password"
+                                    :placeholder="t.hasPassword ? 'сохранён — оставьте пустым, чтобы не менять' : ''"></label>
+                            <label class="field" x-show="t.usesPasskey"><span>Passkey</span>
+                                <input type="text" x-model="trackerForm.passkey" autocomplete="off">
+                                <small>Ключ из ссылки на RSS-ленту в профиле на трекере.</small></label>
+                        </div>
+                        <p class="muted" x-show="!t.needsAccount">Этот трекер работает без входа.</p>
+
+                        <label class="field"><span>Адрес</span>
+                            <input type="text" x-model="trackerForm.address" :placeholder="t.defaultAddress">
+                            <small>Другой адрес (зеркало) трекера. Несколько адресов через запятую: используется первый доступный. Пусто — адрес по умолчанию.</small></label>
+
+                        <label class="field"><span>Прокси</span>
+                            <select x-model="trackerForm.proxy">
+                                <option value="default">Как в общих настройках</option>
+                                <option value="off">Без прокси</option>
+                                <option value="own">Через прокси</option>
+                            </select></label>
+                        <div x-show="trackerForm.proxy == 'own'">
+                            <label class="field"><span>Адрес прокси</span>
+                                <input type="text" x-model="trackerForm.proxyAddress" placeholder="пусто — прокси из общих настроек">
+                                <small>В виде хост:порт.</small></label>
+                            <label class="field" x-show="trackerForm.proxyAddress"><span>Тип прокси</span>
+                                <select x-model="trackerForm.proxyType"><option>SOCKS5</option><option>HTTP</option></select></label>
+                        </div>
+
+                        <div x-show="t.needsAccount">
+                            <button type="button" class="link" @click="trackerForm.showCookie = !trackerForm.showCookie">Вход по cookie из браузера</button>
+                            <div x-show="trackerForm.showCookie">
+                                <label class="field"><span>Cookie</span>
+                                    <textarea rows="3" x-model="trackerForm.cookie" :placeholder="t.hasCookie ? 'сессия сохранена — оставьте пустым, чтобы не менять' : 'имя=значение; имя2=значение2'"></textarea>
+                                    <small>Если трекер при входе требует капчу: войдите на него в браузере и вставьте сюда cookie сайта. Логин и пароль тогда не обязательны.</small></label>
+                                <label class="check" x-show="t.hasCookie"><input type="checkbox" x-model="trackerForm.clearCookie"> Забыть сохранённую сессию</label>
+                            </div>
+                        </div>
+
+                        <div class="actions">
+                            <button class="btn btn--primary" :disabled="!!busy">Сохранить</button>
+                            <button type="button" class="btn" @click="testTracker()" :disabled="!!busy" x-text="busy == 'tracker.test' ? 'Проверяю…' : 'Сохранить и проверить вход'"></button>
+                            <button type="button" class="btn" x-show="t.warnings" @click="act('warnings.clear', { source: t.name })">Сбросить ошибки</button>
+                        </div>
+                    </div>
+                    </template>
+                </form>
+            </li>
+        </template>
+    </ul>
+</section>
+
+<!-- ------------------------------------------------------------ Настройки -->
+<section x-show="page == 'settings'">
+    <header class="head"><h1>Настройки</h1></header>
+
+    <form class="card" @submit.prevent="saveSettings()">
+        <h2>Общие</h2>
+        <label class="field"><span>Адрес TorrentMonitor</span>
+            <input type="url" x-model="settingsForm.serverAddress" required>
+            <small>Используется в ссылках RSS-ленты и на torrent-файлы (для Synology Download Station и TorrServer).</small></label>
+        <label class="check"><input type="checkbox" x-model="settingsForm.rss"> RSS-лента скачанных torrent-файлов по адресу <code>/rss</code></label>
+        <label class="check"><input type="checkbox" x-model="settingsForm.autoUpdate"> Устанавливать обновления TorrentMonitor автоматически</label>
+        <label class="check"><input type="checkbox" x-model="settingsForm.debug"> Подробный журнал проверки (все запросы к трекерам)</label>
+        <label class="field"><span>Прекращать проверку через</span>
+            <input type="number" min="0" x-model="settingsForm.stopAfterDays" required>
+            <small>Дней без обновлений, после которых тема больше не проверяется. 0 — проверять всегда. У темы может быть своё значение.</small></label>
+        <div class="actions"><button class="btn btn--primary" :disabled="!!busy">Сохранить</button></div>
+    </form>
+
+    <form class="card" @submit.prevent="saveSettings()">
+        <h2>Torrent-клиент</h2>
+        <label class="check"><input type="checkbox" x-model="settingsForm.useTorrent"> Передавать скачанные torrent-файлы в torrent-клиент</label>
+        <div x-show="settingsForm.useTorrent">
+            <label class="field"><span>Клиент</span>
+                <select x-model="settingsForm.torrentClient" :required="settingsForm.useTorrent">
+                    <option value="" disabled>Выберите клиент</option>
+                    <template x-for="c in clients" :key="c"><option x-text="c" :selected="c == settingsForm.torrentClient"></option></template>
+                </select></label>
+            <label class="field"><span>Адрес клиента</span>
+                <input type="text" x-model="settingsForm.torrentAddress" placeholder="http://192.168.1.10:8080" :required="settingsForm.useTorrent"></label>
+            <label class="field" x-show="settingsForm.torrentClient != 'Deluge'"><span>Логин</span>
+                <input type="text" x-model="settingsForm.torrentLogin" autocomplete="off"></label>
+            <label class="field"><span>Пароль</span>
+                <input type="password" x-model="settingsForm.torrentPassword" autocomplete="new-password"
+                    :placeholder="settings.hasTorrentPassword ? 'сохранён — оставьте пустым, чтобы не менять' : ''"></label>
+            <label class="check" x-show="settings.hasTorrentPassword"><input type="checkbox" x-model="settingsForm.clearTorrentPassword"> Удалить сохранённый пароль</label>
+            <label class="field"><span>Каталог загрузки</span>
+                <input type="text" x-model="settingsForm.pathToDownload" placeholder="каталог клиента по умолчанию">
+                <small>Путь так, как его видит torrent-клиент. У темы может быть свой каталог.</small></label>
+            <label class="field" x-show="settingsForm.torrentClient == 'qBittorrent'"><span>Категория</span>
+                <input type="text" x-model="settingsForm.qbitCategory">
+                <small>Категория qBittorrent для новых раздач. У темы может быть своя.</small></label>
+            <label class="check"><input type="checkbox" x-model="settingsForm.deleteDistribution"> Сериалы: при выходе новой серии удалять из клиента раздачу предыдущей</label>
+            <label class="check" x-show="settingsForm.deleteDistribution"><input type="checkbox" x-model="settingsForm.deleteOldFiles"> …вместе со скачанными файлами предыдущей серии</label>
+            <label class="check"><input type="checkbox" x-model="settingsForm.deleteFilesOnRemove"> При удалении темы вместе с раздачей по умолчанию удалять и скачанные файлы</label>
+        </div>
+        <div class="actions">
+            <button class="btn btn--primary" :disabled="!!busy">Сохранить</button>
+            <button type="button" class="btn" x-show="settingsForm.useTorrent" @click="testClient()" :disabled="!!busy">Сохранить и проверить подключение</button>
+        </div>
+    </form>
+
+    <form class="card" @submit.prevent="saveSettings()">
+        <h2>Уведомления</h2>
+        <label class="check"><input type="checkbox" x-model="settingsForm.send"> Отправлять уведомления</label>
+        <div x-show="settingsForm.send">
+            <template x-for="n in [{ key: 'Update', title: 'Об обновлениях раздач и новых версиях' }, { key: 'Warning', title: 'Об ошибках' }]" :key="n.key">
+                <fieldset>
+                    <label class="check"><input type="checkbox" x-model="settingsForm['send' + n.key]"> <span x-text="n.title"></span></label>
+                    <div x-show="settingsForm['send' + n.key]">
+                        <label class="field"><span>Сервис</span>
+                            <select x-model="settingsForm['notify' + n.key + 'Service']">
+                                <option value="" disabled>Выберите сервис</option>
+                                <template x-for="s in services" :key="s"><option x-text="s" :selected="s == settingsForm['notify' + n.key + 'Service']"></option></template>
+                            </select></label>
+                        <label class="field"><span>Адрес или ключи</span>
+                            <input type="text" x-model="settingsForm['notify' + n.key + 'Address']" autocomplete="off">
+                            <small x-text="addressHint(settingsForm['notify' + n.key + 'Service'])"></small></label>
+                        <button type="button" class="btn btn--small" @click="testNotify(n.key)" :disabled="!!busy">Отправить пробное сообщение</button>
+                    </div>
+                </fieldset>
+            </template>
+        </div>
+        <div class="actions"><button class="btn btn--primary" :disabled="!!busy">Сохранить</button></div>
+    </form>
+
+    <form class="card" @submit.prevent="saveSettings()">
+        <h2>Сеть</h2>
+        <label class="field"><span>Решатель Cloudflare</span>
+            <input type="url" x-model="settingsForm.flaresolverrUrl" placeholder="http://flaresolverr:8191">
+            <small>Адрес FlareSolverr или Byparr. Нужен, если трекер закрыт проверкой Cloudflare. Решатель должен выходить в интернет с того же адреса, что и TorrentMonitor.</small></label>
+        <label class="check"><input type="checkbox" x-model="settingsForm.proxy"> Обращаться к трекерам через прокси</label>
+        <div x-show="settingsForm.proxy">
+            <label class="field"><span>Адрес прокси</span>
+                <input type="text" x-model="settingsForm.proxyAddress" placeholder="127.0.0.1:9050" :required="settingsForm.proxy"></label>
+            <label class="field"><span>Тип прокси</span>
+                <select x-model="settingsForm.proxyType"><option value="SOCKS5">SOCKS5</option><option value="HTTP">HTTP</option></select></label>
+        </div>
+        <p class="muted">Прокси для отдельного трекера задаётся на странице «Трекеры».</p>
+        <label class="field"><span>Время ожидания ответа</span>
+            <input type="number" min="1" x-model="settingsForm.httpTimeout" required>
+            <small>Секунд на один запрос к трекеру.</small></label>
+        <label class="field"><span>User-Agent</span>
+            <input type="text" x-model="settingsForm.userAgent" required>
+            <small>Так TorrentMonitor представляется трекерам.</small></label>
+        <div class="actions"><button class="btn btn--primary" :disabled="!!busy">Сохранить</button></div>
+    </form>
+
+    <div class="card">
+        <h2>Вход</h2>
+        <form @submit.prevent="saveSettings()">
+            <label class="check"><input type="checkbox" x-model="settingsForm.auth" @change="saveSettings()"> Защищать интерфейс паролем</label>
+        </form>
+        <form @submit.prevent="changePassword()">
+            <label class="field" x-show="status.authRequired"><span>Текущий пароль</span>
+                <input type="password" x-model="passwordForm.current" autocomplete="current-password" :required="status.authRequired"></label>
+            <label class="field"><span>Новый пароль</span>
+                <input type="password" x-model="passwordForm.password" autocomplete="new-password" required minlength="4"></label>
+            <label class="field"><span>Ещё раз</span>
+                <input type="password" x-model="passwordForm.password2" autocomplete="new-password" required></label>
+            <div class="actions"><button class="btn" :disabled="!!busy">Сменить пароль</button></div>
+        </form>
+    </div>
+
+    <div class="card">
+        <h2>API и Sonarr</h2>
+        <p class="muted">Ключ API нужен скриптам и webhook Sonarr. Он передаётся в заголовке <code>Authorization: Bearer …</code> или в параметре <code>token</code>.</p>
+        <div class="actions">
+            <button class="btn" x-show="settings.hasApiKey && !apiKey" @click="showApiKey()">Показать ключ</button>
+            <button class="btn" @click="newApiKey()" x-text="settings.hasApiKey ? 'Создать новый ключ' : 'Создать ключ'"></button>
+        </div>
+        <div x-show="apiKey">
+            <label class="field"><span>Ключ API</span>
+                <input type="text" readonly :value="apiKey" @focus="$el.select()"></label>
+            <label class="field"><span>Webhook для Sonarr</span>
+                <input type="text" readonly :value="webhookUrl" @focus="$el.select()">
+                <small>Sonarr → Settings → Connect → Webhook, метод POST, событие On Grab.</small></label>
+            <button class="btn btn--small" @click="copy(webhookUrl)">Скопировать адрес webhook</button>
+        </div>
+        <form @submit.prevent="saveSettings()">
+            <label class="check"><input type="checkbox" x-model="settingsForm.removeOnSeriesDelete" @change="saveSettings()">
+                При удалении сериала в Sonarr удалять его темы и раздачи (событие On Series Delete)</label>
+        </form>
+    </div>
+</section>
+
+<!-- ------------------------------------------------------------ Состояние -->
+<section x-show="page == 'status'">
+    <header class="head"><h1>Состояние</h1></header>
+
+    <div class="card card--accent" x-show="status.update">
+        <h2>Доступна версия <span x-text="status.update && status.update.version"></span></h2>
+        <pre class="notes" x-show="status.update && status.update.notes" x-text="status.update && status.update.notes"></pre>
+        <div class="actions">
+            <button class="btn btn--primary" @click="installUpdate()" :disabled="!!busy" x-text="busy == 'update.install' ? 'Устанавливаю…' : 'Установить'"></button>
+            <a class="btn" :href="status.update && status.update.url" target="_blank" rel="noopener">Страница выпуска</a>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card__head">
+            <h2>Ошибки</h2><span class="spacer"></span>
+            <button class="btn btn--small" x-show="warnings.length" @click="act('warnings.clear', {})">Сбросить все</button>
+        </div>
+        <p class="muted" x-show="!warnings.length">Ошибок нет.</p>
+        <template x-for="g in warningGroups" :key="g.source">
+            <div class="group">
+                <div class="group__title"><b x-text="g.source"></b>
+                    <button class="link" @click="act('warnings.clear', { source: g.source })">сбросить</button></div>
+                <template x-for="w in g.items" :key="w.id">
+                    <div class="line line--bad"><span class="muted" x-text="date(w.time)"></span> <span x-text="w.text"></span>
+                        <span class="muted" x-show="warningTopic(w)" x-text="'— ' + warningTopic(w)"></span></div>
+                </template>
+            </div>
+        </template>
+    </div>
+
+    <div class="card">
+        <div class="card__head">
+            <h2>Последняя проверка</h2><span class="spacer"></span>
+            <span class="running" x-show="status.running">идёт…</span>
+            <button class="btn btn--small" @click="run()" :disabled="status.running || busy == 'run'">Проверить сейчас</button>
+        </div>
+        <p class="muted" x-show="!runLog">Журнала пока нет.</p>
+        <pre class="log" x-show="runLog" x-text="runLog"></pre>
+    </div>
+
+    <div class="card">
+        <div class="card__head">
+            <h2>Проверка работы</h2><span class="spacer"></span>
+            <button class="btn btn--small" @click="health = null; checkHealth()">Проверить заново</button>
+        </div>
+        <p class="muted" x-show="!health">Проверяю…</p>
+        <template x-for="g in (health || [])" :key="g.title">
+            <div class="group">
+                <div class="group__title"><b x-text="g.title"></b></div>
+                <template x-for="(item, i) in g.items" :key="i">
+                    <div class="line" :class="item.ok === false ? 'line--bad' : (item.ok === true ? 'line--good' : '')" x-text="item.text"></div>
+                </template>
+            </div>
+        </template>
+    </div>
+
+    <div class="card" x-show="news.length">
+        <div class="card__head">
+            <h2>Новости</h2><span class="spacer"></span>
+            <button class="btn btn--small" x-show="news.some(n => n.unread)" @click="act('news.read')">Отметить прочитанными</button>
+        </div>
+        <template x-for="n in news" :key="n.id">
+            <div class="news" :class="n.unread && 'news--unread'" x-html="n.html"></div>
+        </template>
+    </div>
+
+    <p><button class="link" @click="act('update.check')">Проверить обновления TorrentMonitor</button></p>
+</section>
+
+</main>
+</div>
+
+<!-- ======================================================== окно темы/сериала -->
+<div class="overlay" x-show="topicForm" @keydown.escape.window="topicForm = null; deleteForm = null">
+    <template x-if="topicForm">
+    <form class="dialog" @submit.prevent="saveTopic()" @click.outside="topicForm = null">
+        <h2 x-text="(topicForm.id ? 'Изменить ' : 'Добавить ') + (topicForm.kind == 'series' ? 'сериал' : 'тему')"></h2>
+
+        <div x-show="topicForm.kind == 'topic'">
+            <label class="field"><span>Ссылка на тему</span>
+                <input type="url" x-model="topicForm.url" :required="topicForm.kind == 'topic'" placeholder="https://rutracker.org/forum/viewtopic.php?t=…"></label>
+            <label class="field"><span>Название</span>
+                <input type="text" x-model="topicForm.name" :placeholder="topicForm.id ? '' : 'пусто — взять с трекера'"></label>
+            <label class="check"><input type="checkbox" x-model="topicForm.autoRename"> Обновлять название, когда оно меняется на трекере</label>
+        </div>
+
+        <div x-show="topicForm.kind == 'series'">
+            <label class="field" x-show="!topicForm.id"><span>Трекер</span>
+                <select x-model="topicForm.tracker">
+                    <template x-for="t in seriesTrackers" :key="t.name"><option x-text="t.name" :selected="t.name == topicForm.tracker"></option></template>
+                </select></label>
+            <label class="field"><span>Название сериала</span>
+                <input type="text" x-model="topicForm.name" :required="topicForm.kind == 'series'" placeholder="House of the Dragon">
+                <small>Так, как оно написано в ленте трекера (обычно английское название).</small></label>
+            <label class="field"><span>Качество</span>
+                <select x-model="topicForm.quality"><option value="sd">SD</option><option value="720">720p</option><option value="1080">1080p</option></select></label>
+        </div>
+
+        <button type="button" class="link" @click="topicForm.more = !topicForm.more" x-text="topicForm.more ? 'Скрыть дополнительные настройки' : 'Дополнительные настройки'"></button>
+        <div x-show="topicForm.more">
+            <label class="field"><span>Каталог загрузки</span>
+                <input type="text" x-model="topicForm.path" :placeholder="settings.pathToDownload || 'как в настройках'"></label>
+            <label class="field"><span>Категория</span>
+                <input type="text" x-model="topicForm.category" list="categories" :placeholder="settings.qbitCategory || ''">
+                <datalist id="categories"><template x-for="c in categories" :key="c"><option :value="c"></option></template></datalist>
+                <small>Категория в qBittorrent.</small></label>
+            <label class="field"><span>Скрипт</span>
+                <input type="text" x-model="topicForm.script" placeholder="/path/to/script.sh">
+                <small>Запускается на сервере после добавления раздачи в torrent-клиент.</small></label>
+            <label class="field"><span>Прекращать проверку через</span>
+                <input type="number" min="0" x-model="topicForm.stopAfterDays" placeholder="как в настройках">
+                <small>Дней без обновлений. 0 — проверять всегда.</small></label>
+        </div>
+
+        <div x-show="topicForm.id">
+            <label class="check"><input type="checkbox" x-model="topicForm.paused"> Пауза: не проверять</label>
+            <label class="check"><input type="checkbox" x-model="topicForm.reset"> Скачать заново при следующей проверке</label>
+        </div>
+
+        <div class="actions">
+            <button class="btn btn--primary" :disabled="!!busy" x-text="busy ? 'Сохраняю…' : (topicForm.id ? 'Сохранить' : 'Добавить')"></button>
+            <button type="button" class="btn" @click="topicForm = null">Отмена</button>
+        </div>
+    </form>
+    </template>
+</div>
+
+<!-- ========================================================= удаление темы -->
+<div class="overlay" x-show="deleteForm">
+    <template x-if="deleteForm">
+    <form class="dialog dialog--small" @submit.prevent="deleteTopic()" @click.outside="deleteForm = null">
+        <h2>Удалить тему?</h2>
+        <p x-text="deleteForm.name"></p>
+        <div x-show="deleteForm.inClient">
+            <label class="check"><input type="checkbox" x-model="deleteForm.removeFromClient"> Удалить раздачу из torrent-клиента</label>
+            <label class="check" x-show="deleteForm.removeFromClient"><input type="checkbox" x-model="deleteForm.deleteData"> …вместе со скачанными файлами</label>
+        </div>
+        <div class="actions">
+            <button class="btn btn--danger" :disabled="!!busy">Удалить</button>
+            <button type="button" class="btn" @click="deleteForm = null">Отмена</button>
+        </div>
+    </form>
+    </template>
+</div>
+
+</body>
+</html>

@@ -8,6 +8,7 @@ use TorrentMonitor\Data\Settings;
 use TorrentMonitor\Data\Topics;
 use TorrentMonitor\Data\Warnings;
 use TorrentMonitor\Engine\Delivery;
+use TorrentMonitor\Engine\Launcher;
 use TorrentMonitor\Engine\Lock;
 use TorrentMonitor\Engine\Problems;
 use TorrentMonitor\Messages;
@@ -228,38 +229,10 @@ final class Api
     {
         if (Lock::busy())
             self::respond(TRUE, 'Проверка уже выполняется.', NULL, 202);
-        if ( ! function_exists('exec'))
-            self::respond(FALSE, 'Функция exec отключена в PHP, запустить проверку нельзя.', NULL, 500);
-        $php = self::phpBinary();
-        if ($php === NULL)
-            self::respond(FALSE, 'CLI-интерпретатор PHP не найден. Укажите путь в config.php: Config::write(\'php.cli\', \'/usr/bin/php8.3\');', NULL, 500);
-
-        $command = escapeshellarg($php).' '.escapeshellarg(App::root().'/engine.php');
-        $b = self::body();
-        if ( ! empty($b['tracker']) && Registry::has((string)$b['tracker']))
-            $command .= ' '.escapeshellarg('--tracker='.$b['tracker']);
-        if ( ! empty($b['topic']))
-            $command .= ' --topic='.(int)$b['topic'];
-        exec($command.' > /dev/null 2>&1 &');
+        $problem = Launcher::start(self::body());
+        if ($problem !== NULL)
+            self::respond(FALSE, $problem, NULL, 500);
         self::respond(TRUE, 'Проверка запущена.', NULL, 202);
-    }
-
-    private static function phpBinary(): ?string
-    {
-        $configured = \Config::read('php.cli');
-        if ( ! empty($configured))
-            return is_executable($configured) ? $configured : NULL;
-        if (PHP_SAPI === 'cli')
-            return PHP_BINARY;
-        $candidates = array(
-            PHP_BINDIR.'/php'.PHP_MAJOR_VERSION.'.'.PHP_MINOR_VERSION,
-            PHP_BINDIR.'/php'.PHP_MAJOR_VERSION.PHP_MINOR_VERSION,
-            PHP_BINDIR.'/php', '/usr/local/bin/php', '/usr/bin/php',
-        );
-        foreach ($candidates as $candidate)
-            if (is_executable($candidate))
-                return $candidate;
-        return NULL;
     }
 
     // ------------------------------------------------------------------- errors

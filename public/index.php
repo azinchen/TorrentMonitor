@@ -4,6 +4,7 @@
 use TorrentMonitor\App;
 use TorrentMonitor\Web\Api;
 use TorrentMonitor\Web\Feed;
+use TorrentMonitor\Web\Ui;
 
 $path = rawurldecode((string)parse_url(isset($_SERVER['REQUEST_URI']) ? $_SERVER['REQUEST_URI'] : '/', PHP_URL_PATH));
 
@@ -23,7 +24,6 @@ else
 $path = '/'.trim($path, '/');
 
 require_once dirname(__DIR__).'/src/bootstrap.php';
-$legacy = dirname(__DIR__).'/legacy/';
 
 if ($path == '/api' || strncmp($path, '/api/', 5) === 0)
 {
@@ -32,31 +32,20 @@ if ($path == '/api' || strncmp($path, '/api/', 5) === 0)
         array_shift($segments);
     Api::handle($segments);
 }
+elseif (strncmp($path, '/ui/', 4) === 0)
+    Ui::handle(substr($path, 4));
 elseif ($path == '/rss' || $path == '/rss/index.php')
     Feed::handle();
 elseif (strncmp($path, '/torrents/', 10) === 0)
     Feed::torrent(substr($path, 10));
-elseif ($path == '/action.php')
-    require $legacy.'action.php';
-elseif (preg_match('~^/include/([a-z_]+)\.php$~', $path, $m) && is_file($legacy.'include/'.$m[1].'.php'))
-    require $legacy.'include/'.$m[1].'.php';
 elseif ($path == '/' || $path == '/index.php')
 {
-    require_once $legacy.'bootstrap.php';
-    $problem = App::storageProblem();
-    if ($problem !== NULL)
-    {
-        http_response_code(503);
-        header('Content-Type: text/html; charset=utf-8');
-        echo '<!doctype html><meta charset="utf-8"><title>TorrentMonitor</title><body style="font-family:sans-serif;max-width:46em;margin:3em auto;line-height:1.5">'
-            .'<h1>TorrentMonitor не может начать работу</h1><p>'.htmlspecialchars($problem).'</p></body>';
-        return;
-    }
-    if (session_status() !== PHP_SESSION_ACTIVE)
-        session_start();
-    if (empty($_SESSION['csrf_token']))
-        $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
-    require $legacy.(Sys::checkAuth() ? 'pages/main.php' : 'pages/auth.php');
+    //страница одна: данные она запрашивает сама (см. src/Web/Ui.php)
+    header('Content-Type: text/html; charset=utf-8');
+    header('Cache-Control: no-cache');
+    header('X-Frame-Options: DENY');
+    header('Referrer-Policy: no-referrer');
+    echo str_replace('{{version}}', rawurlencode(App::version()), (string)file_get_contents(dirname(__DIR__).'/src/Web/page.html'));
 }
 else
 {

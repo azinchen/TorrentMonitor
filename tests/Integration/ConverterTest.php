@@ -239,7 +239,9 @@ final class ConverterTest extends IntegrationTestCase
         file_put_contents('/app/config.php', $oldConfig);
         file_put_contents('/app/config.xml', '<?xml version="1.0"?><body><proxy><lostfilm.tv><use>yes</use><type>socks5</type><address>192.168.1.220:8118</address></lostfilm.tv><rutor.is><use>no</use></rutor.is></proxy></body>');
 
-        $page = Http::get(Env::APP.'/');
+        // the page itself opens; its first request gets the reason why nothing works
+        $page = Env::uiOpen();
+        $page['body'] = (string)$page['json']['message'];
         $this->assertSame(503, $page['status']);
         $this->assertStringContainsString('php tools/convert-db.php', $page['body']);
         $this->assertSame(503, Env::api('GET', 'torrents')['status']);

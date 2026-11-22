@@ -29,9 +29,9 @@ final class TopicRemovalTest extends IntegrationTestCase
     {
         $this->downloadedTopic(301);
 
-        $response = Env::uiAction(array('action' => 'del', 'id' => $this->id, 'removeFromClient' => 0));
+        $response = Env::ui('topic.delete', array('id' => $this->id, 'removeFromClient' => false));
 
-        $this->assertFalse($response['json']['error']);
+        $this->assertTrue($response['json']['ok'], $response['body']);
         $this->assertNull(AppState::topic($this->id));
         $this->assertTrue(Qbt::has($this->hash));
         $this->assertFileExists($this->payload);
@@ -41,7 +41,7 @@ final class TopicRemovalTest extends IntegrationTestCase
     {
         $this->downloadedTopic(302);
 
-        Env::uiAction(array('action' => 'del', 'id' => $this->id, 'removeFromClient' => 1));
+        Env::ui('topic.delete', array('id' => $this->id, 'removeFromClient' => true));
 
         $this->assertNull(AppState::topic($this->id));
         $this->waitUntilGoneFromClient();
@@ -53,7 +53,7 @@ final class TopicRemovalTest extends IntegrationTestCase
     {
         $this->downloadedTopic(303, array('deleteFilesOnRemove' => '1'));
 
-        Env::uiAction(array('action' => 'del', 'id' => $this->id, 'removeFromClient' => 1));
+        Env::ui('topic.delete', array('id' => $this->id, 'removeFromClient' => true));
 
         $this->waitUntilGoneFromClient();
         $payload = $this->payload;
@@ -66,7 +66,7 @@ final class TopicRemovalTest extends IntegrationTestCase
         // "delete files of old torrents" is about updates only
         $this->downloadedTopic(304, array('deleteOldFiles' => '1', 'deleteDistribution' => '1'));
 
-        Env::uiAction(array('action' => 'del', 'id' => $this->id, 'removeFromClient' => 1));
+        Env::ui('topic.delete', array('id' => $this->id, 'removeFromClient' => true));
 
         $this->waitUntilGoneFromClient();
         sleep(1);

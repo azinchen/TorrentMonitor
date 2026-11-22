@@ -2,7 +2,13 @@
 // New versions are found through GitHub Releases (faked) and installed from the release archive.
 final class UpdateTest extends IntegrationTestCase
 {
-    const BANNER = 'Доступна новая версия TorrentMonitor';
+    // the version the interface offers to install, or null
+    private function offered()
+    {
+        $boot = Env::uiOpen();
+        $this->assertSame(200, $boot['status'], $boot['body']);
+        return $boot['json']['status']['update'] === null ? null : $boot['json']['status']['update']['version'];
+    }
 
     private function release($mode, $version = '9.9.9')
     {
@@ -11,10 +17,7 @@ final class UpdateTest extends IntegrationTestCase
 
     public function testNoReleasesMeansNoUpdate()
     {
-        $page = Env::uiOpen();
-
-        $this->assertSame(200, $page['status']);
-        $this->assertStringNotContainsString(self::BANNER, $page['body']);
+        $this->assertNull($this->offered());
         $this->assertCount(1, Env::fakeRequests('/releases/latest'));
     }
 
@@ -22,25 +25,23 @@ final class UpdateTest extends IntegrationTestCase
     {
         $this->release('ok');
 
-        $this->assertStringContainsString(self::BANNER, Env::uiOpen()['body']);
-        $this->assertStringContainsString(self::BANNER, Env::uiOpen()['body']);
+        $this->assertSame('9.9.9', $this->offered());
+        $this->assertSame('9.9.9', $this->offered());
+        $this->assertStringContainsString('пункт <b>один</b>', Env::uiOpen()['json']['status']['update']['notes'], 'notes are sent as text; the page shows them as text');
         $this->assertCount(1, Env::fakeRequests('/releases/latest'), 'GitHub is asked once, then the cache is used');
     }
 
     public function testSameOrOlderReleaseIsNotAnnounced()
     {
         $this->release('ok', AppState::version());
-        $this->assertStringNotContainsString(self::BANNER, Env::uiOpen()['body']);
+        $this->assertNull($this->offered());
     }
 
     public function testGithubFailureDoesNotBreakThePage()
     {
         $this->release('500');
 
-        $page = Env::uiOpen();
-
-        $this->assertSame(200, $page['status']);
-        $this->assertStringNotContainsString(self::BANNER, $page['body']);
+        $this->assertNull($this->offered());
     }
 
     public function testUpdateFromTheWebInterface()
@@ -57,10 +58,10 @@ final class UpdateTest extends IntegrationTestCase
         file_put_contents('/app/scripts/mine.sh', '#!/bin/sh');
         file_put_contents('/app/torrents/keep.torrent', 'x');
 
-        $page = Env::uiGet('/include/update.php');
+        $page = Env::ui('update.install');
 
-        $this->assertStringContainsString('Обновление до версии: 9.9.9 выполнено успешно.', $page['body']);
-        $this->assertStringContainsString('пункт &lt;b&gt;один&lt;/b&gt;', $page['body'], 'release notes are shown escaped');
+        $this->assertTrue($page['json']['ok'], $page['body']);
+        $this->assertStringContainsString('Обновление до версии: 9.9.9 выполнено успешно.', $page['json']['output']);
         $this->assertSame('9.9.9', AppState::version());
         $this->assertFileExists('/app/src/AddedByRelease.php', 'files from the archive are installed');
         $this->assertSame($config, file_get_contents('/app/config.php'), 'config.php is kept');
@@ -76,7 +77,7 @@ final class UpdateTest extends IntegrationTestCase
         $this->assertDirectoryDoesNotExist('/app/tmp_update');
         $this->assertSame('updated_9.9.9', AppState::news()[0]['id']);
         $this->assertNoWarnings();
-        $this->assertStringNotContainsString(self::BANNER, Env::uiOpen()['body']);
+        $this->assertNull($this->offered());
     }
 
     public function testEngineAnnouncesReleaseOnceWhenAutoUpdateIsOff()
@@ -113,9 +114,9 @@ final class UpdateTest extends IntegrationTestCase
         $this->release('500');
         $before = AppState::version();
 
-        $page = Env::uiGet('/include/update.php');
+        $page = Env::ui('update.install');
 
         $this->assertSame($before, AppState::version());
-        $this->assertStringNotContainsString('выполнено успешно', $page['body']);
+        $this->assertFalse($page['json']['ok']);
     }
 }

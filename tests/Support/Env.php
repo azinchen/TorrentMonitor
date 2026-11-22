@@ -70,6 +70,7 @@ class Env
     {
         self::sh('/src/tests/env/app/sync.sh');
         self::sh('/src/tests/env/app/reset-data.sh');
+        self::uiClose();
         foreach (glob('/app/torrents/*.torrent') as $file)
             unlink($file);
         if ( ! self::isLive())
@@ -120,29 +121,29 @@ class Env
     private static $jar;
     private static $csrf;
 
+    // opens the web interface in a new browser session; returns the answer to the first request of the page
     public static function uiOpen()
     {
         self::$jar = tempnam(sys_get_temp_dir(), 'tmjar');
-        $page = Http::get(self::APP.'/', array('jar' => self::$jar));
-        preg_match('/name="csrf-token" content="([^"]+)"/', $page['body'], $m);
-        self::$csrf = isset($m[1]) ? $m[1] : '';
-        return $page;
+        self::$csrf = '';
+        $boot = Http::postJson(self::APP.'/ui/boot', array(), array('jar' => self::$jar));
+        self::$csrf = isset($boot['json']['csrf']) ? $boot['json']['csrf'] : '';
+        return $boot;
     }
 
-    public static function uiGet($path)
+    // one action of the web interface: POST /ui/<action> with a JSON body, as the page does
+    public static function ui($action, $body = array())
     {
         if (self::$jar === null)
             self::uiOpen();
-        return Http::get(self::APP.$path, array('jar' => self::$jar));
+        return Http::postJson(self::APP.'/ui/'.$action, (object)$body, array('jar' => self::$jar, 'headers' => array('X-CSRF-Token: '.self::$csrf)));
     }
 
-    // POST to action.php as the web interface does
-    public static function uiAction($fields)
+    // forgets the browser session (the next action opens a new one)
+    public static function uiClose()
     {
-        if (self::$jar === null)
-            self::uiOpen();
-        $fields['csrf_token'] = self::$csrf;
-        return Http::post(self::APP.'/action.php', $fields, array('jar' => self::$jar));
+        self::$jar = null;
+        self::$csrf = '';
     }
 
     // ---- REST API ----

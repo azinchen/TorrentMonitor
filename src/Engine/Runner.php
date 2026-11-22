@@ -40,9 +40,17 @@ final class Runner
         $this->onlyTopic = ! empty($options['topic']) ? (int)$options['topic'] : NULL;
     }
 
+    /** @var resource|null журнал запуска (data/engine.log): его показывает страница «Состояние» */
+    private $log = NULL;
+
     private function say(string $line): void
     {
         call_user_func($this->out, $line);
+    }
+
+    public static function logFile(): string
+    {
+        return \TorrentMonitor\Storage\Files::dir().'/engine.log';
     }
 
     public function run(): bool
@@ -60,6 +68,15 @@ final class Runner
         }
 
         $started = microtime(TRUE);
+        $log = @fopen(self::logFile(), 'w');
+        $this->log = $log === FALSE ? NULL : $log;
+        //сообщения доставки и скриптов тоже попадают в журнал
+        $direct = $this->out;
+        $this->out = function ($line) use ($direct) {
+            if ($this->log !== NULL)
+                @fwrite($this->log, '['.date('Y-m-d H:i:s').'] '.$line."\n");
+            call_user_func($direct, $line);
+        };
         try
         {
             if ($this->debug)
@@ -101,11 +118,14 @@ final class Runner
         }
         finally
         {
+            $this->say(sprintf('Готово за %.1f с.', microtime(TRUE) - $started));
             App::setLogger(NULL);
             Lock::release();
+            $this->out = $direct;
+            if ($this->log !== NULL)
+                fclose($this->log);
+            $this->log = NULL;
         }
-        if ($this->debug)
-            $this->say(sprintf('Общее время работы: %.2f с', microtime(TRUE) - $started));
         return TRUE;
     }
 
@@ -143,7 +163,7 @@ final class Runner
                 continue;
             if ($this->onlyTopic !== NULL && $topic['id'] != $this->onlyTopic)
                 continue;
-            $label = $topic['name'].' на трекере '.$topic['tracker'];
+            $label = self::label($topic);
             if ($topic['paused'])
                 $this->say($label.': наблюдение приостановлено.');
             elseif ($this->onlyTopic === NULL && Topics::expired($topic, $stopAfter))
@@ -196,7 +216,7 @@ final class Runner
         foreach ($ready as $id => $topic)
         {
             $name = $topic['tracker'];
-            $this->say($topic['name'].' на трекере '.$name);
+            $this->say(self::label($topic));
             try
             {
                 $found = Registry::get($name)->check($topic, $responses[$id]);
@@ -230,6 +250,12 @@ final class Runner
                 $this->problem($name, 'engine_error', $topic);
             }
         }
+    }
+
+    //как тема называется в журнале
+    private static function label(array $topic): string
+    {
+        return ($topic['name'] !== '' ? $topic['name'] : 'Тема '.$topic['topicId']).' на трекере '.$topic['tracker'];
     }
 
     private function problem(string $source, string $code, ?array $topic = NULL): void

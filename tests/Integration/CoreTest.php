@@ -140,7 +140,7 @@ final class CoreFeaturesTest extends IntegrationTestCase
     {
         $this->loginToTracker();
         file_put_contents('/app/data-probe.txt', 'secret');
-        foreach (array('/config.php', '/version.txt', '/engine.php', '/src/App.php', '/legacy/action.php', '/data/config.json',
+        foreach (array('/config.php', '/version.txt', '/engine.php', '/src/App.php', '/action.php', '/include/settings.php', '/src/Web/page.html', '/data/config.json',
             '/tools/convert-db.php', '/data-probe.txt', '/../config.php', '/include/../../config.php', '/torrents/../config.php') as $path)
         {
             $response = Http::get(Env::APP.$path);
@@ -148,7 +148,7 @@ final class CoreFeaturesTest extends IntegrationTestCase
             $this->assertStringNotContainsString('Config::write', $response['body'], $path);
         }
         unlink('/app/data-probe.txt');
-        $this->assertSame(200, Http::get(Env::APP.'/assets/css/style.min.css')['status']);
+        $this->assertSame(200, Http::get(Env::APP.'/assets/app.css')['status']);
         $this->assertSame(200, Http::get(Env::APP.'/')['status']);
     }
 
@@ -172,44 +172,6 @@ final class CoreFeaturesTest extends IntegrationTestCase
 
         AppState::setSettings(array('rss' => '0'));
         $this->assertSame(404, Http::get(Env::APP.'/rss')['status']);
-    }
-
-    public function testTopicIsAddedAndEditedThroughTheWebInterface()
-    {
-        $this->loginToTracker();
-        Env::setTopic(809, 'Название с трекера', '01-Ноя-26 10:00', 1);
-        Env::setTopic(810, 'Другая тема', '01-Ноя-26 10:00', 1);
-
-        $added = Env::uiAction(array('action' => 'torrent_add', 'url' => self::TOPIC.'809', 'name' => '', 'path' => '/downloads/x/', 'update_header' => 'true', 'category' => 'films'));
-        $this->assertFalse($added['json']['error'], $added['body']);
-        $topic = AppState::topics()[0];
-        $this->assertSame(array('rutracker.org', '809', 'Название с трекера', '/downloads/x/', 'films', true),
-            array($topic['tracker'], $topic['torrent_id'], $topic['name'], $topic['path'], $topic['category'], $topic['autoRename']));
-
-        $again = Env::uiAction(array('action' => 'torrent_add', 'url' => self::TOPIC.'809', 'name' => '', 'path' => '', 'update_header' => 'true'));
-        $this->assertTrue($again['json']['error']);
-        $this->assertTrue(Env::uiAction(array('action' => 'torrent_add', 'url' => 'https://example.org/?t=1', 'name' => '', 'path' => '', 'update_header' => 'true'))['json']['error']);
-        $this->assertTrue(Env::uiAction(array('action' => 'serial_add', 'tracker' => 'lostfilm.tv', 'name' => 'House', 'path' => '', 'hd' => '1'))['json']['error'], 'no account for the tracker');
-        $this->assertCount(1, AppState::topics());
-
-        $this->engine();
-        $edited = Env::uiAction(array('action' => 'update', 'id' => $topic['id'], 'tracker' => 'rutracker.org', 'url' => self::TOPIC.'810', 'name' => 'Своё имя',
-            'path' => '/downloads/y/', 'update' => 'false', 'reset' => 'true', 'script' => '', 'pause' => 'true', 'category' => 'tv'));
-        $this->assertFalse($edited['json']['error'], $edited['body']);
-        $topic = AppState::topics()[0];
-        $this->assertSame(array('810', 'Своё имя', '/downloads/y/', 'tv', false, 1, ''),
-            array($topic['torrent_id'], $topic['name'], $topic['path'], $topic['category'], $topic['autoRename'], $topic['pause'], $topic['timestamp']));
-
-        $item = Env::uiGet('/action.php?action=item_data&id='.$topic['id'])['json'];
-        $this->assertSame('https://rutracker.org/forum/viewtopic.php?t=810', $item['url']);
-
-        foreach (array('/include/show_table.php', '/include/credentials.php', '/include/check.php', '/include/show_warnings.php', '/include/show_watching.php', '/include/news.php', '/include/settings.php', '/include/execution.php') as $page)
-        {
-            $response = Env::uiGet($page);
-            $this->assertSame(200, $response['status'], $page);
-            $this->assertDoesNotMatchRegularExpression('~(Warning|Notice|Deprecated|Fatal error|Parse error)</b>:|Uncaught ~', $response['body'], $page);
-        }
-        $this->assertStringContainsString('Своё имя', Env::uiGet('/include/show_table.php')['body']);
     }
 
     public function testSolverWhoseCookiesDoNotWorkDirectlyIsStillUsedForPages()

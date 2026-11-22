@@ -22,9 +22,13 @@ final class Services
         return NULL;
     }
 
+    //удалась ли последняя отправка (для проверки настроек из интерфейса)
+    public static bool $delivered = FALSE;
+
     public static function post(Request $request): void
     {
-        App::http()->send($request->plain()->timeout(30));
+        $response = App::http()->send($request->plain()->timeout(30));
+        self::$delivered = $response->status >= 200 && $response->status < 300;
     }
 
     public static function plain(string $html): string
@@ -38,7 +42,7 @@ final class Email implements Notifier
     public function send(string $address, string $title, string $html): void
     {
         $headers = 'From: TorrentMonitor'."\r\n".'MIME-Version: 1.0'."\r\n".'Content-type: text/html; charset=utf-8'."\r\n";
-        @mail($address, '=?UTF-8?B?'.base64_encode('TorrentMonitor: '.$title).'?=', nl2br($html), $headers);
+        Services::$delivered = (bool)@mail($address, '=?UTF-8?B?'.base64_encode('TorrentMonitor: '.$title).'?=', nl2br($html), $headers);
     }
 }
 

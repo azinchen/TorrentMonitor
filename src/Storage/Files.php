@@ -148,6 +148,8 @@ final class Files
     {
         return array(
             'updateNotified' => FALSE,
+            //входы «запомнить меня»: sha256 от токена => время окончания (unix)
+            'logins'         => array(),
             'lastRun'        => '',
             //трекер => строка cookie сессии
             'cookies'        => array(),

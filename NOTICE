@@ -6,5 +6,7 @@ https://github.com/ElizarovEugene/TorrentMonitor
 
 Bundled third-party code:
 
-- public/assets/css/style.min.css, public/assets/js/scripts.min.js - interface by
-  Dark Preacher.
+- public/assets/vendor/alpine.min.js - Alpine.js, copyright (c) 2019-2025
+  Caleb Porzio and contributors, MIT License.
+- public/img/*.ico - site icons of the supported trackers; they belong to
+  their respective owners.

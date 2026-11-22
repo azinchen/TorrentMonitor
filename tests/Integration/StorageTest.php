@@ -12,23 +12,11 @@ final class StorageTest extends IntegrationTestCase
         Env::sh('/src/tests/env/app/reset-data.sh');
 
         $page = Http::get(Env::APP.'/');
+        $boot = Env::uiOpen();
 
         $this->assertSame(200, $page['status']);
-        $this->assertStringContainsString('name="password"', $page['body'], 'a new installation asks for the password');
-        $this->assertFileDoesNotExist('/app/config.php.bak');
-    }
-
-    public function testDefaultPasswordOpensANewInstallation()
-    {
-        Env::sh('/src/tests/env/app/reset-data.sh');
-        $jar = tempnam(sys_get_temp_dir(), 'jar');
-        $page = Http::get(Env::APP.'/', array('jar' => $jar));
-        preg_match('/name="csrf-token" content="([^"]+)"/', $page['body'], $m);
-
-        $login = Http::post(Env::APP.'/action.php', array('action' => 'enter', 'password' => 'torrentmonitor', 'remember' => 'false', 'csrf_token' => $m[1]), array('jar' => $jar));
-
-        $this->assertFalse($login['json']['error'], $login['body']);
-        $this->assertStringStartsWith('$2y$', AppState::setting('password'), 'the old default hash is replaced by a modern one at first login');
+        $this->assertTrue($boot['json']['setup'], 'a new installation starts with the setup');
+        $this->assertSame(array(), glob(getenv('TM_DATA_DIR').'/*.json'), 'opening the page creates nothing');
     }
 
     public function testFilesArePrivateAndReadable()
@@ -71,7 +59,9 @@ final class StorageTest extends IntegrationTestCase
         $this->trackTopic(704);
         file_put_contents($this->dataFile('torrents.json'), '{"version": 1, "torrents": [');
 
-        $page = Http::get(Env::APP.'/');
+        // the page itself opens; its first request gets the reason why nothing works
+        $page = Env::uiOpen();
+        $page['body'] = (string)$page['json']['message'];
         $api = Env::api('GET', 'torrents');
         $engine = Env::runEngineExpectingFailure();
 
@@ -111,7 +101,7 @@ final class StorageTest extends IntegrationTestCase
         AppState::useQbittorrent(array('torrentPassword' => 'Secret-Client-Pass'));
         Http::post(Env::FAKE.'/__control/reset');
 
-        $pages = Env::uiOpen()['body'].Env::uiGet('/include/settings.php')['body'].Env::uiGet('/include/credentials.php')['body'];
+        $pages = Http::get(Env::APP.'/')['body'].Env::uiOpen()['body'].Env::ui('overview')['body'].Env::ui('health')['body'];
 
         $this->assertStringContainsString('visible-login', $pages);
         $this->assertStringNotContainsString('Secret-Tracker-Pass', $pages);
@@ -124,19 +114,22 @@ final class StorageTest extends IntegrationTestCase
         AppState::setCredentials('rutracker.org', 'old-login', 'Saved-Pass');
         AppState::useQbittorrent(array('torrentPassword' => 'Saved-Client-Pass'));
 
-        Env::uiAction(array('action' => 'update_credentials', 'id' => 1, 'log' => 'new-login', 'pass' => '', 'passkey' => ''));
-        Env::uiAction(array(
-            'action' => 'update_torrent', 'useTorrent' => 'true', 'torrentClient' => 'qBittorrent', 'torrentAddress' => Env::QBT,
-            'torrentLogin' => 'tm', 'torrentPassword' => '', 'pathToDownload' => '/downloads/qbt/', 'deleteDistribution' => 'false',
-            'deleteOldFiles' => 'false', 'deleteFilesOnRemove' => 'false', 'qbitCategory' => '',
-        ));
+        Env::ui('tracker.save', array('name' => 'rutracker.org', 'login' => 'new-login', 'password' => ''));
+        Env::ui('settings.save', array('useTorrent' => true, 'torrentClient' => 'qBittorrent', 'torrentAddress' => Env::QBT, 'torrentLogin' => 'tm', 'torrentPassword' => ''));
 
         $config = json_decode(AppState::file('config.json'), true);
-        $this->assertSame(array('login' => 'new-login', 'password' => 'Saved-Pass', 'passkey' => ''), $config['trackers']['rutracker.org']);
+        $this->assertSame(array('login' => 'new-login', 'password' => 'Saved-Pass', 'passkey' => '', 'address' => ''), $config['trackers']['rutracker.org']);
         $this->assertSame('Saved-Client-Pass', $config['settings']['torrentPassword']);
 
-        Env::uiAction(array('action' => 'update_credentials', 'id' => 1, 'log' => 'new-login', 'pass' => 'Changed-Pass', 'passkey' => ''));
+        Env::ui('tracker.save', array('name' => 'rutracker.org', 'login' => 'new-login', 'password' => 'Changed-Pass'));
         $this->assertSame('Changed-Pass', json_decode(AppState::file('config.json'), true)['trackers']['rutracker.org']['password']);
+
+        // a saved password can be removed on purpose
+        Env::ui('settings.save', array('clearTorrentPassword' => true));
+        Env::ui('tracker.save', array('name' => 'rutracker.org', 'login' => 'new-login', 'clearPassword' => true));
+        $config = json_decode(AppState::file('config.json'), true);
+        $this->assertSame('', $config['settings']['torrentPassword']);
+        $this->assertSame('', $config['trackers']['rutracker.org']['password']);
     }
 
     public function testProxyForOneTrackerIsSavedAndUsed()
@@ -146,39 +139,28 @@ final class StorageTest extends IntegrationTestCase
         $id = $this->trackTopic(720);
 
         // nothing listens on this address, so the tracker becomes unreachable
-        $saved = Env::uiAction(array('action' => 'update_extended', 'httpTimeout' => 5, 'flaresolverrUrl' => '',
-            'settings' => '{"rutracker.org": {"use": "yes", "type": "HTTP", "address": "127.0.0.1:1"}}'));
-        $this->assertFalse($saved['json']['error'], $saved['body']);
+        $saved = Env::ui('tracker.save', array('name' => 'rutracker.org', 'login' => Env::TRACKER_USER, 'proxy' => 'own', 'proxyAddress' => '127.0.0.1:1', 'proxyType' => 'HTTP'));
+        $this->assertTrue($saved['json']['ok'], $saved['body']);
+        $this->assertSame(array('rutracker.org' => array('use' => 'yes', 'address' => '127.0.0.1:1', 'type' => 'HTTP')), json_decode(AppState::file('config.json'), true)['trackerProxy']);
         Env::runEngine();
         $this->assertNotEmpty(AppState::warnings());
         $this->assertSame('', AppState::topic($id)['timestamp']);
         $this->assertEmpty(Env::fakeRequests('/forum/'), 'no request reached the tracker directly');
 
-        // "no" switches the proxy off for this tracker
-        Env::uiAction(array('action' => 'update_extended', 'httpTimeout' => 5, 'flaresolverrUrl' => '',
-            'settings' => '{"rutracker.org": {"use": "no"}}'));
+        // "off" switches the proxy off for this tracker
+        Env::ui('tracker.save', array('name' => 'rutracker.org', 'login' => Env::TRACKER_USER, 'proxy' => 'off'));
+        $this->assertSame(array('rutracker.org' => array('use' => 'no')), json_decode(AppState::file('config.json'), true)['trackerProxy']);
         Env::runEngine();
         $this->assertSame('2026-11-21 10:00:00', AppState::topic($id)['timestamp']);
     }
 
-    public function testBrokenProxyJsonIsRejected()
-    {
-        Env::uiAction(array('action' => 'update_extended', 'httpTimeout' => 5, 'flaresolverrUrl' => '',
-            'settings' => '{"rutracker.org": {"use": "yes"}}'));
-
-        $response = Env::uiAction(array('action' => 'update_extended', 'httpTimeout' => 5, 'flaresolverrUrl' => '', 'settings' => '{not json'));
-
-        $this->assertTrue($response['json']['error']);
-        $this->assertSame(array('rutracker.org' => array('use' => 'yes')), json_decode(AppState::file('config.json'), true)['trackerProxy']);
-    }
-
     public function testHealthPageChecksTheDataDirectory()
     {
-        $page = Env::uiGet('/include/check.php');
+        $page = Env::ui('health');
+        $page['body'] = json_encode($page['json'], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 
-        $this->assertStringContainsString('Запись в каталог данных', $page['body']);
-        $this->assertStringContainsString('Файлы данных читаются', $page['body']);
-        $this->assertStringNotContainsString('encryption.key', $page['body']);
+        $this->assertStringContainsString('Каталог данных /data доступен для записи', $page['body']);
+        $this->assertStringContainsString('Подключение к интернету есть', $page['body']);
         $this->assertStringNotContainsString('PDO', $page['body']);
     }
 
@@ -186,6 +168,6 @@ final class StorageTest extends IntegrationTestCase
     {
         Env::runEngine();
         $this->assertMatchesRegularExpression('/"lastRun": "\d{4}-\d\d-\d\d \d\d:\d\d:\d\d"/', AppState::file('state.json'));
-        $this->assertStringNotContainsString('Ещё не производилась', Env::uiOpen()['body']);
+        $this->assertMatchesRegularExpression('/^\d{4}-\d\d-\d\d \d\d:\d\d:\d\d$/', Env::uiOpen()['json']['status']['lastRun']);
     }
 }

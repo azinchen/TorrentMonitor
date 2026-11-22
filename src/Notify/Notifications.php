@@ -31,6 +31,24 @@ final class Notifications
         self::deliver('sendUpdate', 'sendUpdateService', 'Обновление.', self::body(date('Y-m-d H:i:s'), $source, $message, ''));
     }
 
+    //пробное сообщение через указанный сервис; TRUE, если сервис его принял
+    public static function test(string $service, string $address): bool
+    {
+        $notifier = Services::get($service);
+        if ($notifier === NULL || $address === '')
+            return FALSE;
+        Services::$delivered = FALSE;
+        try
+        {
+            $notifier->send($address, 'Проверка.', self::body(date('Y-m-d H:i:s'), 'TorrentMonitor', 'Проверка уведомлений: всё работает.', ''));
+        }
+        catch (\Throwable $e)
+        {
+            return FALSE;
+        }
+        return Services::$delivered;
+    }
+
     private static function body(string $date, string $source, string $message, string $url): string
     {
         $body = '<i>Дата:</i>  '.htmlspecialchars($date, ENT_QUOTES)."\n"
