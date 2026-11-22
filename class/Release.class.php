@@ -164,7 +164,6 @@ class Release
         $body = curl_exec($ch);
         $result['code'] = intval(curl_getinfo($ch, CURLINFO_RESPONSE_CODE));
         $result['body'] = is_string($body) ? $body : '';
-        curl_close($ch);
         return $result;
     }
 }

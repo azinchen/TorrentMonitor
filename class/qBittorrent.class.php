@@ -40,7 +40,6 @@ class qBittorrent
 
         if (($httpCode != 200 && $httpCode != 204) || empty($match[0][0]))
         {
-            curl_close($MainCurl);
             $return['status'] = FALSE;
             $return['msg'] = 'log_passwd';
             return $return;
@@ -103,7 +102,6 @@ class qBittorrent
         ));
         $addResponse = curl_exec($ch);
         $httpCode = curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
-        curl_close($ch);
 
         //ожидаем код 200 при успешном добавлении нового и код 202, если торрент уже существует
         if ($httpCode >= 200 && $httpCode <= 204) {
@@ -145,7 +143,6 @@ class qBittorrent
         //выход
         curl_setopt($MainCurl, CURLOPT_URL, $torrentAddress."/api/v2/auth/logout");
         curl_exec($MainCurl);
-        curl_close($MainCurl);
 
         return $return;
     }
@@ -174,7 +171,6 @@ class qBittorrent
         preg_match_all('/(QBT_)?SID(_\d+)?=(.*);/', $response, $match);
 
         if (($httpCode != 200 && $httpCode != 204) || empty($match[0][0])) {
-            curl_close($ch);
             return null;
         }
 
@@ -206,7 +202,6 @@ class qBittorrent
         curl_setopt($ch, CURLOPT_POST, true);
         curl_setopt($ch, CURLOPT_POSTFIELDS, '');
         curl_exec($ch);
-        curl_close($ch);
 
         return $comment;
     }
@@ -240,7 +235,6 @@ class qBittorrent
 
         if (($httpCode != 200 && $httpCode != 204) || empty($match[0][0]))
         {
-            curl_close($MainCurl);
             return array('status' => FALSE, 'msg' => 'log_passwd');
         }
 
@@ -260,7 +254,6 @@ class qBittorrent
 
         curl_setopt($MainCurl, CURLOPT_URL, $torrentAddress."/api/v2/auth/logout");
         curl_exec($MainCurl);
-        curl_close($MainCurl);
 
         return array('status' => TRUE);
     }

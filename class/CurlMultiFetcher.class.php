@@ -138,7 +138,6 @@ class CurlMultiFetcher
                 }
 
                 curl_multi_remove_handle($mh, $ch);
-                curl_close($ch);
 
                 // добавляем следующий из очереди, если есть
                 if (!empty($queue))

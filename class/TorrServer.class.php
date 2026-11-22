@@ -43,7 +43,6 @@ class TorrServer
                         CURLOPT_POSTFIELDS => $data,
                     ));
                     $response = curl_exec($ch);
-                    curl_close($ch);
                 }
             }
             
@@ -66,7 +65,6 @@ class TorrServer
             $response = curl_exec($ch);
             if ($debug)
                 var_dump($response);
-            curl_close($ch);
             
             preg_match_all('/\"hash\":\"(.*)\"/U', $response, $res);
             if ($res[1])
@@ -120,7 +118,6 @@ class TorrServer
         $response = curl_exec($ch);
         if ($debug)
             var_dump($response);
-        curl_close($ch);
 
         Database::clearWarnings('TorrServer');
         return array('status' => TRUE);

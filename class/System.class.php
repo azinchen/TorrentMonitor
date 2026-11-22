@@ -272,7 +272,6 @@ class Sys
 
             $result   = curl_exec($ch);
             $httpCode = curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
-            curl_close($ch);
 
             Sys::$lastCfCookies = '';
             Sys::$lastCfUserAgent = '';
@@ -360,7 +359,6 @@ class Sys
             CURLOPT_TIMEOUT        => 180,
         ));
         $response = curl_exec($ch);
-        curl_close($ch);
 
         if (!$response)
             return null;

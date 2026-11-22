@@ -18,7 +18,6 @@ class SynologyDS
         ));
         $raw   = curl_exec($ch);
         $error = curl_error($ch);
-        curl_close($ch);
 
         if ($raw === FALSE || $error !== '' || empty($raw))
             return FALSE;
@@ -48,7 +47,6 @@ class SynologyDS
             CURLOPT_TIMEOUT        => 30,
         ));
         curl_exec($ch);
-        curl_close($ch);
     }
 
     private static function _list_downloads($sid)
@@ -148,7 +146,6 @@ class SynologyDS
                         CURLOPT_VERBOSE => $param,
                     ));
                     $response = curl_exec($ch);
-                    curl_close($ch);
                     if ($debug)
                         var_dump($response);
 
