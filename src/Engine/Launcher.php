@@ -4,10 +4,10 @@ namespace TorrentMonitor\Engine;
 use TorrentMonitor\App;
 use TorrentMonitor\Tracker\Registry;
 
-//Запуск проверки в фоне (из API и веб-интерфейса).
+// Starting a check in the background (from the API and the web interface).
 final class Launcher
 {
-    //Запускает engine.php отдельным процессом. Возвращает NULL при успехе или причину, по которой это невозможно.
+    // Starts engine.php as a separate process. Returns NULL on success or the reason why it is impossible.
     //$options: tracker, topic
     public static function start(array $options = array()): ?string
     {

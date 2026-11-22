@@ -3,10 +3,10 @@ namespace TorrentMonitor\Data;
 
 use TorrentMonitor\Storage\Files;
 
-//Настройки пользователя (config.json).
+// User settings (config.json).
 final class Settings
 {
-    /** @return array<string,string> все настройки с учётом значений по умолчанию */
+    /** @return array<string,string> all settings with defaults applied */
     public static function all(): array
     {
         $config = Files::config()->read();
@@ -45,7 +45,7 @@ final class Settings
         });
     }
 
-    //сервисы уведомлений: номер => array(service, type). Номера используются в настройках
+    // Notification services: number => array(service, type). The numbers are used in the settings
     //sendUpdateService / sendWarningService.
     public static function notificationServices(): array
     {
@@ -59,7 +59,7 @@ final class Settings
         return $list;
     }
 
-    //сервис и адрес, выбранные в настройке $setting (sendUpdateService или sendWarningService)
+    // Service and address chosen in the $setting setting (sendUpdateService or sendWarningService)
     /** @return array{service:?string,address:string} */
     public static function notificationTarget(string $setting): array
     {

@@ -5,7 +5,7 @@ use TorrentMonitor\App;
 use TorrentMonitor\Data\Settings;
 use TorrentMonitor\Engine\Delivery;
 
-//RSS-лента последних скачанных torrent-файлов (/rss).
+//RSS feed of the most recently downloaded torrent files (/rss).
 final class Feed
 {
     const LIMIT = 20;
@@ -48,7 +48,7 @@ final class Feed
         echo $xml->saveXML();
     }
 
-    //отдаёт сохранённый torrent-файл (/torrents/<имя>.torrent)
+    //serves a saved torrent file (/torrents/<name>.torrent)
     public static function torrent(string $name): void
     {
         $name = basename($name);

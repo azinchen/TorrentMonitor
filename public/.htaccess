@@ -1,4 +1,4 @@
-# Все адреса, кроме существующих файлов, обрабатывает index.php
+# All URLs except existing files are handled by index.php
 <IfModule mod_rewrite.c>
     RewriteEngine On
     RewriteCond %{HTTP:Authorization} .

@@ -1,10 +1,10 @@
 <?php
 namespace TorrentMonitor\Storage;
 
-//Переводы файлов данных со старых версий формата на следующую.
+// Migrations of data files from old format versions to the next one.
 final class Migrations
 {
-    //качество сериала по старому числовому полю hd: у LostFilm значения шли в другом порядке
+    // Series quality from the old numeric hd field: LostFilm had the values in a different order
     public static function quality(string $tracker, $hd): string
     {
         $hd = (int)$hd;
@@ -20,7 +20,7 @@ final class Migrations
         return ($value === '' || strncmp($value, '0000', 4) === 0) ? '' : $value;
     }
 
-    //torrents.json 1 -> 2: понятные имена полей
+    // torrents.json 1 -> 2: clear field names
     public static function torrents1(array $data): array
     {
         $topics = array();

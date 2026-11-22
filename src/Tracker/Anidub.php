@@ -3,12 +3,12 @@ namespace TorrentMonitor\Tracker;
 
 use TorrentMonitor\Http\Request;
 
-//tr.anidub.com. Номер темы - путь страницы раздачи (/anime_tv/.../1234-name.html).
+// tr.anidub.com. The topic id is the path of the release page (/anime_tv/.../1234-name.html).
 final class Anidub extends ForumTracker
 {
     const ADDRESSES = array('https://tr.anidub.com');
 
-    //номер torrent-файла, найденный на странице темы: он же идёт в имя сохраняемого файла
+    // torrent file id found on the topic page: it also goes into the saved file name
     private string $downloadId = '';
 
     protected function sessionAlive(string $cookie): bool
@@ -64,13 +64,13 @@ final class Anidub extends ForumTracker
         return array($day[2].'-'.$day[1].'-'.$day[0].' '.$pieces[1].':00', $text);
     }
 
-    //Название сайта в конце заголовка занимает 114 байт: что именно там написано, неизвестно, поэтому режем по длине.
+    // The site name at the end of the title takes 114 bytes: what exactly it says is unknown, so cut by length.
     protected function parseTitle(string $page): ?string
     {
         if ( ! preg_match('/<title>(.*)<\/title>/sU', $page, $m) || strlen($m[1]) <= 114)
             return NULL;
         $title = trim(html_entity_decode(substr($m[1], 0, -114), ENT_QUOTES, 'UTF-8'));
-        //обрезка по байтам могла разрезать букву
+        // cutting by bytes may have split a letter
         $title = (string)@iconv('UTF-8', 'UTF-8//IGNORE', $title);
         return $title === '' ? NULL : $title;
     }
@@ -88,7 +88,7 @@ final class Anidub extends ForumTracker
         return $this->downloadId !== '' ? $this->downloadId : $topicId;
     }
 
-    //ссылка на torrent-файл есть только на странице темы
+    // the link to the torrent file is only on the topic page
     public function download(string $topicId): string
     {
         $response = $this->send($this->topicRequest($topicId));

@@ -1,7 +1,7 @@
 <?php
 namespace TorrentMonitor\Http;
 
-//Работа со строками cookie вида "a=1; b=2".
+// Handling of cookie strings like "a=1; b=2".
 final class Cookies
 {
     /** @return array<string,string> */
@@ -28,7 +28,7 @@ final class Cookies
         return implode('; ', $pairs);
     }
 
-    //объединяет строки cookie; значения из более поздних заменяют ранние
+    // Merges cookie strings; values from later ones replace earlier ones
     public static function merge(string ...$cookies): string
     {
         $all = array();
@@ -37,7 +37,7 @@ final class Cookies
         return self::build($all);
     }
 
-    //cookie из заголовков ответа (все строки Set-Cookie)
+    // Cookies from the response headers (all Set-Cookie lines)
     public static function fromHeaders(string $headers): array
     {
         $result = array();
@@ -47,7 +47,7 @@ final class Cookies
         return $result;
     }
 
-    //является ли cookie служебной cookie Cloudflare
+    // Whether the cookie is a Cloudflare service cookie
     public static function isCloudflare(string $name): bool
     {
         return strncmp($name, 'cf_', 3) === 0 || strncmp($name, '__cf', 4) === 0;

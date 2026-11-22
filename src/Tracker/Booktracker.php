@@ -18,9 +18,9 @@ final class Booktracker extends ForumTracker
         $body = 'login_username='.$this->encodedLogin().'&login_password='.rawurlencode($this->account['password']).'&login=%D0%92%D1%85%D0%BE%D0%B4';
         $response = $this->send($this->post('/login.php', $body, ''));
 
-        //при неверном пароле сайт тоже может поставить cookie, поэтому сначала текст ошибки
+        // with a wrong password the site may set a cookie too, so check the error text first
         $wrong = (bool)preg_match('/profile\.php\?mode=register/', $response->headers.$response->body);
-        //сессия - первая cookie ответа (кроме служебных Cloudflare)
+        // the session is the first cookie of the response (except Cloudflare's own)
         $session = '';
         foreach ($response->cookies as $name => $value)
         {
@@ -62,7 +62,7 @@ final class Booktracker extends ForumTracker
         $name = preg_replace('/\s*::\s*Книжный трекер$/u', '', $title, -1, $count);
         if ($count > 0)
             return $name;
-        //другое окончание: как раньше, отрезаем 31 байт
+        // a different ending: as before, cut off 31 bytes
         if (preg_match('/<title>(.*)<\/title>/', $page, $m) && strlen($m[1]) > 31)
         {
             $name = trim(html_entity_decode(substr($m[1], 0, -31), ENT_QUOTES, 'UTF-8'));
@@ -79,7 +79,7 @@ final class Booktracker extends ForumTracker
         return $this->get('/download.php?id='.$link[1])->referer($this->url('/viewtopic.php?t='.rawurlencode($topicId)));
     }
 
-    //ссылка на torrent-файл есть только на странице темы
+    // the link to the torrent file is only on the topic page
     public function download(string $topicId): string
     {
         $response = $this->send($this->topicRequest($topicId));

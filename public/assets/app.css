@@ -1,4 +1,4 @@
-/* Оформление веб-интерфейса TorrentMonitor. Светлая и тёмная темы задаются переменными. */
+/* TorrentMonitor web interface styles. The light and dark themes are defined by variables. */
 
 :root {
     --bg: #f4f5f7;
@@ -62,7 +62,7 @@ code { font-family: var(--mono); font-size: .9em; background: var(--surface-2); 
 .muted { color: var(--muted); }
 .spacer { flex: 1; }
 
-/* ---- каркас */
+/* ---- layout */
 .layout { display: flex; min-height: 100vh; }
 
 .nav {
@@ -125,7 +125,7 @@ code { font-family: var(--mono); font-size: .9em; background: var(--surface-2); 
 
 .center { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 1.5rem; }
 
-/* ---- карточки и списки */
+/* ---- cards and lists */
 .card {
     background: var(--surface);
     border: 1px solid var(--border);
@@ -176,7 +176,7 @@ code { font-family: var(--mono); font-size: .9em; background: var(--surface-2); 
 .inline select { width: auto; }
 .inline input { flex: 1; min-width: 12rem; }
 
-/* ---- трекеры */
+/* ---- trackers */
 .tracker__head {
     display: flex;
     align-items: center;
@@ -196,7 +196,7 @@ code { font-family: var(--mono); font-size: .9em; background: var(--surface-2); 
 .tracker__form { padding: .5rem 1rem 1rem 2.75rem; border-top: 1px dashed var(--border); }
 .tracker--open { background: var(--surface); }
 
-/* ---- формы */
+/* ---- forms */
 .field { display: grid; grid-template-columns: 13rem 1fr; gap: .25rem 1rem; align-items: center; margin: .6rem 0; }
 .field > span { color: var(--muted); }
 .field > small, .field > datalist { grid-column: 2; }
@@ -253,7 +253,7 @@ fieldset { border: 0; border-top: 1px solid var(--border); margin: .75rem 0 0; p
 .link { background: none; border: 0; padding: 0; color: var(--accent); font: inherit; cursor: pointer; }
 .link:hover { text-decoration: underline; }
 
-/* ---- окна */
+/* ---- dialogs */
 .overlay {
     position: fixed;
     inset: 0;
@@ -268,12 +268,12 @@ fieldset { border: 0; border-top: 1px solid var(--border); margin: .75rem 0 0; p
 .dialog { width: 100%; max-width: 34rem; background: var(--surface); border-radius: var(--radius); padding: 1.25rem 1.4rem; box-shadow: var(--shadow); }
 .dialog--small { max-width: 26rem; }
 
-/* ---- сообщения */
+/* ---- messages */
 .toasts { position: fixed; right: 1rem; bottom: 1rem; z-index: 30; display: flex; flex-direction: column; gap: .5rem; max-width: min(26rem, calc(100vw - 2rem)); }
 .toast { background: var(--text); color: var(--bg); padding: .6rem .9rem; border-radius: 6px; box-shadow: var(--shadow); cursor: pointer; }
 .toast--error { background: var(--bad); color: #fff; }
 
-/* ---- состояние */
+/* ---- status */
 .group { margin: .75rem 0; }
 .group__title { display: flex; gap: .75rem; align-items: baseline; margin-bottom: .2rem; }
 .line { padding: .15rem 0 .15rem 1.4rem; position: relative; overflow-wrap: anywhere; }
@@ -299,7 +299,7 @@ fieldset { border: 0; border-top: 1px solid var(--border); margin: .75rem 0 0; p
 .news { padding: .6rem 0; border-top: 1px solid var(--border); overflow-wrap: anywhere; }
 .news--unread { border-left: 3px solid var(--accent); padding-left: .75rem; }
 
-/* ---- узкие экраны */
+/* ---- narrow screens */
 @media (max-width: 800px) {
     .layout { flex-direction: column; }
     .nav {

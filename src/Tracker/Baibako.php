@@ -10,7 +10,7 @@ final class Baibako extends SeriesTracker
     const ADDRESSES = array('http://baibako.tv');
     const CHARSET = 'windows-1251';
 
-    //качество темы => array(шаблон названия раздачи, обозначение в имени файла)
+    // topic quality => array(release title pattern, tag in the file name)
     const QUALITY = array(
         'sd'   => array('x264', ''),
         '720'  => array('HD(TV)?720', 'HD'),
@@ -25,7 +25,7 @@ final class Baibako extends SeriesTracker
 
     protected function signIn(): string
     {
-        //commit - "Пустите меня" в windows-1251
+        // commit - "Пустите меня" in windows-1251
         $body = 'username='.$this->encodedLogin().'&password='.rawurlencode($this->account['password']).'&commit=%CF%F3%F1%F2%E8%F2%E5+%EC%E5%ED%FF';
         $response = $this->send($this->post('/takelogin.php', $body, ''));
 
@@ -33,7 +33,7 @@ final class Baibako extends SeriesTracker
         $pass = $response->cookie('pass');
         if ( ! empty($uid) && ! empty($pass) && $uid != 'deleted')
             return 'uid='.$uid.'; pass='.$pass;
-        //других признаков успешного входа нет: подходят любые cookie, установленные сайтом
+        // there is no other sign of a successful login: any cookies set by the site will do
         $pairs = array();
         foreach ($response->cookies as $name => $value)
             if ($value !== '' && $value != 'deleted' && ! Cookies::isCloudflare((string)$name))
@@ -63,7 +63,7 @@ final class Baibako extends SeriesTracker
             $link = (string)$item->link;
             if ( ! preg_match('/'.preg_quote($topic['name'], '/').'/i', $title) || ! preg_match('/'.$quality[0].'/', $title))
                 continue;
-            //серия указана в ссылке; у раздачи нескольких серий (s01e01-11 в названии) берётся последняя
+            // the episode is given in the link; for a multi-episode release (s01e01-11 in the title) the last one is taken
             if ( ! preg_match('/s(\d{2})\.?e(\d{2})/i', $link, $se) && ! preg_match('/s(\d{2})\.?e\d{2}-(\d{2})/i', $title, $se))
                 continue;
             $season = (int)$se[1];
@@ -77,7 +77,7 @@ final class Baibako extends SeriesTracker
             }
             catch (TrackerException $e)
             {
-                //уже найденные серии не теряем: ошибка повторится при следующем запуске
+                // keep the episodes already found: the error will repeat on the next run
                 if (empty($found))
                     throw $e;
                 break;
@@ -92,8 +92,8 @@ final class Baibako extends SeriesTracker
         return $found;
     }
 
-    //Лента в виде, пригодном для разбора: тело уже в UTF-8, а в заголовке XML указана windows-1251;
-    //амперсанды в ссылках не экранированы.
+    // The feed in a parseable form: the body is already UTF-8 while the XML header says windows-1251;
+    // ampersands in links are not escaped.
     private static function fixed(Response $response): Response
     {
         if ($response->body === '')

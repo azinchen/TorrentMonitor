@@ -3,7 +3,7 @@ namespace TorrentMonitor\Engine;
 
 use TorrentMonitor\Storage\Files;
 
-//Блокировка запуска: два запуска одновременно не работают.
+// Run lock: two runs do not work at the same time.
 final class Lock
 {
     /** @var resource|null */
@@ -16,7 +16,7 @@ final class Lock
         Files::prepare();
         $handle = @fopen(Files::dir().'/engine.lock', 'c');
         if ($handle === FALSE)
-            return TRUE; //каталог недоступен для записи: об этом сообщит хранилище
+            return TRUE; // The directory is not writable: the storage will report that
         if ( ! flock($handle, LOCK_EX | LOCK_NB))
         {
             fclose($handle);
@@ -35,7 +35,7 @@ final class Lock
         self::$handle = NULL;
     }
 
-    //идёт ли сейчас запуск (в другом процессе)
+    // Whether a run is in progress right now (in another process)
     public static function busy(): bool
     {
         if (self::$handle !== NULL)

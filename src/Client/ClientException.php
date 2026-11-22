@@ -1,7 +1,7 @@
 <?php
 namespace TorrentMonitor\Client;
 
-//Ошибка torrent-клиента. Сообщение исключения - код ошибки (см. TorrentMonitor\Messages):
+// A torrent client error. The exception message is an error code (see TorrentMonitor\Messages):
 //log_passwd, connect_fail, add_fail, torrent_file_fail, no_response, duplicate_torrent, unknown.
 class ClientException extends \RuntimeException
 {

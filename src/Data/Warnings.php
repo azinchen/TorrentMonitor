@@ -3,11 +3,11 @@ namespace TorrentMonitor\Data;
 
 use TorrentMonitor\Storage\Files;
 
-//Ошибки работы (state.json). Поля: id, time, source (трекер, torrent-клиент, api, system),
-//code (см. Messages), topicId (id темы или NULL).
+// Runtime errors (state.json). Fields: id, time, source (tracker, torrent client, api, system),
+// code (see Messages), topicId (topic id or NULL).
 final class Warnings
 {
-    //ошибки от новых к старым
+    // Errors, newest first
     /** @return array[] */
     public static function all(?string $source = NULL): array
     {
@@ -28,7 +28,7 @@ final class Warnings
         return count(self::all($source));
     }
 
-    /** @return array<string,int> источник => число ошибок */
+    /** @return array<string,int> source => number of errors */
     public static function counts(): array
     {
         $counts = array();
@@ -38,7 +38,7 @@ final class Warnings
         return $counts;
     }
 
-    //добавляет ошибку; возвращает TRUE, если она первая для этого источника
+    // Adds an error; returns TRUE if it is the first one for this source
     public static function add(string $source, string $code, $topicId = NULL): bool
     {
         $first = FALSE;

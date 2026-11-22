@@ -99,6 +99,7 @@ final class StorageTest extends IntegrationTestCase
     {
         AppState::setCredentials('rutracker.org', 'visible-login', 'Secret-Tracker-Pass');
         AppState::useQbittorrent(array('torrentPassword' => 'Secret-Client-Pass'));
+        AppState::setSettings(array('password' => password_hash('Interface-Pass', PASSWORD_BCRYPT)));
         Http::post(Env::FAKE.'/__control/reset');
 
         $pages = Http::get(Env::APP.'/')['body'].Env::uiOpen()['body'].Env::ui('overview')['body'].Env::ui('health')['body'];

@@ -1,20 +1,20 @@
 <?php
 namespace TorrentMonitor\Client;
 
-//Torrent-клиент, в который TorrentMonitor передаёт скачанные torrent-файлы.
+// The torrent client that TorrentMonitor passes downloaded torrent files to.
 interface TorrentClient
 {
-    //Добавляет раздачу. $file - путь к torrent-файлу.
-    //$options: path - каталог загрузки, category - категория, name - название темы,
-    //url - адрес этого же файла на сервере TorrentMonitor (для клиентов, которые принимают только ссылку).
-    //Возвращает идентификатор раздачи в клиенте (обычно info-hash).
+    // Adds a torrent. $file - path to the torrent file.
+    // $options: path - download directory, category - category, name - topic title,
+    // url - address of the same file on the TorrentMonitor server (for clients that accept only a link).
+    // Returns the torrent's id in the client (usually the info-hash).
     public function add(string $file, array $options): string;
 
-    //удаляет раздачу; $deleteData - вместе со скачанными файлами (если клиент это умеет)
+    // removes the torrent; $deleteData - together with the downloaded files (if the client can do it)
     public function remove(string $id, bool $deleteData): void;
 
-    //Сведения о раздаче в клиенте: array('comment' => комментарий из torrent-файла (трекеры пишут
-    //туда адрес темы), 'path' => каталог загрузки, 'category' => категория).
-    //NULL, если раздачи нет или клиент этого не умеет.
+    // Details of the torrent in the client: array('comment' => comment from the torrent file (trackers put
+    // the topic address there), 'path' => download directory, 'category' => category).
+    // NULL if there is no such torrent or the client cannot do this.
     public function info(string $id): ?array;
 }

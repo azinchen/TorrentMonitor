@@ -15,11 +15,11 @@ use TorrentMonitor\Tracker\TrackerException;
 use TorrentMonitor\Update\Release;
 use TorrentMonitor\Update\Updater;
 
-//Один запуск TorrentMonitor: проверка тем на трекерах, отслеживаемых пользователей,
-//повтор передачи в torrent-клиент, проверка обновлений программы.
+// A single TorrentMonitor run: checking topics on trackers, watched users,
+// retrying the handover to the torrent client, checking for program updates.
 final class Runner
 {
-    //адреса для проверки подключения к интернету (достаточно ответа от любого)
+    // Addresses for checking the internet connection (a response from any of them is enough)
     const CONNECTIVITY = array('https://www.google.com/generate_204', 'https://ya.ru/');
 
     /** @var callable function(string $line): void */
@@ -29,8 +29,8 @@ final class Runner
     private ?string $onlyTracker;
     private ?int $onlyTopic;
 
-    //$options: tracker - проверить только этот трекер; topic - только тему с этим id;
-    //dryRun - ничего не скачивать и не менять, только показать, что было бы сделано
+    // $options: tracker - check only this tracker; topic - only the topic with this id;
+    // dryRun - download and change nothing, only show what would be done
     public function __construct(callable $out, array $options = array())
     {
         $this->out = $out;
@@ -40,7 +40,7 @@ final class Runner
         $this->onlyTopic = ! empty($options['topic']) ? (int)$options['topic'] : NULL;
     }
 
-    /** @var resource|null журнал запуска (data/engine.log): его показывает страница «Состояние» */
+    /** @var resource|null run log (data/engine.log): it is shown by the "Status" page */
     private $log = NULL;
 
     private function say(string $line): void
@@ -70,7 +70,7 @@ final class Runner
         $started = microtime(TRUE);
         $log = @fopen(self::logFile(), 'w');
         $this->log = $log === FALSE ? NULL : $log;
-        //сообщения доставки и скриптов тоже попадают в журнал
+        // Delivery and script messages also go to the log
         $direct = $this->out;
         $this->out = function ($line) use ($direct) {
             if ($this->log !== NULL)
@@ -129,8 +129,8 @@ final class Runner
         return TRUE;
     }
 
-    //есть ли подключение к интернету. Адреса проверки можно задать в config.php:
-    //Config::write('connectivity.url', 'https://example.org/'); пустая строка отключает проверку.
+    // Whether there is an internet connection. The check addresses can be set in config.php:
+    // Config::write('connectivity.url', 'https://example.org/'); an empty string disables the check.
     private function online(): bool
     {
         $configured = \Config::read('connectivity.url');
@@ -147,7 +147,7 @@ final class Runner
         return FALSE;
     }
 
-    // -------------------------------------------------------------------- темы
+    // -------------------------------------------------------------------- topics
 
     private function topics(): void
     {
@@ -155,7 +155,7 @@ final class Runner
         $topics = Topics::all();
         usort($topics, function ($a, $b) { return strcmp($a['tracker'], $b['tracker']) ?: strcmp($a['name'], $b['name']) ?: $a['id'] - $b['id']; });
 
-        //отбор тем для проверки
+        // Selecting topics to check
         $byTracker = array();
         foreach ($topics as $topic)
         {
@@ -172,7 +172,7 @@ final class Runner
                 $byTracker[$topic['tracker']][] = $topic;
         }
 
-        //вход на трекеры и запросы страниц тем
+        // Logging in to trackers and requesting topic pages
         $requests = array();
         $ready = array();
         foreach ($byTracker as $name => $list)
@@ -210,7 +210,7 @@ final class Runner
             }
         }
 
-        //страницы всех тем загружаются параллельно
+        // The pages of all topics are loaded in parallel
         $responses = App::http()->sendAll($requests);
 
         foreach ($ready as $id => $topic)
@@ -252,7 +252,7 @@ final class Runner
         }
     }
 
-    //как тема называется в журнале
+    // How the topic is named in the log
     private static function label(array $topic): string
     {
         return ($topic['name'] !== '' ? $topic['name'] : 'Тема '.$topic['topicId']).' на трекере '.$topic['tracker'];
@@ -265,7 +265,7 @@ final class Runner
             Problems::report($source, $code, $topic);
     }
 
-    // ------------------------------------------------------------ пользователи
+    // ------------------------------------------------------------ users
 
     private function users(): void
     {
@@ -286,7 +286,7 @@ final class Runner
                 foreach ($topics === NULL ? array() : $topics as $t)
                     Users::addFound($user['id'], $name, $t['section'], (string)$t['topicId'], $t['title'], $t['date']);
 
-                //темы, которые пользователь отметил для скачивания
+                // Topics the user marked for download
                 $accepted = Users::found(function ($f) use ($name) { return $f['tracker'] == $name && $f['accepted'] && ! $f['downloaded']; });
                 foreach ($accepted as $item)
                 {
@@ -316,7 +316,7 @@ final class Runner
         }
     }
 
-    // -------------------------------------------------------------- обновление
+    // -------------------------------------------------------------- update
 
     private function update(): void
     {

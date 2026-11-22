@@ -12,7 +12,7 @@
 </head>
 <body x-data="app" x-cloak>
 
-<!-- сообщения -->
+<!-- messages -->
 <div class="toasts" aria-live="polite">
     <template x-for="t in toasts" :key="t.id">
         <div class="toast" :class="t.error && 'toast--error'" x-text="t.text" @click="toasts = toasts.filter(x => x.id !== t.id)"></div>
@@ -28,7 +28,7 @@
     </div>
 </div>
 
-<!-- ================================================= первоначальная настройка -->
+<!-- ============================================================ initial setup -->
 <div class="center" x-show="!loading && !fatal && mode == 'setup'">
     <form class="card card--narrow" @submit.prevent="doSetup()">
         <h1>Настройка TorrentMonitor</h1>
@@ -72,7 +72,7 @@
     </form>
 </div>
 
-<!-- ===================================================================== вход -->
+<!-- ==================================================================== login -->
 <div class="center" x-show="!loading && !fatal && mode == 'login'">
     <form class="card card--login" @submit.prevent="doLogin()">
         <h1>TorrentMonitor</h1>
@@ -83,7 +83,7 @@
     </form>
 </div>
 
-<!-- =============================================================== приложение -->
+<!-- ============================================================== application -->
 <div class="layout" x-show="!loading && !fatal && mode == 'app'">
 
 <nav class="nav">
@@ -104,7 +104,7 @@
 
 <main class="main">
 
-<!-- строка состояния над каждой страницей -->
+<!-- status bar above every page -->
 <div class="runbar">
     <span class="muted" x-show="!status.running">
         <span x-show="status.lastRun">Последняя проверка: <span x-text="date(status.lastRun)"></span></span>
@@ -119,7 +119,7 @@
     <a href="#status" @click.prevent="open('status')">Подробнее</a>
 </div>
 
-<!-- ------------------------------------------------------------- Торренты -->
+<!-- ------------------------------------------------------------- Torrents -->
 <section x-show="page == 'topics'">
     <header class="head">
         <h1>Торренты</h1>
@@ -189,7 +189,7 @@
     </ul>
 </section>
 
-<!-- --------------------------------------------------------- Пользователи -->
+<!-- ---------------------------------------------------------------- Users -->
 <section x-show="page == 'users'">
     <header class="head"><h1>Пользователи</h1></header>
     <p class="muted">TorrentMonitor следит за новыми раздачами пользователя трекера. Найденную раздачу можно скачать один раз или поставить на постоянное отслеживание.</p>
@@ -233,7 +233,7 @@
     </template>
 </section>
 
-<!-- -------------------------------------------------------------- Трекеры -->
+<!-- ------------------------------------------------------------- Trackers -->
 <section x-show="page == 'trackers'">
     <header class="head"><h1>Трекеры</h1></header>
     <p class="muted">Учётные данные нужны только для трекеров, которыми вы пользуетесь. Пароли хранятся на сервере и в браузер не передаются.</p>
@@ -306,7 +306,7 @@
     </ul>
 </section>
 
-<!-- ------------------------------------------------------------ Настройки -->
+<!-- ------------------------------------------------------------- Settings -->
 <section x-show="page == 'settings'">
     <header class="head"><h1>Настройки</h1></header>
 
@@ -441,7 +441,7 @@
     </div>
 </section>
 
-<!-- ------------------------------------------------------------ Состояние -->
+<!-- --------------------------------------------------------------- Status -->
 <section x-show="page == 'status'">
     <header class="head"><h1>Состояние</h1></header>
 
@@ -514,7 +514,7 @@
 </main>
 </div>
 
-<!-- ======================================================== окно темы/сериала -->
+<!-- ====================================================== topic/series dialog -->
 <div class="overlay" x-show="topicForm" @keydown.escape.window="topicForm = null; deleteForm = null">
     <template x-if="topicForm">
     <form class="dialog" @submit.prevent="saveTopic()" @click.outside="topicForm = null">
@@ -569,7 +569,7 @@
     </template>
 </div>
 
-<!-- ========================================================= удаление темы -->
+<!-- ======================================================== topic deletion -->
 <div class="overlay" x-show="deleteForm">
     <template x-if="deleteForm">
     <form class="dialog dialog--small" @submit.prevent="deleteTopic()" @click.outside="deleteForm = null">

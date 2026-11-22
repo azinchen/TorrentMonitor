@@ -17,10 +17,10 @@ use TorrentMonitor\Storage\Migrations;
 use TorrentMonitor\Storage\StorageException;
 use TorrentMonitor\Tracker\Registry;
 
-//HTTP API: /api/torrents, /api/errors, /api/run, /api/sonarr. Описание - wiki/API.md.
+//HTTP API: /api/torrents, /api/errors, /api/run, /api/sonarr. Described in wiki/API.md.
 final class Api
 {
-    //$segments - части пути после /api
+    //$segments - path parts after /api
     public static function handle(array $segments): void
     {
         header('Content-Type: application/json; charset=utf-8');
@@ -78,7 +78,7 @@ final class Api
         return $json;
     }
 
-    //Отвечает клиенту и продолжает работу: Sonarr не должен ждать torrent-клиент.
+    //Responds to the client and keeps working: Sonarr must not wait for the torrent client.
     private static function respondAndContinue(string $message): void
     {
         ignore_user_abort(TRUE);
@@ -123,7 +123,7 @@ final class Api
         return in_array(strtolower((string)$_GET[$name]), array('1', 'true', 'yes'), TRUE);
     }
 
-    //тема в виде, отдаваемом API
+    //a topic in the form returned by the API
     private static function view(array $t): array
     {
         return array(
@@ -190,7 +190,7 @@ final class Api
         if ( ! Registry::get($tracker)->validName($name))
             self::respond(FALSE, 'Недопустимое название сериала.', NULL, 422);
 
-        //качество: quality = sd | 720 | 1080; прежний параметр hd (0, 1, 2) тоже принимается
+        //quality: quality = sd | 720 | 1080; the former hd parameter (0, 1, 2) is accepted too
         if (isset($b['quality']) && $b['quality'] !== '')
             $quality = strtolower(rtrim((string)$b['quality'], 'pP'));
         else
@@ -250,9 +250,9 @@ final class Api
 
     // ------------------------------------------------------------------- sonarr
 
-    //Webhook Sonarr. Grab: раздача, которую Sonarr передал в torrent-клиент, ставится на отслеживание
-    //(адрес темы берётся из комментария torrent-файла). SeriesDelete: темы сериала удаляются, если это
-    //включено в настройках. Остальные события принимаются и пропускаются.
+    //Sonarr webhook. Grab: the torrent that Sonarr sent to the torrent client is added to monitoring
+    //(the topic URL is taken from the torrent file's comment). SeriesDelete: the series' topics are deleted if this
+    //is enabled in the settings. Other events are accepted and skipped.
     private static function sonarr(): void
     {
         $body = json_decode((string)file_get_contents('php://input'), TRUE);
@@ -301,7 +301,7 @@ final class Api
 
     private static function grab(string $hash, string $title, ?int $seriesId, ?string $category): void
     {
-        //раздача может появиться в клиенте не сразу после события
+        //the torrent may not appear in the client right after the event
         $info = NULL;
         try
         {
@@ -335,7 +335,7 @@ final class Api
             return;
         }
 
-        //тема уже отслеживается: это не ошибка, запоминаем раздачу и сериал
+        //the topic is already monitored: not an error, remember the torrent and the series
         $known = Topics::find($parsed['tracker'], $parsed['topicId']);
         if ($known !== NULL)
         {
@@ -346,7 +346,7 @@ final class Api
             return;
         }
 
-        //каталог и категория раздачи сохраняются в теме: обновлённая раздача попадёт туда же
+        //the torrent's directory and category are saved in the topic: the updated torrent will go to the same place
         Topics::add(array(
             'tracker' => $parsed['tracker'], 'topicId' => $parsed['topicId'], 'name' => $title, 'autoRename' => TRUE,
             'hash' => strtolower($hash), 'path' => $info['path'], 'sonarrSeries' => $seriesId,

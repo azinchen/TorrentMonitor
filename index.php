@@ -1,6 +1,6 @@
 <?php
-//Этот файл виден, только если корень сайта указывает на каталог программы, а не на public,
-//и веб-сервер не выполняет .htaccess (nginx и другие).
+//This file is visible only if the site root points to the program directory instead of public,
+//and the web server does not process .htaccess (nginx and others).
 http_response_code(503);
 header('Content-Type: text/html; charset=utf-8');
 ?>

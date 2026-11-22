@@ -9,7 +9,7 @@ final class Newstudio extends SeriesTracker
 {
     const ADDRESSES = array('https://newstudio.tv');
 
-    //качество темы => array(шаблон названия раздачи, обозначение в имени файла)
+    // topic quality => array(release title pattern, tag in the file name)
     const QUALITY = array(
         'sd'   => array('WEBDLRip', ''),
         '720'  => array('720p', 'HD'),
@@ -42,7 +42,7 @@ final class Newstudio extends SeriesTracker
         throw new TrackerException('cant_find_cookie');
     }
 
-    //cookie сессии из ответа: bb_data, а если её нет - первая установленная сайтом
+    // session cookie from the response: bb_data, or if it is missing - the first one set by the site
     private function sessionCookie(Response $response): ?string
     {
         if ( ! empty($response->cookie('bb_data')) && $response->cookie('bb_data') != 'deleted')
@@ -82,7 +82,7 @@ final class Newstudio extends SeriesTracker
             }
             catch (TrackerException $e)
             {
-                //уже найденные серии не теряем: ошибка повторится при следующем запуске
+                // keep the episodes already found: the error will repeat on the next run
                 if (empty($found))
                     throw $e;
                 break;
@@ -98,7 +98,7 @@ final class Newstudio extends SeriesTracker
         return $found;
     }
 
-    //torrent-файл раздачи: его номер указан на странице темы
+    // torrent file of the release: its id is given on the topic page
     private function release(string $link): string
     {
         $page = $this->send($this->post($link)->follow());
@@ -107,7 +107,7 @@ final class Newstudio extends SeriesTracker
         return $this->torrent($this->post('/download.php?id='.$id[1])->follow());
     }
 
-    //дата из ленты как есть, без пересчёта часового пояса: array('Y-m-d H:i:s', 'd Мес Y H:i')
+    // date from the feed as is, without time zone conversion: array('Y-m-d H:i:s', 'd Mon Y H:i') with a Russian month
     private static function date(string $pubDate): array
     {
         if ( ! preg_match('/(\d{1,2})\s+(\w{3})\s+(\d{4})\s+(\d{2}:\d{2}):(\d{2})/', $pubDate, $m) || self::monthNumber($m[2]) === NULL)

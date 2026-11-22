@@ -1,28 +1,28 @@
 <?php
 namespace TorrentMonitor\Http;
 
-//Описание одного HTTP-запроса.
+// Description of a single HTTP request.
 final class Request
 {
     public string $method = 'GET';
     public string $url;
-    /** @var string|array|null тело POST: строка (как есть) или массив полей */
+    /** @var string|array|null POST body: a string (as is) or an array of fields */
     public $body = NULL;
-    /** @var string[] заголовки вида "Имя: значение" */
+    /** @var string[] headers like "Name: value" */
     public array $headers = array();
     public string $cookie = '';
     public ?string $referer = NULL;
     public bool $follow = FALSE;
-    //кодировка страницы на сайте: тело ответа будет переведено из неё в UTF-8
+    // Page encoding on the site: the response body will be converted from it to UTF-8
     public ?string $charset = NULL;
-    //логин:пароль для HTTP Basic
+    // login:password for HTTP Basic
     public ?string $auth = NULL;
     public ?int $timeout = NULL;
-    //имя трекера: по нему выбирается прокси; NULL - запрос не к трекеру
+    // Tracker name: the proxy is chosen by it; NULL - not a request to a tracker
     public ?string $tracker = NULL;
-    //ответ - файл, а не страница: решатель Cloudflare для такого адреса вызывать нельзя
+    // The response is a file, not a page: the Cloudflare solver must not be called for such an address
     public bool $binary = FALSE;
-    //не обходить Cloudflare и не использовать прокси (запросы к torrent-клиентам, уведомлениям)
+    // Do not bypass Cloudflare and do not use a proxy (requests to torrent clients, notifications)
     public bool $plain = FALSE;
 
     private function __construct(string $method, string $url)
@@ -51,7 +51,7 @@ final class Request
         return $request;
     }
 
-    //POST multipart/form-data. $files: имя поля => array(имя файла, содержимое)
+    // POST multipart/form-data. $files: field name => array(file name, contents)
     public static function multipart(string $url, array $fields, array $files = array()): self
     {
         $boundary = '----tm'.bin2hex(random_bytes(12));
@@ -82,7 +82,7 @@ final class Request
         return strtolower((string)parse_url($this->url, PHP_URL_HOST));
     }
 
-    //схема://хост[:порт]
+    // scheme://host[:port]
     public function origin(): string
     {
         $parts = parse_url($this->url);

@@ -4,12 +4,12 @@ namespace TorrentMonitor\Tracker;
 use TorrentMonitor\Http\Request;
 use TorrentMonitor\Http\Response;
 
-//riperam.org. Номер темы - путь страницы темы (начинается с /).
+// riperam.org. The topic id is the path of the topic page (starts with /).
 final class Riperam extends ForumTracker
 {
     const ADDRESSES = array('http://riperam.org');
 
-    //номер torrent-файла, найденный на странице темы: он же идёт в имя сохраняемого файла
+    // torrent file id found on the topic page: it also goes into the saved file name
     private string $downloadId = '';
 
     protected function sessionAlive(string $cookie): bool
@@ -23,7 +23,7 @@ final class Riperam extends ForumTracker
         $body = 'username='.$this->encodedLogin().'&password='.rawurlencode($this->account['password']).'&login=%C2%F5%EE%E4';
         $response = $this->send($this->post('/ucp.php?mode=login', $body, ''));
 
-        //cookie phpBB: <префикс>_u (номер пользователя, 1 - гость), <префикс>_k, <префикс>_sid
+        // phpBB cookies: <prefix>_u (user id, 1 - guest), <prefix>_k, <prefix>_sid
         $pairs = array();
         $user = NULL;
         foreach ($response->cookies as $name => $value)
@@ -40,7 +40,7 @@ final class Riperam extends ForumTracker
             throw new TrackerException('cant_get_auth_page');
         if (preg_match('/login\.php\?redirect=/', $response->body))
             throw new TrackerException('credential_wrong');
-        //cookie названы иначе: как и раньше, сессией считается всё, что выдал сайт
+        // the cookies are named differently: as before, the session is everything the site issued
         if ($user === NULL && ! empty($pairs))
             return implode('; ', $pairs);
         throw new TrackerException($response->body === '' && $response->status != 302 ? 'cant_get_auth_page' : 'cant_find_cookie');
@@ -53,7 +53,7 @@ final class Riperam extends ForumTracker
 
     protected function parseDate(string $page): ?array
     {
-        //[ 21 ноя 2026, 10:15 ]; месяц - три русские буквы, 6 байт (выражение без /u)
+        // [ 21 ноя 2026, 10:15 ]; the month is three Russian letters, 6 bytes (the expression has no /u)
         if ( ! preg_match('/\[ (\d{2} \D{6} \d{4}\, \d{2}\:\d{2}) \]/', $page, $m))
             return NULL;
         $parts = explode(', ', $m[1]);
@@ -79,7 +79,7 @@ final class Riperam extends ForumTracker
 
     public function check(array $topic, Response $response): array
     {
-        //как и раньше: если на странице нет ссылки на файл (например, сессия не действует), это ошибка, даже когда дата не изменилась
+        // as before: if the page has no link to the file (e.g. the session is not valid), it is an error even when the date has not changed
         if ($response->body !== '' && ! $response->challenged && $this->parseDate($response->body) !== NULL
             && self::downloadId($response->body) === NULL)
             throw new TrackerException('cant_find_dowload_link');
@@ -100,7 +100,7 @@ final class Riperam extends ForumTracker
         return $this->downloadId !== '' ? $this->downloadId : $topicId;
     }
 
-    //ссылка на torrent-файл есть только на странице темы
+    // the link to the torrent file is only on the topic page
     public function download(string $topicId): string
     {
         $response = $this->send($this->topicRequest($topicId));

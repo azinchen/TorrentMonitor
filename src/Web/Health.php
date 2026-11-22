@@ -11,14 +11,14 @@ use TorrentMonitor\Http\Request;
 use TorrentMonitor\Storage\Files;
 use TorrentMonitor\Tracker\Registry;
 
-//Проверки для страницы «Состояние».
+//Checks for the «Состояние» (Status) page.
 final class Health
 {
     /** @var array[] */
     private array $groups = array();
 
-    //Возвращает группы проверок: array(title, items => array(array(ok => TRUE|FALSE|NULL, text))).
-    //ok = NULL - сведения без оценки.
+    //Returns groups of checks: array(title, items => array(array(ok => TRUE|FALSE|NULL, text))).
+    //ok = NULL - information only, no verdict.
     public static function report(): array
     {
         $health = new self();
@@ -107,7 +107,7 @@ final class Health
         $names = array();
         foreach (Registry::names() as $name)
         {
-            //проверяются трекеры, которыми пользуются: есть учётные данные или темы
+            //only trackers in use are checked: those with credentials or topics
             if ( ! $this->used($name))
                 continue;
             $names[] = $name;
@@ -177,7 +177,7 @@ final class Health
                 .(Settings::get('serverAddress') ?: 'не задан').') должен быть доступен с него.');
     }
 
-    //пробует войти в torrent-клиент; NULL - всё в порядке, иначе текст ошибки
+    //tries to log in to the torrent client; NULL - everything is fine, otherwise the error text
     public static function clientProblem(): ?string
     {
         try
@@ -185,7 +185,7 @@ final class Health
             $client = Clients::current();
             if ($client === NULL)
                 return 'клиент не выбран.';
-            //запрос сведений о несуществующей раздаче: проходит только при верном адресе и пароле
+            //request for details of a nonexistent torrent: succeeds only with the right address and password
             $client->info(str_repeat('0', 40));
             return NULL;
         }

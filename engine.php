@@ -1,8 +1,8 @@
 <?php
-//Запуск проверки тем. Обычно вызывается по расписанию: php engine.php
-//  --tracker=rutracker.org  проверить только этот трекер
-//  --topic=12               проверить только тему с этим номером
-//  --dry-run                показать найденные обновления, ничего не скачивая и не меняя
+//Runs the topic check. Usually called on a schedule: php engine.php
+//  --tracker=rutracker.org  check only this tracker
+//  --topic=12               check only the topic with this number
+//  --dry-run                show the updates found without downloading or changing anything
 require_once __DIR__.'/src/bootstrap.php';
 
 use TorrentMonitor\App;

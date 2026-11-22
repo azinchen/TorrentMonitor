@@ -1,6 +1,6 @@
 <?php
-//Единственная точка входа веб-сервера. Корень сайта - каталог public: программа, настройки
-//и данные лежат уровнем выше и из браузера недоступны.
+//The web server's only entry point. The site root is the public directory: the program, settings
+//and data live one level up and cannot be reached from a browser.
 use TorrentMonitor\App;
 use TorrentMonitor\Web\Api;
 use TorrentMonitor\Web\Feed;
@@ -8,7 +8,7 @@ use TorrentMonitor\Web\Ui;
 
 $path = rawurldecode((string)parse_url(isset($_SERVER['REQUEST_URI']) ? $_SERVER['REQUEST_URI'] : '/', PHP_URL_PATH));
 
-//встроенный сервер PHP (php -S ... public/index.php): готовые файлы отдаёт он сам
+//PHP built-in server (php -S ... public/index.php): it serves existing files itself
 if (PHP_SAPI == 'cli-server')
 {
     if ($path != '/' && ! preg_match('/\.php$/i', $path) && strpos($path, '..') === FALSE && is_file(__DIR__.$path))
@@ -16,7 +16,7 @@ if (PHP_SAPI == 'cli-server')
 }
 else
 {
-    //установка в подкаталоге сайта (http://host/tm/)
+    //installed in a subdirectory of the site (http://host/tm/)
     $base = rtrim(str_replace('\\', '/', dirname(isset($_SERVER['SCRIPT_NAME']) ? $_SERVER['SCRIPT_NAME'] : '/')), '/');
     if ($base !== '' && strncmp($path, $base.'/', strlen($base) + 1) === 0)
         $path = substr($path, strlen($base));
@@ -40,7 +40,7 @@ elseif (strncmp($path, '/torrents/', 10) === 0)
     Feed::torrent(substr($path, 10));
 elseif ($path == '/' || $path == '/index.php')
 {
-    //страница одна: данные она запрашивает сама (см. src/Web/Ui.php)
+    //there is a single page: it requests its data itself (see src/Web/Ui.php)
     header('Content-Type: text/html; charset=utf-8');
     header('Cache-Control: no-cache');
     header('X-Frame-Options: DENY');

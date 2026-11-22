@@ -1,9 +1,9 @@
 <?php
 namespace TorrentMonitor\Notify;
 
-//Сервис уведомлений.
+// Notification service.
 interface Notifier
 {
-    //$address - адрес или ключи сервиса из настроек; $html - текст с тегами <b>, <i> и переводами строк
+    // $address - the service's address or keys from the settings; $html - text with <b>, <i> tags and line breaks
     public function send(string $address, string $title, string $html): void;
 }

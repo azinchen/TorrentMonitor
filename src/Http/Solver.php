@@ -1,7 +1,7 @@
 <?php
 namespace TorrentMonitor\Http;
 
-//Решатель проверок Cloudflare с API FlareSolverr (FlareSolverr, Byparr).
+// Cloudflare challenge solver with the FlareSolverr API (FlareSolverr, Byparr).
 final class Solver
 {
     private string $url;
@@ -13,8 +13,8 @@ final class Solver
         $this->maxTimeout = $maxTimeout;
     }
 
-    //открывает страницу в браузере решателя.
-    //Возвращает array(status, body, cookies => array(имя => значение), userAgent) или NULL
+    // Opens a page in the solver's browser.
+    // Returns array(status, body, cookies => array(name => value), userAgent) or NULL
     public function request(string $method, string $url, string $cookie = '', string $postData = '', ?string $proxy = NULL): ?array
     {
         $cookies = array();

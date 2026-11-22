@@ -7,7 +7,7 @@ use TorrentMonitor\Data\State;
 use TorrentMonitor\Http\Client;
 use TorrentMonitor\Storage\Files;
 
-//Пути установки и общие объекты.
+// Installation paths and shared objects.
 final class App
 {
     private static ?Client $http = NULL;
@@ -25,7 +25,7 @@ final class App
         return isset($version['system']) ? (string)$version['system'] : '0';
     }
 
-    //каталог сохранённых torrent-файлов
+    // Directory of saved torrent files
     public static function torrentsDir(): string
     {
         $dir = \Config::read('torrents.dir');
@@ -37,8 +37,8 @@ final class App
         return $dir;
     }
 
-    //Сообщение для установки, перенесённой с версии с базой данных, данные которой
-    //ещё не преобразованы; NULL, если всё в порядке.
+    // Message for an installation migrated from a version with a database whose data
+    // has not been converted yet; NULL if everything is fine.
     public static function legacyDatabaseNotice(): ?string
     {
         if (Files::initialized() || empty(\Config::read('db.type')))
@@ -49,7 +49,7 @@ final class App
             .'Чтобы начать с чистой установки, удалите строки db.* из config.php.';
     }
 
-    //причина, по которой работать нельзя (данные не перенесены или повреждены), или NULL
+    // The reason the program cannot work (data not migrated or corrupted), or NULL
     public static function storageProblem(): ?string
     {
         try
@@ -65,7 +65,7 @@ final class App
         }
     }
 
-    //куда писать отладочные строки HTTP-клиента (function(string): void) или NULL
+    // Where to write the HTTP client's debug lines (function(string): void) or NULL
     public static function setLogger(?callable $logger): void
     {
         self::$logger = $logger;
@@ -78,7 +78,7 @@ final class App
             call_user_func(self::$logger, $line);
     }
 
-    //HTTP-клиент с настройками пользователя
+    // HTTP client with the user's settings
     public static function http(): Client
     {
         if (self::$http === NULL)

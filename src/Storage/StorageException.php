@@ -1,7 +1,7 @@
 <?php
 namespace TorrentMonitor\Storage;
 
-//Ошибка хранилища: файл данных повреждён, недоступен или создан более новой версией.
+// Storage error: a data file is corrupted, inaccessible or was created by a newer version.
 class StorageException extends \RuntimeException
 {
 }

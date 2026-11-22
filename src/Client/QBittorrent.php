@@ -16,7 +16,7 @@ final class QBittorrent extends HttpClientBase
         foreach ($response->cookies as $name => $value)
             if (preg_match('/^(QBT_)?SID(_\d+)?$/', $name))
                 $this->cookie = $name.'='.$value;
-        //авторизация может быть отключена для адреса TorrentMonitor: тогда cookie нет, но запросы проходят
+        // authentication may be disabled for the TorrentMonitor address: then there is no cookie, but requests work
         if ($this->cookie === '' && ($response->status != 200 || trim($response->body) != 'Ok.'))
             throw new ClientException('log_passwd');
     }
@@ -34,7 +34,7 @@ final class QBittorrent extends HttpClientBase
         if ($hash === NULL)
             throw new ClientException('torrent_file_fail');
 
-        //autoTMM заставляет qBittorrent игнорировать savepath: отключаем, если каталог задан
+        // autoTMM makes qBittorrent ignore savepath: turn it off if a directory is set
         $fields = array('autoTMM' => empty($options['path']) ? 'true' : 'false', 'root_folder' => 'true');
         if ( ! empty($options['path']))
             $fields['savepath'] = $options['path'];
@@ -46,7 +46,7 @@ final class QBittorrent extends HttpClientBase
             throw new ClientException('log_passwd');
         if ($response->status >= 200 && $response->status < 300 && stripos($response->body, 'Fails') === FALSE)
             return $hash;
-        //такая раздача уже есть в клиенте: это не ошибка
+        // the client already has this torrent: not an error
         if ($this->has($hash))
             return $hash;
         throw new ClientException($response->status == 415 ? 'torrent_file_fail' : 'add_fail');

@@ -4,7 +4,7 @@ namespace TorrentMonitor\Web;
 use TorrentMonitor\Data\Settings;
 use TorrentMonitor\Storage\Files;
 
-//Вход в веб-интерфейс: сессия и необязательный долгий вход («запомнить меня»).
+//Web interface login: the session and an optional long-lived login ("remember me").
 final class Auth
 {
     const COOKIE = 'tm_login';
@@ -34,7 +34,7 @@ final class Auth
         return $sent !== '' && hash_equals($_SESSION['csrf'], $sent);
     }
 
-    //включена ли защита паролем
+    //whether password protection is enabled
     public static function required(): bool
     {
         return Settings::on('auth');
@@ -55,10 +55,12 @@ final class Auth
         return FALSE;
     }
 
-    //проверяет пароль; пароль в старом виде (md5) при первом входе заменяется на bcrypt
+    //verifies the password; a password in the old format (md5) is replaced with bcrypt on first login
     public static function passwordValid(string $password): bool
     {
         $stored = (string)Settings::get('password');
+        if ($stored === '')
+            return FALSE;
         if (password_verify($password, $stored))
             return TRUE;
         if (strlen($stored) == 32 && hash_equals($stored, md5($password)))
@@ -72,7 +74,7 @@ final class Auth
     public static function setPassword(string $password): void
     {
         Settings::set('password', password_hash($password, PASSWORD_BCRYPT));
-        //сменили пароль: прежние долгие входы больше не действуют
+        //the password was changed: earlier long-lived logins are no longer valid
         Files::state()->update(function (&$data) { $data['logins'] = array(); });
     }
 

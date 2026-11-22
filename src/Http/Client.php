@@ -1,14 +1,14 @@
 <?php
 namespace TorrentMonitor\Http;
 
-//Единственный HTTP-клиент TorrentMonitor: все запросы к трекерам, torrent-клиентам,
-//уведомлениям и GitHub идут через него.
+// The only HTTP client of TorrentMonitor: all requests to trackers, torrent clients,
+// notifications and GitHub go through it.
 //
-//Cloudflare. Если сайт ответил проверкой, клиент просит решатель (FlareSolverr/Byparr)
-//открыть страницу сайта, запоминает выданные cookie и User-Agent браузера и повторяет
-//исходный запрос напрямую. Так работают и POST-запросы (авторизация), и скачивание
-//torrent-файлов, которые через браузер решателя не проходят. Если прямой повтор всё
-//равно упирается в проверку (у решателя другой IP), используется ответ самого решателя.
+// Cloudflare. If a site answers with a challenge, the client asks the solver (FlareSolverr/Byparr)
+// to open the site's page, remembers the issued cookies and the browser User-Agent and repeats
+// the original request directly. This also covers POST requests (login) and downloading
+// torrent files, which do not go through the solver's browser. If the direct retry still
+// hits the challenge (the solver has a different IP), the solver's own response is used.
 final class Client
 {
     private string $userAgent;
@@ -18,15 +18,15 @@ final class Client
     private ?ClearanceStore $clearance;
     /** @var array{enabled:bool,address:string,type:string} */
     private array $proxy;
-    /** @var array<string,array> трекер => array(use, address, type) */
+    /** @var array<string,array> tracker => array(use, address, type) */
     private array $trackerProxy;
     /** @var callable|null function(string $line): void */
     private $log;
-    //разрешён ли обход Cloudflare (для проверок доступности его можно отключить)
+    // Whether bypassing Cloudflare is allowed (it can be turned off for availability checks)
     public bool $solveChallenges = TRUE;
 
     //$options: userAgent, timeout, concurrency, solverUrl, proxy => array(enabled, address, type),
-    //trackerProxy => array(трекер => array(use, address, type)), log => callable
+    // trackerProxy => array(tracker => array(use, address, type)), log => callable
     public function __construct(array $options = array(), ?ClearanceStore $clearance = NULL)
     {
         $this->userAgent = ! empty($options['userAgent']) ? (string)$options['userAgent'] : 'Mozilla/5.0 (X11; Linux x86_64; rv:133.0) Gecko/20100101 Firefox/133.0';
@@ -55,14 +55,14 @@ final class Client
         return $responses[0];
     }
 
-    //Выполняет запросы параллельно. Ключи результата совпадают с ключами $requests.
+    // Performs requests in parallel. The result keys match the keys of $requests.
     /**
      * @param array<int|string,Request> $requests
      * @return array<int|string,Response>
      */
     public function sendAll(array $requests): array
     {
-        //одинаковые GET-запросы (одна RSS-лента для десяти сериалов) выполняются один раз
+        // Identical GET requests (one RSS feed for ten series) are performed once
         $unique = array();
         $aliases = array();
         foreach ($requests as $key => $request)
@@ -77,7 +77,7 @@ final class Client
 
         $raw = $this->transfer($unique);
 
-        //проверки Cloudflare обходим по очереди: первое решение даёт cookie остальным запросам к сайту
+        // Cloudflare challenges are bypassed one at a time: the first solution gives cookies to the other requests to the site
         foreach ($unique as $signature => $request)
             if ($this->isChallenge($raw[$signature]))
                 $raw[$signature] = $this->solve($request, $raw[$signature]);
@@ -101,7 +101,7 @@ final class Client
                 && (strpos($body, 'Checking your browser') !== FALSE || strpos($body, 'DDoS protection') !== FALSE));
     }
 
-    //адрес прокси для запроса в виде схема://хост:порт или NULL
+    // Proxy address for the request as scheme://host:port, or NULL
     public function proxyFor(Request $request): ?string
     {
         if ($request->plain)
@@ -153,7 +153,7 @@ final class Client
         $solverProxy = $proxy === NULL ? NULL : str_replace('socks5h://', 'socks5://', $proxy);
         $ownCookie = $this->withoutCloudflare($request->cookie);
 
-        //другой запрос этого же пакета мог уже получить свежие cookie: пробуем с ними
+        // Another request of the same batch may have already obtained fresh cookies: try with them
         $known = $this->clearance !== NULL ? $this->clearance->get($host) : NULL;
         if ($known !== NULL && $blocked->sentClearance !== $known['cookie'])
         {
@@ -162,9 +162,9 @@ final class Client
                 return $retry;
         }
 
-        //Браузер решателя открывает адрес, закрытый проверкой: сам адрес запроса (и для POST тоже -
-        //сайты часто закрывают не все страницы, и на открытой странице cookie не выдаётся).
-        //Файл в браузере открыть нельзя: для него берётся страница, с которой он скачивается.
+        // The solver's browser opens the address closed by the challenge: the request address itself (for POST too -
+        // sites often protect only some pages, and an unprotected page does not issue the cookie).
+        // A file cannot be opened in the browser: the page it is downloaded from is used instead.
         $page = ($request->method == 'GET' && ! $request->binary);
         $targets = $request->binary ? array_filter(array($request->referer, $request->origin().'/')) : array($request->url);
         $solution = NULL;
@@ -196,7 +196,7 @@ final class Client
             return $blocked;
         }
 
-        //прямой запрос не проходит: берём то, что увидел браузер решателя
+        // The direct request does not get through: take what the solver's browser saw
         if ( ! $page)
         {
             if ($request->binary)
@@ -308,7 +308,7 @@ final class Client
             $known = $this->clearance->get($request->host());
             if ($known !== NULL)
             {
-                //cookie Cloudflare действуют только вместе с User-Agent браузера, который прошёл проверку
+                // Cloudflare cookies are valid only together with the User-Agent of the browser that passed the challenge
                 $userAgent = $known['userAgent'];
                 $cookie = Cookies::merge($cookie, $known['cookie']);
                 $sentClearance = $known['cookie'];

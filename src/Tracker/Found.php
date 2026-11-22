@@ -1,22 +1,22 @@
 <?php
 namespace TorrentMonitor\Tracker;
 
-//Новая раздача, найденная трекером для темы.
+// A new release found by the tracker for a topic.
 final class Found
 {
-    //содержимое torrent-файла
+    // torrent file contents
     public string $torrent;
-    //дата раздачи на трекере (Y-m-d H:i:s): запоминается в теме
+    // release date on the tracker (Y-m-d H:i:s): stored in the topic
     public string $date;
-    //та же дата в виде, принятом на трекере: для уведомления
+    // the same date in the tracker's own format: for the notification
     public string $dateText;
-    //часть имени сохраняемого файла: [трекер]_<fileId>.torrent
+    // part of the saved file name: [tracker]_<fileId>.torrent
     public string $fileId;
-    //сообщение об обновлении
+    // update message
     public string $message;
-    //новое название темы (NULL - не менять)
+    // new topic title (NULL - leave unchanged)
     public ?string $name = NULL;
-    //серия вида S01E02 (для сериалов)
+    // episode in the S01E02 form (for series)
     public ?string $episode = NULL;
 
     public function __construct(string $torrent, string $date, string $dateText, string $fileId, string $message)

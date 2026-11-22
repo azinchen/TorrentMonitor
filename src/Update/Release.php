@@ -5,38 +5,38 @@ use TorrentMonitor\App;
 use TorrentMonitor\Http\Request;
 use TorrentMonitor\Storage\Files;
 
-//Сведения о последнем выпуске TorrentMonitor из GitHub Releases.
-//Ответ кешируется в файле release.cache.json, чтобы не обращаться к GitHub
-//при каждом открытии страницы.
+// Information about the latest TorrentMonitor release from GitHub Releases.
+// The response is cached in the release.cache.json file to avoid contacting GitHub
+// every time a page is opened.
 class Release
 {
-    //репозиторий, в котором публикуются выпуски
+    // Repository where the releases are published
     const REPO = 'azinchen/TorrentMonitor';
-    //время жизни кеша удачного ответа, сек.
+    // Cache lifetime of a successful response, sec.
     const CACHE_TTL = 21600;
-    //время жизни кеша неудачного ответа, сек.
+    // Cache lifetime of a failed response, sec.
     const CACHE_TTL_FAIL = 1800;
 
-    //адрес страницы выпусков
+    // Address of the releases page
     public static function pageUrl()
     {
         return 'https://github.com/'.self::repo().'/releases';
     }
 
-    //адрес вики
+    // Wiki address
     public static function wikiUrl()
     {
         return 'https://github.com/'.self::repo().'/wiki';
     }
 
-    //репозиторий можно переопределить в config.php: Config::write('update.repo', 'user/repo');
+    // The repository can be overridden in config.php: Config::write('update.repo', 'user/repo');
     public static function repo()
     {
         $repo = \Config::read('update.repo');
         return ! empty($repo) ? $repo : self::REPO;
     }
 
-    //адрес API можно переопределить в config.php (нужно для тестового стенда):
+    // The API address can be overridden in config.php (needed for the test bench):
     //Config::write('update.api', 'http://localhost:8080');
     private static function apiUrl()
     {
@@ -44,21 +44,21 @@ class Release
         return rtrim( ! empty($api) ? $api : 'https://api.github.com', '/');
     }
 
-    //установленная версия
+    // Installed version
     public static function currentVersion()
     {
         return App::version();
     }
 
-    //приводим тег выпуска (v3.4.0) к номеру версии (3.4.0)
+    // Convert the release tag (v3.4.0) to a version number (3.4.0)
     public static function normalizeVersion($tag)
     {
         return ltrim(trim(strval($tag)), 'vV');
     }
 
-    //последний выпуск: array('version', 'notes', 'zip', 'url') или NULL, если выпусков нет
-    //или GitHub недоступен. $force = TRUE - не использовать кеш: вернуть только то,
-    //что GitHub ответил сейчас.
+    // Latest release: array('version', 'notes', 'zip', 'url') or NULL if there are no releases
+    // or GitHub is unavailable. $force = TRUE - do not use the cache: return only what
+    // GitHub answered just now.
     public static function latest($force = FALSE)
     {
         $cache = json_decode(strval(@file_get_contents(self::cacheFile())), TRUE);
@@ -71,7 +71,7 @@ class Release
 
         $response = self::request(self::apiUrl().'/repos/'.self::repo().'/releases/latest');
 
-        //404 - в репозитории ещё нет ни одного выпуска
+        // 404 - the repository has no releases yet
         if ($response['code'] == 404)
         {
             self::saveCache(NULL, self::CACHE_TTL);
@@ -81,14 +81,14 @@ class Release
         $data = $response['code'] == 200 ? json_decode($response['body'], TRUE) : NULL;
         if ( ! is_array($data) || empty($data['tag_name']))
         {
-            //GitHub недоступен: оставляем прежние сведения и повторяем попытку позже
+            // GitHub is unavailable: keep the previous information and retry later
             $release = is_array($cache) && isset($cache['release']) && is_array($cache['release']) ? $cache['release'] : NULL;
             self::saveCache($release, self::CACHE_TTL_FAIL);
-            //при принудительной проверке (установка обновления) кешу не доверяем
+            // On a forced check (installing an update) the cache is not trusted
             return $force ? NULL : $release;
         }
 
-        //архив, собранный tools/release.sh; если его нет - архив исходного кода с GitHub
+        // The archive built by tools/release.sh; if it is missing - the source code archive from GitHub
         $zip = isset($data['zipball_url']) ? $data['zipball_url'] : '';
         if ( ! empty($data['assets']) && is_array($data['assets']))
         {
@@ -112,14 +112,14 @@ class Release
         return $release;
     }
 
-    //есть ли выпуск новее установленной версии
+    // Whether there is a release newer than the installed version
     public static function isNewer($release)
     {
         return is_array($release) && ! empty($release['version'])
             && version_compare($release['version'], self::currentVersion(), '>');
     }
 
-    //скачиваем файл выпуска, возвращаем TRUE при успехе
+    // Download the release file, return TRUE on success
     public static function download($url, $target)
     {
         $response = self::request($url, 300);
@@ -128,7 +128,7 @@ class Release
         return file_put_contents($target, $response['body']) !== FALSE;
     }
 
-    //кеш лежит в каталоге данных
+    // The cache lives in the data directory
     private static function cacheFile()
     {
         Files::prepare();
@@ -143,14 +143,14 @@ class Release
             'ttl'     => $ttl,
             'release' => $release,
         ));
-        //веб-сервер и cron могут работать от разных пользователей
+        // The web server and cron may run as different users
         if (@file_put_contents($file, $data, LOCK_EX) !== FALSE)
             @chmod($file, 0666);
     }
 
     private static function request($url, $timeout = 15)
     {
-        //GitHub API отклоняет запросы без User-Agent: клиент всегда отправляет его
+        // The GitHub API rejects requests without a User-Agent: the client always sends one
         $response = App::http()->send(Request::get($url)->follow()->timeout($timeout)->binary()
             ->header('Accept: application/vnd.github+json'));
         return array('code' => $response->status, 'body' => $response->body);

@@ -4,7 +4,7 @@ namespace TorrentMonitor\Notify;
 use TorrentMonitor\App;
 use TorrentMonitor\Http\Request;
 
-//Реализации сервисов уведомлений.
+// Implementations of the notification services.
 final class Services
 {
     public static function get(string $service): ?Notifier
@@ -22,7 +22,7 @@ final class Services
         return NULL;
     }
 
-    //удалась ли последняя отправка (для проверки настроек из интерфейса)
+    // Whether the last send succeeded (for checking the settings from the interface)
     public static bool $delivered = FALSE;
 
     public static function post(Request $request): void
@@ -65,7 +65,7 @@ final class Pushbullet implements Notifier
     }
 }
 
-//адрес: "ключ пользователя;токен приложения"
+// Address: "user key;application token"
 final class Pushover implements Notifier
 {
     public function send(string $address, string $title, string $html): void
@@ -79,7 +79,7 @@ final class Pushover implements Notifier
     }
 }
 
-//адрес: "id;ключ"
+// Address: "id;key"
 final class Pushall implements Notifier
 {
     public function send(string $address, string $title, string $html): void
@@ -93,7 +93,7 @@ final class Pushall implements Notifier
     }
 }
 
-//адрес: "токен бота;чат[:тема];чат[:тема]..."
+// Address: "bot token;chat[:topic];chat[:topic]..."
 final class Telegram implements Notifier
 {
     public function send(string $address, string $title, string $html): void
@@ -113,7 +113,7 @@ final class Telegram implements Notifier
     }
 }
 
-//адрес: "адрес сервера;токен приложения"
+// Address: "server address;application token"
 final class Gotify implements Notifier
 {
     public function send(string $address, string $title, string $html): void

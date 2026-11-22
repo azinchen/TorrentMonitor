@@ -1,7 +1,7 @@
 <?php
 namespace TorrentMonitor\Http;
 
-//Хранилище результатов прохождения проверки Cloudflare: cookie и User-Agent браузера по хостам.
+// Storage for the results of passed Cloudflare challenges: cookies and the browser User-Agent per host.
 interface ClearanceStore
 {
     /** @return array{cookie:string,userAgent:string}|null */

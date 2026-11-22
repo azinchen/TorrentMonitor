@@ -6,10 +6,10 @@ use TorrentMonitor\Data\Warnings;
 use TorrentMonitor\Notify\Notifications;
 use TorrentMonitor\Tracker\Registry;
 
-//Запись ошибок работы: в список ошибок, в тему и (первая ошибка источника) в уведомление.
+// Recording runtime errors: to the error list, to the topic and (first error of a source) to a notification.
 final class Problems
 {
-    //$source - трекер, torrent-клиент, api или system; $topic - тема, к которой относится ошибка
+    // $source - tracker, torrent client, api or system; $topic - the topic the error relates to
     public static function report(string $source, string $code, ?array $topic = NULL): void
     {
         $first = Warnings::add($source, $code, $topic === NULL ? NULL : $topic['id']);

@@ -1,7 +1,7 @@
 <?php
 namespace TorrentMonitor;
 
-//Тексты ошибок по их кодам.
+// Error texts by their codes.
 final class Messages
 {
     const TEXT = array(

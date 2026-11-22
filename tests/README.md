@@ -48,6 +48,17 @@ Tests change the behaviour of the fake through `Env::fake()` and read the state 
 the application through `AppState`. `AppState` is the only class that knows how
 the application stores data, so the tests survive a storage change.
 
+The web interface is one page that talks to the server through `POST /ui/<action>`
+with a JSON body. Tests send the same requests through three helpers:
+
+- `Env::uiOpen()` – opens a new browser session (cookie jar + CSRF token) and
+  returns the answer to the page's first request, `boot`;
+- `Env::ui($action, $body)` – one action, e.g. `Env::ui('topic.add', array(...))`;
+  opens a session first if there is none;
+- `Env::uiClose()` – forgets the session.
+
+The integration suite has 93 tests.
+
 What the suites cover on top of the older tests:
 
 - **unit** – `Unit/CoreTest.php`: the HTTP client (Cloudflare challenge detection,
@@ -56,13 +67,29 @@ What the suites cover on top of the older tests:
 - **integration** – `Integration/CoreTest.php`: the run lock (a second run is
   skipped), `--dry-run`, `--topic` / `--tracker`, stop-after-days, no internet,
   the closed web root (only `public/` is served), `/torrents/<file>.torrent` and
-  `/rss`, adding and editing a topic through the web UI, a solver whose cookies do
-  not work directly. `Integration/SonarrWebhookTest.php`: Grab, folder and category
+  `/rss`, a solver whose cookies do not work directly. `Integration/SonarrWebhookTest.php`: Grab, folder and category
   of the torrent kept in the topic, other events accepted and ignored, SeriesDelete,
   Grab of an already tracked topic, Grab of an unknown torrent, Grab without a hash.
+  `Integration/WebInterfaceTest.php`: the page and its files (nothing is loaded
+  from other sites), setup of a new installation with and without a password,
+  login, logout and "remember me", adding, editing and deleting a topic, adding a
+  series, saving a tracker account and checking the login, starting a check and
+  reading its log, errors shown with their topic and cleared, watched users
+  (track, download once, hide), unknown actions refused.
+  `Integration/SettingsTest.php` (rewritten for the new interface): the CSRF
+  token, torrent client settings, only known settings accepted, notification
+  service and address, the client connection check, the API key shown on request
+  and replaced.
 
 Not covered yet: Deluge, SynologyDS, TorrServer, notifications, every tracker
 except rutracker.org (offline) and kinozal (live only).
+
+## Screenshots of the interface
+
+Not part of the suite; a manual step for visual checks. Start the stack with
+`tests/run.sh up` (http://127.0.0.1:8088) and take screenshots with headless
+Chrome from the `zenika/alpine-chrome` image pointed at that address.
+`tests/run.sh down` removes the stack.
 
 ## Secrets
 
@@ -92,7 +119,7 @@ is skipped.
 | FlareSolverr | `http://flaresolverr:8192` | `http://127.0.0.1:8192` |
 
 FlareSolverr listens on port 8192 in the live stack, not on its usual 8191:
-`TM_SOLVER=http://flaresolverr:8192 tests/run.sh live`.
+`TM_SOLVER=http://flaresolverr:8193 tests/run.sh live`.
 
 `TM_KEEP=1 tests/run.sh live` leaves the live stack running afterwards
 (needed for `record`); `tests/run.sh down` removes it.

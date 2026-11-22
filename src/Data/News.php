@@ -3,10 +3,10 @@ namespace TorrentMonitor\Data;
 
 use TorrentMonitor\Storage\Files;
 
-//Новости для пользователя (state.json): сообщения о новых версиях. Поля: id, text, unread.
+// News for the user (state.json): messages about new versions. Fields: id, text, unread.
 final class News
 {
-    /** @return array[] от новых к старым */
+    /** @return array[] newest first */
     public static function all(): array
     {
         $news = Files::state()->read()['news'];
@@ -27,7 +27,7 @@ final class News
         return FALSE;
     }
 
-    //добавляет новость или заменяет текст существующей
+    // Adds a news item or replaces the text of an existing one
     public static function put(string $id, string $text): void
     {
         Files::state()->update(function (&$data) use ($id, $text) {

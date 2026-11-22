@@ -19,9 +19,9 @@ final class Nnmclub extends ForumTracker
         $body = 'username='.$this->encodedLogin().'&password='.rawurlencode($this->account['password']).'&login=%C2%F5%EE%E4';
         $response = $this->send($this->post('/forum/login.php', $body, ''));
 
-        //при неверном пароле сайт тоже ставит cookie (гостевую сессию), поэтому сначала текст ошибки
+        // with a wrong password the site sets a cookie too (a guest session), so check the error text first
         $wrong = (bool)preg_match('/login\.php\?redirect=/', $response->headers.$response->body);
-        //сессия - все cookie форума (имена зависят от настроек сайта), кроме служебных Cloudflare
+        // the session is all forum cookies (their names depend on the site settings) except Cloudflare's own
         $pairs = array();
         foreach ($response->cookies as $name => $value)
             if ($value !== '' && $value != 'deleted' && ! preg_match('/^(cf_|__cf)/', $name))
@@ -42,7 +42,7 @@ final class Nnmclub extends ForumTracker
 
     protected function parseDate(string $page): ?array
     {
-        //21 Ноя 2026 10:00:05 (\D{6} - три русские буквы в UTF-8)
+        // 21 Ноя 2026 10:00:05 (\D{6} - three Russian letters in UTF-8)
         if ( ! preg_match('/<td class=\"genmed\">&nbsp;(\d{2}\s\D{6}\s\d{4}\s\d{2}:\d{2}:\d{2})<\/td>/', $page, $m))
             return NULL;
         if ( ! preg_match('/^(\d{2})\s(\S+)\s(\d{4})\s(\d{2}:\d{2}:\d{2})$/u', $m[1], $d) || self::monthNumber($d[2]) === NULL)
@@ -69,7 +69,7 @@ final class Nnmclub extends ForumTracker
             ->referer($this->url('/forum/viewtopic.php?t='.rawurlencode($topicId)));
     }
 
-    //ссылка на torrent-файл есть только на странице темы
+    // the link to the torrent file is only on the topic page
     public function download(string $topicId): string
     {
         $response = $this->send($this->topicRequest($topicId));

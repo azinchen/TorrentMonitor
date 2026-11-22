@@ -4,23 +4,23 @@ namespace TorrentMonitor\Tracker;
 use TorrentMonitor\Http\Request;
 use TorrentMonitor\Http\Response;
 
-//Трекер, где отслеживается тема: на её странице есть дата раздачи; когда дата меняется,
-//torrent-файл скачивается заново.
+// A tracker where a topic is watched: its page shows the release date; when the date changes,
+// the torrent file is downloaded again.
 abstract class ForumTracker extends Tracker
 {
-    //TRUE - скачивать, только если дата на трекере новее сохранённой; FALSE - при любом отличии
+    // TRUE - download only if the date on the tracker is newer than the saved one; FALSE - on any difference
     const NEWER_ONLY = FALSE;
 
-    //запрос страницы темы
+    // request for the topic page
     abstract protected function topicRequest(string $topicId): Request;
 
-    //Дата раздачи со страницы темы: array('Y-m-d H:i:s', 'дата как на трекере') или NULL.
+    // Release date from the topic page: array('Y-m-d H:i:s', 'date as shown on the tracker') or NULL.
     abstract protected function parseDate(string $page): ?array;
 
-    //запрос torrent-файла (по странице темы, если ссылка берётся с неё); NULL - ссылка не найдена
+    // request for the torrent file (built from the topic page if the link is taken from it); NULL - link not found
     abstract protected function downloadRequest(string $topicId, string $page): ?Request;
 
-    //название темы со страницы темы
+    // topic title from the topic page
     protected function parseTitle(string $page): ?string
     {
         return self::pageTitle($page);
@@ -70,7 +70,7 @@ abstract class ForumTracker extends Tracker
         return $this->torrent($request);
     }
 
-    //часть имени torrent-файла
+    // part of the torrent file name
     protected function fileId(string $topicId): string
     {
         return $topicId;

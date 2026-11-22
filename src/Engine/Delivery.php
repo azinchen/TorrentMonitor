@@ -13,17 +13,17 @@ use TorrentMonitor\Notify\Notifications;
 use TorrentMonitor\Tracker\Found;
 use TorrentMonitor\Tracker\Registry;
 
-//Что происходит с найденной раздачей: torrent-файл сохраняется, передаётся в torrent-клиент,
-//запускается пользовательский скрипт, отправляется уведомление.
+// What happens to a found torrent: the torrent file is saved, handed to the torrent client,
+// the user script is run, a notification is sent.
 final class Delivery
 {
-    //имя сохраняемого torrent-файла
+    // Name of the torrent file being saved
     public static function fileName(string $tracker, string $fileId): string
     {
         return '['.$tracker.']_'.str_replace(array("'", ':', '/', '\\', "\0"), '', $fileId).'.torrent';
     }
 
-    //сохраняет torrent-файл; имя файла или NULL при неудаче
+    // Saves the torrent file; the file name or NULL on failure
     public static function save(string $tracker, string $fileId, string $torrent): ?string
     {
         $name = self::fileName($tracker, $fileId);
@@ -33,14 +33,14 @@ final class Delivery
         return @file_put_contents($path, $torrent) ? $name : NULL;
     }
 
-    //адрес сохранённого torrent-файла на сервере TorrentMonitor
+    // Address of the saved torrent file on the TorrentMonitor server
     public static function fileUrl(string $file): string
     {
         return rtrim((string)Settings::get('serverAddress'), '/').'/torrents/'.rawurlencode($file);
     }
 
-    //Обрабатывает новую раздачу темы. Возвращает поля темы, которые нужно изменить,
-    //или NULL, если torrent-файл не удалось сохранить.
+    // Processes a new torrent of a topic. Returns the topic fields that need to be changed,
+    // or NULL if the torrent file could not be saved.
     public static function deliver(array $topic, Found $found, callable $out): ?array
     {
         $tracker = $topic['tracker'];
@@ -77,12 +77,12 @@ final class Delivery
         return $fields;
     }
 
-    //Передаёт сохранённый файл в torrent-клиент; прежняя раздача темы при этом удаляется.
-    //Возвращает идентификатор раздачи в клиенте или NULL (тогда файл ставится в очередь повтора).
+    // Hands the saved file to the torrent client; the topic's previous torrent is removed in the process.
+    // Returns the torrent's identifier in the client or NULL (then the file is put in the retry queue).
     public static function toClient(array $topic, string $name, string $file, string $dateText): ?string
     {
         $clientName = Clients::currentName();
-        //эта же раздача уже есть в клиенте (например, её добавил Sonarr): трогать её незачем
+        // The same torrent is already in the client (for example, added by Sonarr): no need to touch it
         $known = Bencode::infoHash((string)@file_get_contents(App::torrentsDir().'/'.$file));
         if ($known !== NULL && $topic['hash'] !== '' && strcasecmp($known, $topic['hash']) == 0)
             return $topic['hash'];
@@ -91,7 +91,7 @@ final class Delivery
             $client = Clients::current();
             if ($topic['hash'] !== '')
             {
-                //у сериалов каждая серия - отдельная раздача: прежнюю удаляем, только если так настроено
+                // For series every episode is a separate torrent: the previous one is removed only if configured so
                 $series = Registry::kind($topic['tracker']) == 'series';
                 if ( ! $series)
                     $client->remove($topic['hash'], FALSE);
@@ -117,8 +117,8 @@ final class Delivery
         }
     }
 
-    //удаляет раздачу темы из torrent-клиента (при удалении темы).
-    //$deleteData: TRUE/FALSE - удалять ли скачанные файлы, NULL - как задано в настройке deleteFilesOnRemove.
+    // Removes the topic's torrent from the torrent client (when the topic is deleted).
+    // $deleteData: TRUE/FALSE - whether to delete the downloaded files, NULL - as set in the deleteFilesOnRemove setting.
     public static function removeFromClient(string $hash, ?bool $deleteData = NULL): bool
     {
         $clientName = Clients::currentName();
@@ -137,7 +137,7 @@ final class Delivery
         }
     }
 
-    //пользовательский скрипт темы
+    // The topic's user script
     public static function script(array $topic, string $name, string $hash, string $message, string $dateText, callable $out): void
     {
         if (empty($topic['script']) || ! function_exists('shell_exec'))
@@ -148,7 +148,7 @@ final class Delivery
             $out(trim($result));
     }
 
-    //повторяет передачу в torrent-клиент файлов, которые не удалось передать раньше
+    // Retries handing to the torrent client the files that could not be handed over earlier
     public static function retryPending(callable $out): void
     {
         if (Clients::currentName() === NULL)
@@ -172,7 +172,7 @@ final class Delivery
         }
     }
 
-    //удаляет старые torrent-файлы: остаются 20 последних и те, что ждут передачи в клиент
+    // Removes old torrent files: the last 20 and those waiting to be handed to the client are kept
     public static function cleanFiles(int $keep = 20): void
     {
         $waiting = array_column(Pending::all(), 'file');

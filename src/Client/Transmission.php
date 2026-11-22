@@ -3,7 +3,7 @@ namespace TorrentMonitor\Client;
 
 use TorrentMonitor\Http\Request;
 
-//Transmission: протокол RPC (https://github.com/transmission/transmission/blob/main/docs/rpc-spec.md).
+// Transmission: RPC protocol (https://github.com/transmission/transmission/blob/main/docs/rpc-spec.md).
 final class Transmission extends HttpClientBase
 {
     private string $sessionId = '';
@@ -19,7 +19,7 @@ final class Transmission extends HttpClientBase
                 $request->auth($this->login, $this->password);
             $response = $this->send($request);
 
-            //первый ответ 409 сообщает идентификатор сессии, с которым запрос надо повторить
+            // the first 409 response gives the session id the request must be repeated with
             if ($response->status == 409 && $response->header('X-Transmission-Session-Id') !== NULL)
             {
                 $this->sessionId = $response->header('X-Transmission-Session-Id');

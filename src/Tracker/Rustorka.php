@@ -39,7 +39,7 @@ final class Rustorka extends ForumTracker
     {
         if ( ! preg_match('/<td>Зарегистрирован:<\/td>\r\n{1,2}\s{4}<td>(.*)<\/td>/', $page, $m))
             return NULL;
-        //21-Ноя-26 10:00 или 21-Ноя-26 10:00:05
+        // 21-Ноя-26 10:00 or 21-Ноя-26 10:00:05
         if ( ! preg_match('/^(\d{1,2})-([^-\s]+)-(\d{2})\s+((\d{1,2}):(\d{2})(?::(\d{2}))?)/u', trim($m[1]), $d) || self::monthNumber($d[2]) === NULL)
             return NULL;
         return array(

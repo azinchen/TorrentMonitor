@@ -3,7 +3,7 @@ namespace TorrentMonitor\Tracker;
 
 use TorrentMonitor\Http\Request;
 
-//Раздачи baibako.tv, отслеживаемые как темы (сериалы из RSS - класс Baibako).
+// baibako.tv releases watched as topics (series from RSS - the Baibako class).
 final class BaibakoForum extends ForumTracker
 {
     const ADDRESSES = array('http://baibako.tv');
@@ -43,7 +43,7 @@ final class BaibakoForum extends ForumTracker
         if (count($parts) < 5 || self::monthNumber($parts[1]) === NULL)
             return NULL;
         $day = strlen($parts[0]) == 1 ? '0'.$parts[0] : $parts[0];
-        //в тексте для уведомления время без секунд
+        // the notification text has the time without seconds
         $text = preg_split('/\s/', substr($m[1], 0, -3));
         return array(
             $parts[2].'-'.self::monthNumber($parts[1]).'-'.$day.' '.$parts[4],

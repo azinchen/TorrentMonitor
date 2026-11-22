@@ -1,5 +1,5 @@
-# Корень сайта должен указывать на каталог public. Если веб-сервер (Apache) настроен
-# на этот каталог, запросы передаются в public, а остальные файлы остаются закрытыми.
+# The site root must point to the public directory. If the web server (Apache) is configured
+# for this directory, requests are passed on to public and the other files stay closed.
 <IfModule mod_rewrite.c>
     RewriteEngine On
     RewriteCond %{REQUEST_URI} !/public/

@@ -24,14 +24,14 @@ use TorrentMonitor\Tracker\TrackerException;
 use TorrentMonitor\Update\Release;
 use TorrentMonitor\Update\Updater;
 
-//Запросы веб-интерфейса: POST /ui/<действие> с телом JSON, ответ JSON.
-//Ответ: {ok: true, ...данные} или {ok: false, message: "..."}.
+//Web interface requests: POST /ui/<action> with a JSON body, JSON response.
+//Response: {ok: true, ...data} or {ok: false, message: "..."}.
 final class Ui
 {
-    //действия, доступные без входа
+    //actions available without logging in
     const OPEN = array('boot', 'login', 'setup');
 
-    //настройки, которые меняются на странице «Настройки» (пароли и ключ API - отдельными действиями)
+    //settings changed on the «Настройки» (Settings) page (passwords and the API key have separate actions)
     const SETTINGS = array('serverAddress', 'auth', 'rss', 'debug', 'autoUpdate', 'userAgent', 'httpTimeout', 'flaresolverrUrl',
         'proxy', 'proxyAddress', 'proxyType', 'useTorrent', 'torrentClient', 'torrentAddress', 'torrentLogin', 'pathToDownload',
         'qbitCategory', 'deleteDistribution', 'deleteOldFiles', 'deleteFilesOnRemove', 'stopAfterDays', 'removeOnSeriesDelete',
@@ -89,13 +89,13 @@ final class Ui
         return ! empty($this->in[$key]) && $this->in[$key] !== 'false' && $this->in[$key] !== '0';
     }
 
-    //нужна ли первоначальная настройка: данных ещё нет
+    //whether initial setup is needed: there is no data yet
     private static function fresh(): bool
     {
-        return ! Files::initialized();
+        return ! is_file(Files::dir().'/config.json');
     }
 
-    // -------------------------------------------------------------- вход, старт
+    // ----------------------------------------------------------- login, startup
 
     private function doBoot(): array
     {
@@ -115,7 +115,7 @@ final class Ui
 
     private function doLogin(): array
     {
-        usleep(300000); //замедляет подбор пароля
+        usleep(300000); //slows down password guessing
         if (self::fresh())
             $this->fail('Сначала выполните первоначальную настройку.');
         if ( ! Auth::login((string)(isset($this->in['password']) ? $this->in['password'] : ''), $this->flag('remember')))
@@ -129,7 +129,7 @@ final class Ui
         return array();
     }
 
-    //Первоначальная настройка: пароль, адрес, torrent-клиент.
+    //Initial setup: password, address, torrent client.
     private function doSetup(): array
     {
         if ( ! self::fresh())
@@ -154,9 +154,9 @@ final class Ui
         return array('in' => TRUE) + $this->doOverview();
     }
 
-    // ----------------------------------------------------------------- данные
+    // ------------------------------------------------------------------- data
 
-    //Всё, что показывает интерфейс. Запрашивается после входа и после каждого изменения.
+    //Everything the interface shows. Requested after login and after every change.
     private function doOverview(): array
     {
         $settings = Settings::all();
@@ -239,9 +239,9 @@ final class Ui
         );
     }
 
-    // -------------------------------------------------------------------- темы
+    // ------------------------------------------------------------------ topics
 
-    //поля темы, общие для добавления и изменения
+    //topic fields shared by adding and editing
     private function topicFields(): array
     {
         $fields = array('path' => $this->str('path'), 'category' => $this->str('category'), 'script' => $this->str('script'));
@@ -289,7 +289,7 @@ final class Ui
         return array('message' => 'Тема добавлена.') + $this->doOverview();
     }
 
-    //название темы с трекера; при неудаче - ссылка (название подставится при первой проверке)
+    //topic title from the tracker; on failure - the link (the title will be filled in on the first check)
     private static function title(array $parsed): string
     {
         try
@@ -332,7 +332,7 @@ final class Ui
                 $fields += $parsed;
             }
         }
-        //«скачать заново»: при следующей проверке раздача будет считаться новой
+        //"download again": on the next check the torrent will be treated as new
         if ($this->flag('reset'))
             $fields = array('updatedAt' => '', 'episode' => '', 'error' => FALSE) + $fields;
         Topics::update($topic['id'], $fields);
@@ -357,13 +357,13 @@ final class Ui
         return array('message' => $removed ? 'Тема удалена, раздача удалена из torrent-клиента.' : 'Тема удалена.') + $this->doOverview();
     }
 
-    //проверить одну тему сейчас
+    //check one topic now
     private function doTopicCheck(): array
     {
         return $this->startRun(array('topic' => isset($this->in['id']) ? (int)$this->in['id'] : 0));
     }
 
-    // ------------------------------------------------------------ пользователи
+    // ------------------------------------------------------------------- users
 
     private function doUserAdd(): array
     {
@@ -393,14 +393,14 @@ final class Ui
         return function ($f) use ($id) { return $f['id'] == $id; };
     }
 
-    //скачать раздачу один раз (при следующей проверке)
+    //download the torrent once (on the next check)
     private function doFoundDownload(): array
     {
         Users::changeFound($this->foundFilter(), array('accepted' => TRUE, 'unread' => FALSE));
         return array('message' => 'Раздача будет скачана при следующей проверке.') + $this->doOverview();
     }
 
-    //отслеживать тему постоянно
+    //monitor the topic permanently
     private function doFoundTrack(): array
     {
         $items = Users::found($this->foundFilter());
@@ -425,7 +425,7 @@ final class Ui
         return $this->doOverview();
     }
 
-    // ----------------------------------------------------------------- трекеры
+    // ---------------------------------------------------------------- trackers
 
     private function doTrackerSave(): array
     {
@@ -434,7 +434,7 @@ final class Ui
             $this->fail('Неизвестный трекер.');
         $fields = array('login' => $this->str('login'), 'passkey' => $this->str('passkey'), 'address' => $this->str('address'));
         $password = isset($this->in['password']) ? (string)$this->in['password'] : '';
-        //сохранённый пароль в браузер не передаётся: пустое поле означает «не менять»
+        //the saved password is not sent to the browser: an empty field means "do not change"
         if ($password !== '')
             $fields['password'] = $password;
         elseif ($this->flag('clearPassword') || $fields['login'] === '')
@@ -444,7 +444,7 @@ final class Ui
                 $this->fail('Адрес трекера указан неверно: '.trim($address));
         Accounts::set($name, $fields);
 
-        //cookie, вставленная вручную (вход с капчей); смена логина или пароля сбрасывает прежнюю сессию
+        //cookie pasted manually (login with a captcha); changing the login or password resets the previous session
         $cookie = isset($this->in['cookie']) ? trim((string)$this->in['cookie']) : '';
         if ($cookie !== '' || $password !== '' || $this->flag('clearCookie'))
             Accounts::setCookie($name, $cookie);
@@ -468,7 +468,7 @@ final class Ui
         return array('message' => 'Сохранено.') + $this->doOverview();
     }
 
-    //пробует войти на трекер с сохранёнными данными
+    //tries to log in to the tracker with the saved credentials
     private function doTrackerTest(): array
     {
         $name = $this->str('name');
@@ -490,7 +490,7 @@ final class Ui
         return array('message' => Registry::needsAccount($name) ? 'Вход на '.$name.' выполнен.' : $name.' не требует входа.') + $this->doOverview();
     }
 
-    // --------------------------------------------------------------- настройки
+    // ---------------------------------------------------------------- settings
 
     private function doSettingsSave(): array
     {
@@ -513,10 +513,10 @@ final class Ui
                 $values[$key] = (string)max($min, (int)$values[$key]);
         if (isset($values['torrentClient']) && $values['torrentClient'] !== '' && ! isset(Clients::CLASSES[$values['torrentClient']]))
             $this->fail('Неизвестный torrent-клиент.');
-        if (isset($values['auth']) && $values['auth'] == '1' && strlen((string)Settings::get('password')) == 32 && ! Auth::required())
+        if (isset($values['auth']) && $values['auth'] == '1' && (string)Settings::get('password') === '')
             $this->fail('Сначала задайте пароль.');
 
-        //сохранённый пароль клиента в браузер не передаётся: пустое поле означает «не менять»
+        //the client's saved password is not sent to the browser: an empty field means "do not change"
         $password = isset($this->in['torrentPassword']) ? (string)$this->in['torrentPassword'] : '';
         if ($password !== '')
             $values['torrentPassword'] = $password;
@@ -537,7 +537,7 @@ final class Ui
         return array('message' => 'Настройки сохранены.') + $this->doOverview();
     }
 
-    //номер сервиса уведомлений по названию и виду ('' - не выбран)
+    //notification service number by name and kind ('' - not selected)
     private static function serviceId(string $service, string $type)
     {
         foreach (Settings::notificationServices() as $id => $info)
@@ -559,7 +559,7 @@ final class Ui
         return array('message' => 'Пароль изменён.') + $this->doOverview();
     }
 
-    //новый ключ API показывается один раз
+    //a new API key is shown once
     private function doSettingsApikey(): array
     {
         $key = bin2hex(random_bytes(32));
@@ -579,7 +579,7 @@ final class Ui
         return array('message' => 'Пробное сообщение отправлено.');
     }
 
-    //проверяет подключение к torrent-клиенту с сохранёнными настройками
+    //checks the connection to the torrent client with the saved settings
     private function doClientTest(): array
     {
         if (Clients::currentName() === NULL)
@@ -590,7 +590,7 @@ final class Ui
         return array('message' => 'Подключение к '.Clients::currentName().' работает.');
     }
 
-    // --------------------------------------------------------------- состояние
+    // ------------------------------------------------------------------ status
 
     private function doWarningsClear(): array
     {
@@ -624,12 +624,12 @@ final class Ui
             return array('message' => 'Проверка уже выполняется.', 'running' => TRUE);
         if (Launcher::start($options) === NULL)
         {
-            //дожидаемся, пока запуск возьмёт блокировку, чтобы интерфейс сразу показал «выполняется»
+            //wait until the run takes the lock so that the interface shows "running" right away
             for ($i = 0; $i < 20 && ! Lock::busy(); $i++)
                 usleep(100000);
             return array('message' => 'Проверка запущена.', 'running' => TRUE);
         }
-        //фоновый запуск невозможен: выполняем проверку в этом запросе
+        //a background run is impossible: perform the check within this request
         @set_time_limit(0);
         ignore_user_abort(TRUE);
         if (session_status() === PHP_SESSION_ACTIVE)
@@ -638,7 +638,7 @@ final class Ui
         return array('message' => 'Проверка выполнена.', 'running' => FALSE) + $this->doOverview();
     }
 
-    //журнал последнего запуска
+    //log of the last run
     private function doRunLog(): array
     {
         $log = (string)@file_get_contents(Runner::logFile());

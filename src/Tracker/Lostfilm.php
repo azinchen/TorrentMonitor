@@ -8,7 +8,7 @@ final class Lostfilm extends SeriesTracker
 {
     const ADDRESSES = array('https://www.lostfilm.download', 'https://www.lostfilm.tv', 'https://www.lostfilmtv5.site');
 
-    //качество темы => array(метка на странице, шаблон названия раздачи, обозначение в имени файла)
+    // topic quality => array(label on the page, release title pattern, tag in the file name)
     const QUALITY = array(
         'sd'   => array('SD', '(WEBRip|WEB-DLRip|HDTVRip)', 'SD'),
         '1080' => array('1080', '1080p? (WEBRip|WEB-DLRip|HDTVRip)', 'HD'),
@@ -72,7 +72,7 @@ final class Lostfilm extends SeriesTracker
             }
             catch (TrackerException $e)
             {
-                //уже найденные серии не теряем: ошибка повторится при следующем запуске
+                // keep the episodes already found: the error will repeat on the next run
                 if (empty($found))
                     throw $e;
                 break;
@@ -85,7 +85,7 @@ final class Lostfilm extends SeriesTracker
 
     private function release(array $topic, \SimpleXMLElement $item, array $quality, string $showId, array $se): Found
     {
-        //страница переадресации на список раздач серии
+        // page that redirects to the list of the episode's releases
         $search = $this->send($this->get('/v_search.php?a='.$showId.sprintf('%03d%03d', (int)$se[1], (int)$se[2])));
         if ( ! preg_match('/a href=\"(.*)\"/U', $search->body, $link))
             throw new TrackerException('cant_find_dowload_link');

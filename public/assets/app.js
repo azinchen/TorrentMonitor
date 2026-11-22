@@ -1,5 +1,5 @@
-// Веб-интерфейс TorrentMonitor. Одна страница, данные приходят с сервера запросами POST /ui/<действие>.
-// Используется Alpine.js (assets/vendor/alpine.min.js); разметка - в src/Web/page.html.
+// TorrentMonitor web interface. A single page; data comes from the server via POST /ui/<action> requests.
+// Uses Alpine.js (assets/vendor/alpine.min.js); the markup is in src/Web/page.html.
 
 const QUALITY = { sd: 'SD', 720: '720p', 1080: '1080p' };
 const PAGES = [
@@ -12,10 +12,10 @@ const PAGES = [
 
 document.addEventListener('alpine:init', () => {
     Alpine.data('app', () => ({
-        // ---- состояние
-        loading: true,          // первая загрузка
-        busy: '',               // действие, которое сейчас выполняется (для блокировки кнопок)
-        fatal: '',              // сервер не может работать (данные повреждены и т. п.)
+        // ---- state
+        loading: true,          // first load
+        busy: '',               // the action currently running (to disable buttons)
+        fatal: '',              // the server cannot work (corrupted data, etc.)
         csrf: '',
         mode: 'app',            // setup | login | app
         page: 'topics',
@@ -23,18 +23,18 @@ document.addEventListener('alpine:init', () => {
         theme: localStorage.getItem('tm-theme') || 'auto',
         toasts: [],
 
-        // данные с сервера
+        // data from the server
         topics: [], users: [], trackers: [], settings: {}, warnings: [], news: [], categories: [], clients: [], services: [],
         status: { version: '', lastRun: '', running: false, client: null, update: null, authRequired: true, wiki: '' },
 
-        // формы
+        // forms
         login: { password: '', remember: true },
         setup: { password: '', password2: '', noPassword: false, serverAddress: '', torrentClient: '', torrentAddress: '', torrentLogin: '', torrentPassword: '', pathToDownload: '' },
         filter: { text: '', tracker: '', state: '' },
-        topicForm: null,        // добавляемая или изменяемая тема
-        deleteForm: null,       // подтверждение удаления темы
+        topicForm: null,        // topic being added or edited
+        deleteForm: null,       // topic deletion confirmation
         userForm: { tracker: '', name: '' },
-        openTracker: '',        // трекер, раскрытый для правки
+        openTracker: '',        // tracker expanded for editing
         trackerForm: {},
         settingsForm: {},
         passwordForm: { current: '', password: '', password2: '' },
@@ -43,7 +43,7 @@ document.addEventListener('alpine:init', () => {
         runLog: '',
         logTimer: null,
 
-        // ---- запуск
+        // ---- startup
         async init() {
             this.applyTheme();
             const fromHash = location.hash.slice(1);
@@ -73,7 +73,7 @@ document.addEventListener('alpine:init', () => {
             if (this.status.running) this.watchRun();
         },
 
-        // раскладывает ответ сервера по полям
+        // distributes the server response into fields
         apply(data) {
             for (const key of ['topics', 'users', 'trackers', 'warnings', 'news', 'categories', 'clients', 'services', 'status']) {
                 if (data[key] !== undefined) this[key] = data[key];
@@ -88,7 +88,7 @@ document.addEventListener('alpine:init', () => {
             }
         },
 
-        // ---- запросы к серверу
+        // ---- server requests
         async call(action, body = {}, options = {}) {
             if (!options.silent) this.busy = action;
             try {
@@ -99,7 +99,7 @@ document.addEventListener('alpine:init', () => {
                     credentials: 'same-origin',
                 });
                 let data = null;
-                try { data = await response.json(); } catch (e) { /* не JSON: ошибка сервера */ }
+                try { data = await response.json(); } catch (e) { /* not JSON: server error */ }
                 if (response.status === 401) { this.mode = 'login'; return null; }
                 if (response.status === 503 && data) { this.fatal = data.message; return null; }
                 if (!data) { this.toast('Сервер ответил ошибкой (' + response.status + ').', true); return null; }
@@ -114,7 +114,7 @@ document.addEventListener('alpine:init', () => {
             }
         },
 
-        // действие, после которого сервер возвращает свежие данные
+        // an action after which the server returns fresh data
         async act(action, body = {}, options = {}) {
             const data = await this.call(action, body, options);
             if (data) this.apply(data);
@@ -127,7 +127,7 @@ document.addEventListener('alpine:init', () => {
             setTimeout(() => { this.toasts = this.toasts.filter(t => t.id !== item.id); }, error ? 8000 : 4000);
         },
 
-        // ---- оформление и переходы
+        // ---- appearance and navigation
         applyTheme() {
             const dark = this.theme === 'dark' || (this.theme === 'auto' && matchMedia('(prefers-color-scheme: dark)').matches);
             document.documentElement.dataset.theme = dark ? 'dark' : 'light';
@@ -154,7 +154,7 @@ document.addEventListener('alpine:init', () => {
             return 0;
         },
 
-        // ---- вход и первоначальная настройка
+        // ---- login and initial setup
         async doLogin() {
             const data = await this.call('login', this.login);
             this.login.password = '';
@@ -177,7 +177,7 @@ document.addEventListener('alpine:init', () => {
             }
         },
 
-        // ---- темы
+        // ---- topics
         get shownTopics() {
             const text = this.filter.text.trim().toLowerCase();
             return this.topics
@@ -232,7 +232,7 @@ document.addEventListener('alpine:init', () => {
             if (data) this.deleteForm = null;
         },
 
-        // ---- пользователи
+        // ---- users
         async addUser() {
             if (!this.userForm.tracker && this.userTrackers.length) this.userForm.tracker = this.userTrackers[0].name;
             const data = await this.act('user.add', this.userForm);
@@ -242,7 +242,7 @@ document.addEventListener('alpine:init', () => {
             if (confirm('Перестать следить за пользователем ' + user.name + '?')) this.act('user.delete', { id: user.id });
         },
 
-        // ---- трекеры
+        // ---- trackers
         editableTracker(t) {
             return { name: t.name, login: t.login, password: '', passkey: t.passkey, address: t.address, cookie: '', clearCookie: false,
                 proxy: t.proxy, proxyAddress: t.proxyAddress, proxyType: t.proxyType || 'SOCKS5', showCookie: false };
@@ -263,7 +263,7 @@ document.addEventListener('alpine:init', () => {
             if (await this.saveTracker()) await this.act('tracker.test', { name: this.trackerForm.name });
         },
 
-        // ---- настройки
+        // ---- settings
         editableSettings(s) {
             const form = Object.assign({}, s, { torrentPassword: '', clearTorrentPassword: false });
             for (const key of ['auth', 'rss', 'debug', 'autoUpdate', 'proxy', 'useTorrent', 'deleteDistribution', 'deleteOldFiles',
@@ -314,7 +314,7 @@ document.addEventListener('alpine:init', () => {
             }[service] || '';
         },
 
-        // ---- состояние
+        // ---- status
         async run() {
             const data = await this.call('run');
             if (data) this.afterRunStarted(data);
@@ -328,7 +328,7 @@ document.addEventListener('alpine:init', () => {
                 this.loadLog();
             }
         },
-        // пока идёт проверка, обновляет журнал; по окончании перечитывает данные
+        // while a check is running, refreshes the log; when it finishes, reloads the data
         watchRun() {
             clearInterval(this.logTimer);
             this.logTimer = setInterval(async () => {
@@ -366,7 +366,7 @@ document.addEventListener('alpine:init', () => {
             if (data && data.reload) setTimeout(() => location.reload(), 1500);
         },
 
-        // ---- вспомогательное
+        // ---- helpers
         date(value) {
             if (!value) return '';
             const m = value.match(/^(\d{4})-(\d\d)-(\d\d)(?: (\d\d):(\d\d))?/);

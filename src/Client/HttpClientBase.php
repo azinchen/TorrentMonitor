@@ -5,7 +5,7 @@ use TorrentMonitor\Http\Client;
 use TorrentMonitor\Http\Request;
 use TorrentMonitor\Http\Response;
 
-//Общее для torrent-клиентов: адрес, логин, пароль, запросы.
+// Common to torrent clients: address, login, password, requests.
 abstract class HttpClientBase implements TorrentClient
 {
     protected Client $http;
@@ -24,7 +24,7 @@ abstract class HttpClientBase implements TorrentClient
         $this->password = $password;
     }
 
-    //запрос к клиенту: без прокси и обхода Cloudflare
+    // request to the client: no proxy and no Cloudflare bypass
     protected function send(Request $request): Response
     {
         $response = $this->http->send($request->plain()->timeout(30));

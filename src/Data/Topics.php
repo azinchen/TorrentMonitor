@@ -3,12 +3,12 @@ namespace TorrentMonitor\Data;
 
 use TorrentMonitor\Storage\Files;
 
-//Отслеживаемые темы и сериалы (torrents.json).
-//Поля темы: id, tracker, name, topicId (номер или путь темы на трекере; пусто у сериалов),
-//quality (sd|720|1080, у сериалов), episode (S01E02), updatedAt (дата раздачи на трекере),
-//autoRename (брать название с трекера), hash (раздача в torrent-клиенте), path, category, script,
-//paused, error, closed, stopAfterDays (NULL - как в настройках), sonarrSeries (номер сериала в Sonarr,
-//если тема добавлена им), addedAt, lastActivityAt.
+// Watched topics and series (torrents.json).
+// Topic fields: id, tracker, name, topicId (topic number or path on the tracker; empty for series),
+// quality (sd|720|1080, for series), episode (S01E02), updatedAt (torrent date on the tracker),
+// autoRename (take the name from the tracker), hash (the torrent in the torrent client), path, category, script,
+// paused, error, closed, stopAfterDays (NULL - as in the settings), sonarrSeries (series number in Sonarr,
+// if the topic was added by it), addedAt, lastActivityAt.
 final class Topics
 {
     public static function now(): string
@@ -37,7 +37,7 @@ final class Topics
         return $i === NULL ? NULL : $topics[$i];
     }
 
-    //тема форумного трекера по её номеру на трекере
+    // A forum tracker topic by its number on the tracker
     public static function find(string $tracker, string $topicId): ?array
     {
         foreach (self::all() as $topic)
@@ -64,7 +64,7 @@ final class Topics
         return NULL;
     }
 
-    //добавляет тему, возвращает её id
+    // Adds a topic, returns its id
     public static function add(array $fields): int
     {
         $id = 0;
@@ -84,13 +84,13 @@ final class Topics
         );
     }
 
-    //изменяет поля темы; FALSE, если темы нет
+    // Changes the topic's fields; FALSE if there is no such topic
     public static function update($id, array $fields): bool
     {
         return self::updateMany(array($id => $fields)) > 0;
     }
 
-    //изменяет несколько тем одной записью файла: id => поля. Возвращает число найденных тем.
+    // Changes several topics in a single file write: id => fields. Returns the number of topics found.
     public static function updateMany(array $updates): int
     {
         $found = 0;
@@ -107,7 +107,7 @@ final class Topics
                 $before = $data['topics'][$i];
                 $fields = array_intersect_key($fields, $before);
                 unset($fields['id']);
-                //смена даты раздачи считается обновлением темы
+                // A change of the torrent date counts as a topic update
                 if (isset($fields['updatedAt']) && $fields['updatedAt'] !== '' && $fields['updatedAt'] != $before['updatedAt'])
                     $fields['lastActivityAt'] = self::now();
                 $data['topics'][$i] = array_merge($before, $fields);
@@ -141,8 +141,8 @@ final class Topics
         return $categories;
     }
 
-    //Прекращена ли проверка темы: она давно не обновлялась.
-    //$globalDays - настройка stopAfterDays; у темы может быть своё значение (0 - проверять всегда).
+    // Whether checking of the topic has stopped: it has not been updated for a long time.
+    // $globalDays - the stopAfterDays setting; a topic may have its own value (0 - always check).
     public static function expired(array $topic, int $globalDays, ?int $now = NULL): bool
     {
         $days = $topic['stopAfterDays'] === NULL ? $globalDays : (int)$topic['stopAfterDays'];

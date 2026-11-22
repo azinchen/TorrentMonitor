@@ -55,6 +55,24 @@ final class WebInterfaceTest extends IntegrationTestCase
         $this->assertTrue(Env::ui('login', array('password' => 'My-Secret-1'))['json']['ok']);
     }
 
+    public function testLostSettingsFileDoesNotOpenTheInstallation()
+    {
+        // topics survived, config.json did not: nobody gets in with a built-in password
+        $this->loginToTracker();
+        $this->trackTopic(905);
+        unlink(getenv('TM_DATA_DIR').'/config.json');
+        @unlink(getenv('TM_DATA_DIR').'/config.json.bak');
+        Env::uiClose();
+
+        $boot = Env::uiOpen()['json'];
+        $this->assertTrue($boot['setup']);
+        $this->assertFalse(Env::ui('login', array('password' => 'torrentmonitor'))['json']['ok']);
+        $this->assertSame(401, Env::ui('overview')['status']);
+
+        $this->assertTrue(Env::ui('setup', array('password' => 'New-Secret'))['json']['ok']);
+        $this->assertCount(1, AppState::topics(), 'the topics are still there');
+    }
+
     public function testSetupWithoutPassword()
     {
         $this->fresh();

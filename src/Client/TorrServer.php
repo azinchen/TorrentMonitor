@@ -3,8 +3,8 @@ namespace TorrentMonitor\Client;
 
 use TorrentMonitor\Http\Request;
 
-//TorrServer. Принимает ссылку на torrent-файл на сервере TorrentMonitor.
-//Удаление скачанных файлов не поддерживается.
+// TorrServer. Takes a link to the torrent file on the TorrentMonitor server.
+// Deleting downloaded files is not supported.
 final class TorrServer extends HttpClientBase
 {
     private function authorized(Request $request): Request

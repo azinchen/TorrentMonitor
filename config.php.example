@@ -1,23 +1,22 @@
 <?php
-// Необязательный файл. TorrentMonitor работает и без него: все настройки, учётные
-// данные и темы хранятся в каталоге данных (по умолчанию data/ рядом с программой).
-// Скопируйте файл как config.php, только если нужна одна из настроек ниже.
+// Optional file. TorrentMonitor works without it: all settings, accounts and topics are kept
+// in the data directory (data/ next to the program by default).
+// Copy this file to config.php only if you need one of the settings below.
 
-# Каталог данных (настройки, пароли, темы). По умолчанию data/ рядом с программой.
-# То же самое можно задать переменной окружения TM_DATA_DIR.
-#Config::write('data.dir', '/var/lib/torrentmonitor');
+// Data directory (settings, passwords, topics). Default: data/ next to the program.
+// The TM_DATA_DIR environment variable does the same.
+//Config::write('data.dir', '/var/lib/torrentmonitor');
 
-# Путь к CLI-интерпретатору PHP для POST /api/run.
-# Нужен, если интерпретатор не находится автоматически: нестандартная сборка,
-# open_basedir, несколько версий PHP на сервере.
-#Config::write('php.cli', '/usr/bin/php8.3');
+// Directory for downloaded torrent files (default: torrents/ next to the program).
+//Config::write('torrents.dir', '/var/lib/torrentmonitor/torrents');
 
-# Сколько трекеров опрашивать одновременно (по умолчанию 10).
-#Config::write('curl.concurrency', 5);
+// Path to the PHP CLI binary, used to start a check in the background.
+// Needed when it is not found automatically: custom build, open_basedir, several PHP versions.
+//Config::write('php.cli', '/usr/bin/php8.3');
 
-# Каталог для скачанных torrent-файлов (по умолчанию torrents/ рядом с программой).
-#Config::write('torrents.dir', '/var/lib/torrentmonitor/torrents');
+// How many requests to trackers run at the same time (default 10).
+//Config::write('curl.concurrency', 5);
 
-# Адрес, по которому перед опросом трекеров проверяется подключение к интернету.
-# Пустая строка отключает проверку.
-#Config::write('connectivity.url', 'https://example.org/');
+// Address used to check the internet connection before trackers are polled.
+// An empty string turns the check off.
+//Config::write('connectivity.url', 'https://example.org/');

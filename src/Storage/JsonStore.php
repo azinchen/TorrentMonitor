@@ -1,12 +1,12 @@
 <?php
 namespace TorrentMonitor\Storage;
 
-//Один JSON-файл с данными.
-//Чтение: файл читается целиком при каждом обращении (он небольшой), разбор JSON
-//повторяется только если содержимое изменилось.
-//Запись: под эксклюзивной блокировкой файл перечитывается, изменяется и заменяется
-//атомарно (запись во временный файл и rename), поэтому одновременная работа
-//веб-интерфейса и engine.php не приводит к потере изменений или битому файлу.
+// A single JSON data file.
+// Reading: the file is read in full on every access (it is small); JSON parsing
+// is repeated only if the contents have changed.
+// Writing: under an exclusive lock the file is re-read, modified and replaced
+// atomically (write to a temporary file and rename), so the web interface and
+// engine.php working at the same time do not cause lost changes or a broken file.
 class JsonStore
 {
     private $file;
@@ -15,14 +15,14 @@ class JsonStore
     private $migrations;
     private $backup;
 
-    //последнее прочитанное содержимое файла и результат его разбора
+    // The last read file contents and the result of parsing them
     private $cacheRaw = NULL;
     private $cache = NULL;
 
-    //$defaults   - содержимое нового файла (без поля version)
-    //$version    - текущая версия формата файла
-    //$migrations - array(версия => function(array $data): array), переводит данные с этой версии на следующую
-    //$backup     - хранить ли предыдущую версию файла рядом (<файл>.bak)
+    // $defaults   - contents of a new file (without the version field)
+    // $version    - current version of the file format
+    // $migrations - array(version => function(array $data): array), migrates data from that version to the next one
+    // $backup     - whether to keep the previous version of the file next to it (<file>.bak)
     public function __construct($file, array $defaults, $version = 1, array $migrations = array(), $backup = TRUE)
     {
         $this->file = $file;
@@ -43,21 +43,21 @@ class JsonStore
         return is_file($this->file);
     }
 
-    //данные файла (значения по умолчанию, если файла ещё нет)
+    // The file's data (defaults if the file does not exist yet)
     public function read()
     {
         $data = $this->load();
         if ($data['version'] < $this->version)
         {
-            //формат устарел: обновляем под блокировкой
+            // The format is outdated: upgrade under the lock
             $this->update(function (&$data) { return TRUE; });
             return $this->cache;
         }
         return $data;
     }
 
-    //изменяет данные: $change(array &$data) вызывается под блокировкой со свежими данными.
-    //Если $change вернула FALSE, файл не перезаписывается. Возвращает то, что вернула $change.
+    // Modifies the data: $change(array &$data) is called under the lock with fresh data.
+    // If $change returned FALSE, the file is not rewritten. Returns what $change returned.
     public function update($change)
     {
         $dir = dirname($this->file);
@@ -114,7 +114,7 @@ class JsonStore
             throw new StorageException('Файл данных '.$this->file.' создан более новой версией TorrentMonitor (формат '
                 .$data['version'].', эта версия понимает формат '.$this->version.'). Обновите TorrentMonitor.');
 
-        //разделы, появившиеся в новых версиях, берутся из значений по умолчанию
+        // Sections introduced in newer versions are taken from the defaults
         $data = $data + $this->defaults;
         $this->cacheRaw = $raw;
         $this->cache = $data;
@@ -132,10 +132,10 @@ class JsonStore
         if (@file_put_contents($tmp, $json."\n") === FALSE)
             throw new StorageException('Нет прав на запись в каталог данных: '.$dir);
 
-        //файлы содержат пароли: доступ только владельцу (и группе, если так настроен каталог)
+        // The files contain passwords: access for the owner only (and the group, if the directory is set up that way)
         $dirMode = @fileperms($dir);
         @chmod($tmp, ($dirMode !== FALSE && ($dirMode & 0020)) ? 0660 : 0600);
-        //engine.php, запущенный от root, не должен отбирать файлы у пользователя веб-сервера
+        // engine.php run as root must not take the files away from the web server user
         if (function_exists('posix_geteuid') && posix_geteuid() === 0)
         {
             @chown($tmp, fileowner($dir));

@@ -3,8 +3,8 @@ namespace TorrentMonitor\Data;
 
 use TorrentMonitor\Storage\Files;
 
-//Скачанные torrent-файлы, которые не удалось передать в torrent-клиент (state.json).
-//Передача повторяется при каждом запуске. Ключ - id темы; поля: name, file, tracker, date.
+// Downloaded torrent files that could not be handed to the torrent client (state.json).
+// The handover is retried on every run. The key is the topic id; fields: name, file, tracker, date.
 final class Pending
 {
     /** @return array<string,array> */

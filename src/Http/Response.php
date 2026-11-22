@@ -1,22 +1,22 @@
 <?php
 namespace TorrentMonitor\Http;
 
-//Ответ на HTTP-запрос. Тело страниц уже переведено в UTF-8.
+// Response to an HTTP request. Page bodies are already converted to UTF-8.
 final class Response
 {
     public int $status = 0;
     public string $body = '';
-    //заголовки всех ответов цепочки переадресаций, как пришли
+    // Headers of all responses in the redirect chain, as received
     public string $headers = '';
-    /** @var array<string,string> cookie, установленные сервером (и решателем Cloudflare) */
+    /** @var array<string,string> cookies set by the server (and by the Cloudflare solver) */
     public array $cookies = array();
-    //ошибка соединения (пусто, если ответ получен)
+    // Connection error (empty if a response was received)
     public string $error = '';
-    //сайт ответил проверкой Cloudflare, и обойти её не удалось
+    // The site answered with a Cloudflare challenge that could not be bypassed
     public bool $challenged = FALSE;
-    //тело получено через решатель Cloudflare (браузер), а не напрямую
+    // The body was obtained through the Cloudflare solver (a browser), not directly
     public bool $solved = FALSE;
-    //cookie Cloudflare, с которыми был отправлен запрос (служебное поле клиента)
+    // Cloudflare cookies the request was sent with (internal field of the client)
     public ?string $sentClearance = NULL;
 
     public function ok(): bool
@@ -29,7 +29,7 @@ final class Response
         return isset($this->cookies[$name]) ? $this->cookies[$name] : NULL;
     }
 
-    //"a=1; b=2" из установленных cookie; $names - только перечисленные
+    // "a=1; b=2" from the cookies that were set; $names - only the listed ones
     public function cookieString(array $names = array()): string
     {
         $pairs = array();

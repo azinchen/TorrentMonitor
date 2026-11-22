@@ -3,7 +3,7 @@ namespace TorrentMonitor\Client;
 
 use TorrentMonitor\Http\Request;
 
-//Deluge через deluge-web (JSON-RPC). Логин не используется, только пароль веб-интерфейса.
+// Deluge via deluge-web (JSON-RPC). No login is used, only the web interface password.
 final class Deluge extends HttpClientBase
 {
     private string $cookie = '';
@@ -26,7 +26,7 @@ final class Deluge extends HttpClientBase
             return;
         if ($this->rpc('auth.login', array($this->password)) !== TRUE)
             throw new ClientException('log_passwd');
-        //веб-интерфейс может быть не подключён к демону: подключаемся к первому из известных
+        // the web interface may not be connected to a daemon: connect to the first known one
         if ($this->rpc('web.connected') !== TRUE)
         {
             $hosts = $this->rpc('web.get_hosts');
@@ -44,7 +44,7 @@ final class Deluge extends HttpClientBase
         $hash = $this->rpc('core.add_torrent_file', array(basename($file), base64_encode($torrent), $settings));
         if (empty($hash))
         {
-            //раздача уже есть в клиенте: это не ошибка
+            // the client already has the torrent: not an error
             $known = Bencode::infoHash($torrent);
             if ($known !== NULL && $this->rpc('web.get_torrent_status', array($known, array('hash'))))
                 return $known;

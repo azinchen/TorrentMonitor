@@ -42,7 +42,7 @@ final class Pornolab extends ForumTracker
         return self::date(trim($m[1]));
     }
 
-    //21-Ноя-26 10:00 или 21-Ноя-26 10:00:05
+    // 21-Ноя-26 10:00 or 21-Ноя-26 10:00:05
     private static function date(string $text): ?array
     {
         if ( ! preg_match('/^(\d{1,2})-([^-\s]+)-(\d{2})\s+((\d{1,2}):(\d{2})(?::(\d{2}))?)/u', $text, $d) || self::monthNumber($d[2]) === NULL)

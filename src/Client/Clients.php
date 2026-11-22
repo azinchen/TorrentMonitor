@@ -4,7 +4,7 @@ namespace TorrentMonitor\Client;
 use TorrentMonitor\App;
 use TorrentMonitor\Data\Settings;
 
-//Выбор torrent-клиента по настройкам.
+// Selects the torrent client according to the settings.
 final class Clients
 {
     const CLASSES = array(
@@ -15,7 +15,7 @@ final class Clients
         'TorrServer'   => TorrServer::class,
     );
 
-    //название выбранного клиента или NULL, если передача в клиент выключена
+    // name of the selected client, or NULL if passing torrents to a client is turned off
     public static function currentName(): ?string
     {
         $name = Settings::get('torrentClient');

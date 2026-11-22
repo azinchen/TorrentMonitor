@@ -3,7 +3,7 @@ namespace TorrentMonitor\Tracker;
 
 use TorrentMonitor\Http\Request;
 
-//kinozal.tv и его зеркала kinozal.me, kinozal.guru: один сайт под разными адресами.
+// kinozal.tv and its mirrors kinozal.me, kinozal.guru: one site under different addresses.
 final class Kinozal extends ForumTracker
 {
     const CHARSET = 'windows-1251';

@@ -3,7 +3,7 @@ namespace TorrentMonitor\Data;
 
 use TorrentMonitor\Storage\Files;
 
-//Отслеживаемые пользователи трекеров (torrents.json) и найденные у них темы (state.json).
+// Watched tracker users (torrents.json) and the topics found for them (state.json).
 final class Users
 {
     /** @return array[] array(id, tracker, name) */
@@ -52,9 +52,9 @@ final class Users
         });
     }
 
-    // ---- найденные темы: id, userId, tracker, section, topicId, title, date, accepted, downloaded, unread
+    // ---- found topics: id, userId, tracker, section, topicId, title, date, accepted, downloaded, unread
 
-    //запоминает тему пользователя; FALSE, если она уже известна
+    // Remembers a user's topic; FALSE if it is already known
     public static function addFound($userId, string $tracker, string $section, string $topicId, string $title, string $date): bool
     {
         $section = html_entity_decode($section, ENT_QUOTES, 'UTF-8');

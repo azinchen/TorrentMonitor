@@ -3,7 +3,7 @@ namespace TorrentMonitor\Data;
 
 use TorrentMonitor\Storage\Files;
 
-//Учётные данные трекеров (config.json) и cookie их сессий (state.json).
+// Tracker credentials (config.json) and their session cookies (state.json).
 final class Accounts
 {
     /** @return array{login:string,password:string,passkey:string,address:string} */
@@ -19,14 +19,14 @@ final class Accounts
         );
     }
 
-    //заданы ли логин и пароль
+    // Whether the login and password are set
     public static function filled(string $tracker): bool
     {
         $account = self::get($tracker);
         return trim($account['login']) !== '' && trim($account['password']) !== '';
     }
 
-    //сохраняет переданные поля (login, password, passkey, address), остальные не трогает
+    // Saves the given fields (login, password, passkey, address), leaves the rest untouched
     public static function set(string $tracker, array $fields): void
     {
         $fields = array_intersect_key($fields, array('login' => 1, 'password' => 1, 'passkey' => 1, 'address' => 1));
@@ -56,7 +56,7 @@ final class Accounts
         });
     }
 
-    //прокси отдельных трекеров: трекер => array(use, address, type)
+    // Proxies of individual trackers: tracker => array(use, address, type)
     public static function proxies(): array
     {
         $config = Files::config()->read();

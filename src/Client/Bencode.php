@@ -1,16 +1,16 @@
 <?php
 namespace TorrentMonitor\Client;
 
-//Минимальный разбор torrent-файла: info-hash и комментарий.
+// Minimal torrent file parsing: info-hash and comment.
 final class Bencode
 {
-    //info-hash раздачи (40 шестнадцатеричных символов, нижний регистр) или NULL, если это не torrent-файл
+    // info-hash of the torrent (40 hex characters, lower case) or NULL if this is not a torrent file
     public static function infoHash(string $torrent): ?string
     {
         $info = self::topLevel($torrent, 'info');
         if ($info === NULL)
             return NULL;
-        //раздача только формата v2: клиенты используют первые 20 байт SHA-256
+        // v2-only torrent: clients use the first 20 bytes of SHA-256
         if (strpos($info, '6:pieces') === FALSE && strpos($info, '12:meta versioni2e') !== FALSE)
             return substr(hash('sha256', $info), 0, 40);
         return sha1($info);
@@ -24,7 +24,7 @@ final class Bencode
         return substr($raw, strlen($m[0]));
     }
 
-    //необработанное значение ключа верхнего уровня
+    // raw value of a top-level key
     private static function topLevel(string $data, string $key): ?string
     {
         if ($data === '' || $data[0] != 'd')
@@ -48,7 +48,7 @@ final class Bencode
         return NULL;
     }
 
-    //позиция сразу за элементом, начинающимся в $pos; NULL при ошибке формата
+    // position right after the element starting at $pos; NULL on a format error
     private static function skip(string $data, int $pos): ?int
     {
         $length = strlen($data);

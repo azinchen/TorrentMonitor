@@ -4,22 +4,22 @@ namespace TorrentMonitor\Tracker;
 use TorrentMonitor\Http\Request;
 use TorrentMonitor\Http\Response;
 
-//Лента раздач lostfilm.tv на стороннем сервере: учётная запись не нужна.
+// Feed of lostfilm.tv releases on a third-party server: no account needed.
 final class LostfilmMirror extends SeriesTracker
 {
     const ADDRESSES = array('https://rss.bzda.ru');
     const NEEDS_ACCOUNT = FALSE;
-    //резервный адрес ленты, используется, если основной источник недоступен
+    // fallback feed address, used if the main source is unavailable
     const MIRROR_URL = 'https://lf.tormon.ru/rss.xml';
 
-    //качество темы => array(шаблон ссылки на раздачу, обозначение в имени файла)
+    // topic quality => array(release link pattern, tag in the file name)
     const QUALITY = array(
         'sd'   => array('avi|AVI', 'SD'),
         '1080' => array('mkv|MKV', 'HD'),
         '720'  => array('mp4|MP4', 'MP4'),
     );
 
-    //лента с резервного адреса (загружается один раз за запуск)
+    // feed from the fallback address (loaded once per run)
     private ?Response $reserve = NULL;
 
     public function request(array $topic): ?Request
@@ -37,7 +37,7 @@ final class LostfilmMirror extends SeriesTracker
         }
         $xml = $this->feed($response);
         $quality = isset(self::QUALITY[$topic['quality']]) ? self::QUALITY[$topic['quality']] : self::QUALITY['sd'];
-        //в названиях раздач слова разделены точками; точка в шаблоне - любой символ
+        // words in release titles are separated by dots; a dot in the pattern is any character
         $name = str_replace(array(' ', '\.'), '.', preg_quote($topic['name'], '/'));
         $have = $topic['episode'];
         $found = array();
@@ -59,7 +59,7 @@ final class LostfilmMirror extends SeriesTracker
             }
             catch (TrackerException $e)
             {
-                //уже найденные серии не теряем: ошибка повторится при следующем запуске
+                // keep the episodes already found: the error will repeat on the next run
                 if (empty($found))
                     throw $e;
                 break;
@@ -74,7 +74,7 @@ final class LostfilmMirror extends SeriesTracker
         return $found;
     }
 
-    //дата из ленты как есть, без пересчёта часового пояса: array('Y-m-d H:i:s', 'd Mon Y H:i:s')
+    // date from the feed as is, without time zone conversion: array('Y-m-d H:i:s', 'd Mon Y H:i:s')
     private static function date(string $pubDate): array
     {
         if ( ! preg_match('/(\d{1,2})\s+(\w{3})\s+(\d{4})\s+(\d{2}:\d{2}:\d{2})/', $pubDate, $m) || self::monthNumber($m[2]) === NULL)

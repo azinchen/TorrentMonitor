@@ -4,7 +4,7 @@ namespace TorrentMonitor\Data;
 use TorrentMonitor\Http\ClearanceStore;
 use TorrentMonitor\Storage\Files;
 
-//Рабочее состояние программы (state.json): время запуска, пройденные проверки Cloudflare.
+// Working state of the program (state.json): run time, passed Cloudflare challenges.
 final class State implements ClearanceStore
 {
     public static function lastRun(): string

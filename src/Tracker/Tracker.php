@@ -6,36 +6,36 @@ use TorrentMonitor\Http\Client;
 use TorrentMonitor\Http\Request;
 use TorrentMonitor\Http\Response;
 
-//Трекер. Один объект создаётся на один запуск и хранит сессию.
+// A tracker. One object is created per run and holds the session.
 //
-//Порядок работы движка:
-//  login()                    - один раз за запуск; исключение останавливает работу с трекером
-//  request($topic)            - какую страницу получить для темы (страницы всех тем загружаются параллельно)
-//  check($topic, $response)   - разбор страницы; возвращает найденные новые раздачи
+// How the engine uses it:
+//   login()                    - once per run; an exception stops work with the tracker
+//   request($topic)            - which page to fetch for a topic (pages of all topics are loaded in parallel)
+//   check($topic, $response)   - parses the page; returns the new releases found
 abstract class Tracker
 {
-    //адреса сайта: основной и запасные (используется первый доступный).
-    //Адрес из настроек трекера ставится перед ними.
+    // site addresses: the main one and fallbacks (the first reachable one is used).
+    // The address from the tracker settings is put before them.
     const ADDRESSES = array();
-    //кодировка страниц сайта (NULL - UTF-8)
+    // encoding of the site's pages (NULL - UTF-8)
     const CHARSET = NULL;
-    //нужны ли логин и пароль
+    // whether a login and password are needed
     const NEEDS_ACCOUNT = TRUE;
 
     protected string $name;
     protected Client $http;
     /** @var array{login:string,password:string,passkey:string,address:string} */
     protected array $account;
-    //пробный запуск: torrent-файлы не скачиваются (у трекеров бывает суточный лимит)
+    // dry run: torrent files are not downloaded (trackers may have a daily limit)
     public bool $probe = FALSE;
-    //cookie сессии
+    // session cookie
     protected string $session = '';
     private bool $loggedIn = FALSE;
     /** @var string[] */
     private array $addresses;
-    //получен ли хоть один ответ от текущего адреса
+    // whether the current address has returned at least one response
     private bool $reached = FALSE;
-    //последний ответ сайта был непройденной проверкой Cloudflare
+    // the site's last response was an unsolved Cloudflare challenge
     private bool $blocked = FALSE;
 
     public function __construct(string $name, Client $http)
@@ -53,7 +53,7 @@ abstract class Tracker
         $this->addresses = array_values(array_unique($this->addresses));
     }
 
-    /** @return string[] адреса сайта по умолчанию */
+    /** @return string[] default site addresses */
     protected function defaultAddresses(): array
     {
         return static::ADDRESSES;
@@ -64,22 +64,22 @@ abstract class Tracker
         return $this->name;
     }
 
-    //адрес сайта без / на конце
+    // site address without a trailing /
     public function base(): string
     {
         return $this->addresses[0];
     }
 
-    // ------------------------------------------------------- для движка и API
+    // ------------------------------------------------------- for the engine and API
 
-    //Входит на трекер, если ещё не вошёл. TrackerException с кодом ошибки при неудаче.
+    // Logs in to the tracker unless already logged in. TrackerException with an error code on failure.
     public function login(): void
     {
         if ($this->loggedIn)
             return;
         if (static::NEEDS_ACCOUNT)
         {
-            //cookie могла быть вставлена пользователем вручную (вход с капчей): тогда логин и пароль не нужны
+            // the cookie may have been pasted in by the user manually (login with a captcha): then no login and password are needed
             $saved = Accounts::cookie($this->name);
             if ($saved !== '' && $this->sessionAlive($saved))
                 $this->session = $saved;
@@ -101,68 +101,68 @@ abstract class Tracker
         $this->loggedIn = TRUE;
     }
 
-    //запрос страницы, по которой проверяется тема; NULL, если страница не нужна
+    // request for the page the topic is checked by; NULL if no page is needed
     abstract public function request(array $topic): ?Request;
 
-    //Разбирает страницу темы. Возвращает новые раздачи (пусто - обновлений нет).
-    //TrackerException с кодом ошибки, если проверить тему не удалось.
+    // Parses the topic page. Returns the new releases (empty - no updates).
+    // TrackerException with an error code if the topic could not be checked.
     /** @return Found[] */
     abstract public function check(array $topic, Response $response): array;
 
-    //название темы на трекере (для добавления темы без названия); NULL, если получить не удалось
+    // topic title on the tracker (for adding a topic without a title); NULL if it could not be obtained
     public function title(string $topicId): ?string
     {
         return NULL;
     }
 
-    //адрес темы на трекере для ссылок в интерфейсе и уведомлениях ('' - ссылки нет)
+    // topic address on the tracker for links in the interface and notifications ('' - no link)
     public function topicUrl(string $topicId): string
     {
         return '';
     }
 
-    //номер темы из её адреса; NULL, если адрес не подходит
+    // topic id from its address; NULL if the address does not match
     public function topicIdFromUrl(string $url): ?string
     {
         return NULL;
     }
 
-    //допустимо ли такое название сериала (для сериальных трекеров)
+    // whether such a series title is acceptable (for series trackers)
     public function validName(string $name): bool
     {
         return TRUE;
     }
 
-    // ---------------------------------------------- отслеживание пользователей
+    // ---------------------------------------------- watching users
 
-    //Темы пользователя трекера: array of array(section, topicId, title, date 'Y-m-d').
-    //NULL, если трекер этого не умеет.
+    // Topics of a tracker user: array of array(section, topicId, title, date 'Y-m-d').
+    // NULL if the tracker cannot do this.
     public function userTopics(string $user): ?array
     {
         return NULL;
     }
 
-    //torrent-файл темы; TrackerException при неудаче
+    // torrent file of the topic; TrackerException on failure
     public function download(string $topicId): string
     {
         throw new TrackerException('torrent_file_fail');
     }
 
-    // ------------------------------------------------- для классов трекеров
+    // ------------------------------------------------- for tracker classes
 
-    //действует ли сохранённая cookie сессии
+    // whether the saved session cookie is still valid
     protected function sessionAlive(string $cookie): bool
     {
         return FALSE;
     }
 
-    //Авторизация: возвращает cookie сессии. TrackerException с кодом ошибки при неудаче.
+    // Authentication: returns the session cookie. TrackerException with an error code on failure.
     protected function signIn(): string
     {
         throw new TrackerException('credential_miss');
     }
 
-    //логин в кодировке сайта, готовый для подстановки в тело POST
+    // login in the site's encoding, ready to be put into a POST body
     protected function encodedLogin(): string
     {
         $login = $this->account['login'];
@@ -187,13 +187,13 @@ abstract class Tracker
         return $request->cookie($cookie === NULL ? $this->session : $cookie)->charset(static::CHARSET)->tracker($this->name);
     }
 
-    //полный адрес: путь относительно адреса сайта или готовый адрес
+    // full address: a path relative to the site address or a ready-made address
     protected function url(string $path): string
     {
         return preg_match('~^https?://~i', $path) ? $path : $this->base().$path;
     }
 
-    //Выполняет запрос. Пока сайт ни разу не ответил, при ошибке соединения пробует запасные адреса.
+    // Performs a request. Until the site has responded at least once, tries the fallback addresses on a connection error.
     protected function send(Request $request): Response
     {
         $response = $this->http->send($request);
@@ -211,13 +211,13 @@ abstract class Tracker
         return $response;
     }
 
-    //похоже ли содержимое на torrent-файл
+    // whether the content looks like a torrent file
     public static function isTorrent(string $data): bool
     {
         return strlen($data) > 100 && strpos($data, 'announce') !== FALSE && $data[0] == 'd';
     }
 
-    //Скачивает torrent-файл. TrackerException('torrent_file_fail'), если пришло что-то другое.
+    // Downloads the torrent file. TrackerException('torrent_file_fail') if something else came back.
     protected function torrent(Request $request): string
     {
         if ($this->probe)
@@ -228,7 +228,7 @@ abstract class Tracker
         return $response->body;
     }
 
-    //месяц словом (янв, Feb, марта...) -> номер '01'..'12'; NULL, если не распознан
+    // month as a word (янв, Feb, марта...) -> number '01'..'12'; NULL if not recognized
     public static function monthNumber(string $month): ?string
     {
         $names = array('янв' => '01', 'фев' => '02', 'мар' => '03', 'апр' => '04', 'мая' => '05', 'май' => '05', 'июн' => '06',
@@ -239,14 +239,14 @@ abstract class Tracker
         return isset($names[$key]) ? $names[$key] : NULL;
     }
 
-    //номер месяца -> 'Янв'..'Дек'
+    // month number -> 'Янв'..'Дек'
     public static function monthName($number): string
     {
         $names = array('', 'Янв', 'Фев', 'Мар', 'Апр', 'Май', 'Июн', 'Июл', 'Авг', 'Сен', 'Окт', 'Ноя', 'Дек');
         return isset($names[(int)$number]) ? $names[(int)$number] : '';
     }
 
-    //содержимое <title> страницы с раскодированными HTML-сущностями
+    // contents of the page's <title> with HTML entities decoded
     protected static function pageTitle(string $page): ?string
     {
         if ( ! preg_match('/<title>(.*)<\/title>/sU', $page, $m))

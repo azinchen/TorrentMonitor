@@ -1,13 +1,13 @@
 <?php
-// Переносит данные TorrentMonitor 3.x из базы данных (SQLite, MySQL/MariaDB,
-// PostgreSQL) в JSON-файлы новой версии.
+// Migrates TorrentMonitor 3.x data from a database (SQLite, MySQL/MariaDB,
+// PostgreSQL) to the JSON files of the new version.
 //
-// Самостоятельная программа: не использует файлы TorrentMonitor и ничего не меняет
-// в базе данных (только читает). Запускается один раз вручную:
+// A standalone program: it does not use TorrentMonitor files and changes nothing
+// in the database (read-only). Run once by hand:
 //
-//   php tools/convert-db.php            проверить и перенести
-//   php tools/convert-db.php --dry-run  только показать, что будет перенесено
-//   php tools/convert-db.php --help     все параметры
+//   php tools/convert-db.php            check and migrate
+//   php tools/convert-db.php --dry-run  only show what would be migrated
+//   php tools/convert-db.php --help     all options
 
 const FORMAT_VERSION = 1;
 
@@ -57,7 +57,7 @@ function say($message)
     echo $message."\n";
 }
 
-// ---- параметры ----------------------------------------------------------------
+// ---- options ------------------------------------------------------------------
 
 $options = getopt('', array(
     'config:', 'type:', 'db:', 'host:', 'port:', 'user:', 'password:', 'charset:', 'key:', 'key-file:',
@@ -72,8 +72,8 @@ if (isset($options['help']))
 $root = dirname(__DIR__);
 $dryRun = isset($options['dry-run']);
 
-// Значения Config::write('имя', 'значение') из прежнего config.php. Файл не выполняется,
-// а только читается как текст; закомментированные строки пропускаются.
+// Config::write('name', 'value') values from the old config.php. The file is not executed,
+// only read as text; commented-out lines are skipped.
 function readOldConfig($file)
 {
     $values = array();
@@ -114,7 +114,7 @@ if ($db['type'] === '')
 if ($db['name'] === '')
     fail('не указано имя базы данных (--db)');
 
-// ключ шифрования
+// encryption key
 $keyHex = isset($options['key']) ? $options['key'] : (isset($old['encryption.key']) ? $old['encryption.key'] : '');
 $keyFile = isset($options['key-file']) ? $options['key-file'] : '';
 if ($keyHex === '' && $keyFile === '' && $db['type'] == 'sqlite' && is_file(dirname($db['name']).'/db_crypt.key'))
@@ -132,7 +132,7 @@ if ($keyHex !== '' && ! preg_match('/^[0-9a-fA-F]{64}$/', $keyHex))
     fail('ключ шифрования должен состоять из 64 шестнадцатеричных знаков');
 $key = $keyHex === '' ? NULL : hex2bin($keyHex);
 
-// ---- чтение базы ---------------------------------------------------------------
+// ---- reading the database ------------------------------------------------------
 
 try
 {
@@ -163,7 +163,7 @@ catch (PDOException $e)
     fail('не удалось подключиться к базе данных: '.$e->getMessage()."\nДоступные драйверы PDO: ".($drivers ?: 'нет'));
 }
 
-// все строки таблицы; таблицы, которой нет в старой базе, считаются пустыми
+// all rows of a table; tables missing from the old database are treated as empty
 function rows(PDO $pdo, $table)
 {
     try
@@ -181,7 +181,7 @@ function byId($a, $b)
     return (int)$a['id'] - (int)$b['id'];
 }
 
-// расшифровка значений, сохранённых версией 3.x с encryption.key (AES-256-GCM, префикс enc:)
+// decrypts values saved by version 3.x with encryption.key (AES-256-GCM, enc: prefix)
 $undecrypted = array();
 $decrypt = function ($value, $what) use ($key, &$undecrypted) {
     $value = (string)$value;
@@ -203,8 +203,8 @@ if ( ! function_exists('openssl_decrypt'))
 
 $notes = array();
 
-// настройки. В старых базах встречаются повторяющиеся строки одного ключа:
-// берётся первое непустое значение.
+// settings. Old databases may contain duplicate rows for one key:
+// the first non-empty value is used.
 $stateKeys = array('cf_userAgent', 'sentUpdateNotification');
 $settingRows = rows($pdo, 'settings');
 if (empty($settingRows))
@@ -231,7 +231,7 @@ foreach ($settingRows as $row)
 $settings = $buckets['config'];
 $stateSettings = $buckets['state'];
 
-// учётные данные трекеров и cookies
+// tracker credentials and cookies
 $trackers = array();
 $cookies = array();
 foreach (rows($pdo, 'credentials') as $row)
@@ -247,13 +247,13 @@ foreach (rows($pdo, 'credentials') as $row)
         $cookies[$tracker] = $cookie;
 }
 
-// адреса сервисов уведомлений
+// notification service addresses
 $notifications = array();
 foreach (rows($pdo, 'notifications') as $row)
     if ((string)$row['address'] !== '')
         $notifications[(string)$row['id']] = (string)$row['address'];
 
-// темы
+// topics
 $now = date('Y-m-d H:i:s');
 $topics = array();
 $topicRows = rows($pdo, 'torrent');
@@ -277,13 +277,13 @@ foreach ($topicRows as $row)
         'error'          => (int)$row['error'],
         'closed'         => isset($row['closed']) ? (int)$row['closed'] : 0,
         'category'       => isset($row['category']) ? (string)$row['category'] : '',
-        // когда тема добавлена, старая база не знала; обновлением считается дата раздачи
+        // the old database did not know when a topic was added; the torrent's date is used as the update time
         'addedAt'        => $now,
         'lastActivityAt' => (strpos($timestamp, '0000') === 0 || strpos($timestamp, '2000-01-01') === 0 || strtotime($timestamp) === FALSE) ? '' : $timestamp,
     );
 }
 
-// отслеживаемые пользователи и найденные у них темы
+// monitored users and the topics found for them
 $users = array();
 $userRows = rows($pdo, 'watch');
 usort($userRows, 'byId');
@@ -301,7 +301,7 @@ foreach ($bufferRows as $row)
         'tracker' => (string)$row['tracker'],
     );
 
-// ошибки, новости, очередь в torrent-клиент
+// errors, news, the torrent client queue
 $warnings = array();
 $warningRows = rows($pdo, 'warning');
 usort($warningRows, 'byId');
@@ -319,7 +319,7 @@ $temp = array();
 foreach (rows($pdo, 'temp') as $row)
     $temp[(string)$row['id']] = array('name' => (string)$row['name'], 'path' => (string)$row['path'], 'tracker' => (string)$row['tracker'], 'date' => (string)$row['date']);
 
-// прокси для отдельных трекеров из прежнего config.xml
+// per-tracker proxies from the old config.xml
 $trackerProxy = array();
 $xmlFile = isset($options['config-xml']) ? $options['config-xml'] : $root.'/config.xml';
 if (isset($options['config-xml']) && ! is_file($xmlFile))
@@ -345,7 +345,7 @@ if (is_file($xmlFile) && function_exists('simplexml_load_file'))
     }
 }
 
-// ---- результат ----------------------------------------------------------------
+// ---- result -------------------------------------------------------------------
 
 $maxId = function ($list) {
     $max = 0;
@@ -446,7 +446,7 @@ foreach ($files as $name => $data)
     if (@file_put_contents($tmp, $json."\n") === FALSE)
         fail('нет прав на запись в каталог данных: '.$dataDir);
     chmod($tmp, 0600);
-    // при запуске от root файлы отдаются владельцу каталога данных (обычно пользователь веб-сервера)
+    // when run as root, files are handed over to the data directory's owner (usually the web server user)
     if (function_exists('posix_geteuid') && posix_geteuid() === 0)
     {
         @chown($tmp, fileowner($dataDir));

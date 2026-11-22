@@ -1,10 +1,10 @@
 <?php
 namespace TorrentMonitor\Storage;
 
-//Все данные TorrentMonitor хранятся в трёх JSON-файлах в каталоге данных:
-//  config.json   - настройки, учётные данные трекеров, адреса уведомлений (меняется только пользователем)
-//  torrents.json - отслеживаемые темы и пользователи
-//  state.json    - рабочее состояние: cookies, ошибки, новости, очереди (меняется при каждом запуске)
+// All TorrentMonitor data is stored in three JSON files in the data directory:
+//   config.json   - settings, tracker credentials, notification addresses (changed only by the user)
+//   torrents.json - watched topics and users
+//   state.json    - working state: cookies, errors, news, queues (changes on every run)
 final class Files
 {
     const CONFIG_VERSION   = 1;
@@ -14,8 +14,8 @@ final class Files
     private static array $stores = array();
     private static ?string $dir = NULL;
 
-    //Каталог данных: переменная окружения TM_DATA_DIR, затем Config::write('data.dir', ...)
-    //в config.php, иначе каталог data рядом с программой.
+    // Data directory: the TM_DATA_DIR environment variable, then Config::write('data.dir', ...)
+    // in config.php, otherwise the data directory next to the program.
     public static function dir(): string
     {
         if (self::$dir === NULL)
@@ -30,7 +30,7 @@ final class Files
         return self::$dir;
     }
 
-    //создаёт каталог данных и закрывает его от раздачи веб-сервером Apache
+    // Creates the data directory and closes it from being served by the Apache web server
     public static function prepare(): bool
     {
         $dir = self::dir();
@@ -41,13 +41,13 @@ final class Files
         return is_dir($dir) && is_writable($dir);
     }
 
-    //были ли данные уже созданы (хотя бы один раз сохранены настройки или темы)
+    // Whether the data has already been created (settings or topics were saved at least once)
     public static function initialized(): bool
     {
         return is_file(self::dir().'/config.json') || is_file(self::dir().'/torrents.json');
     }
 
-    //читает все файлы данных; StorageException, если какой-то из них повреждён или недоступен
+    // Reads all data files; StorageException if any of them is corrupted or inaccessible
     public static function check(): void
     {
         self::config()->read();
@@ -80,14 +80,14 @@ final class Files
         return self::$stores[$name];
     }
 
-    //настройки новой установки
+    // Settings of a new installation
     public static function settingsDefaults(): array
     {
         return array(
             'serverAddress'        => '',
             'auth'                 => '1',
-            //пароль по умолчанию: torrentmonitor (при первом входе хеш заменяется на bcrypt)
-            'password'             => '1f10c9fd49952a7055531975c06c5bd8',
+            // Password hash (bcrypt). Empty until the setup form sets it: there is no default password.
+            'password'             => '',
             'ApiKey'               => '',
             'rss'                  => '1',
             'debug'                => '0',
@@ -109,9 +109,9 @@ final class Files
             'deleteDistribution'   => '0',
             'deleteOldFiles'       => '0',
             'deleteFilesOnRemove'  => '0',
-            //через сколько дней без обновлений прекращать проверку темы (0 - никогда)
+            // After how many days without updates to stop checking a topic (0 - never)
             'stopAfterDays'        => '0',
-            //удалять тему и раздачу, когда Sonarr сообщает об удалении сериала
+            // Delete the topic and the torrent when Sonarr reports that the series was deleted
             'removeOnSeriesDelete' => '0',
             'send'                 => '0',
             'sendUpdate'           => '0',
@@ -125,11 +125,11 @@ final class Files
     {
         return array(
             'settings'      => self::settingsDefaults(),
-            //трекер => array('login' => ..., 'password' => ..., 'passkey' => ..., 'address' => ...)
+            // tracker => array('login' => ..., 'password' => ..., 'passkey' => ..., 'address' => ...)
             'trackers'      => array(),
-            //номер сервиса уведомлений (см. Notify\Services) => адрес или ключ
+            // Notification service number (see Notify\Services) => address or key
             'notifications' => array(),
-            //трекер => array('use' => 'yes'|'no', 'address' => 'хост:порт', 'type' => 'SOCKS5'|'HTTP')
+            // tracker => array('use' => 'yes'|'no', 'address' => 'host:port', 'type' => 'SOCKS5'|'HTTP')
             'trackerProxy'  => array(),
         );
     }
@@ -148,20 +148,20 @@ final class Files
     {
         return array(
             'updateNotified' => FALSE,
-            //входы «запомнить меня»: sha256 от токена => время окончания (unix)
+            // "Remember me" logins: sha256 of the token => expiry time (unix)
             'logins'         => array(),
             'lastRun'        => '',
-            //трекер => строка cookie сессии
+            // tracker => session cookie string
             'cookies'        => array(),
-            //хост => array('cookie' => ..., 'userAgent' => ..., 'at' => ...): пройденные проверки Cloudflare
+            // host => array('cookie' => ..., 'userAgent' => ..., 'at' => ...): passed Cloudflare challenges
             'clearance'      => array(),
             'nextWarningId'  => 1,
             'warnings'       => array(),
             'news'           => array(),
-            //темы, найденные у отслеживаемых пользователей
+            // Topics found for watched users
             'nextFoundId'    => 1,
             'found'          => array(),
-            //раздачи, которые не удалось передать в torrent-клиент: номер темы => array(name, file, tracker, date)
+            // Torrents that could not be handed to the torrent client: topic id => array(name, file, tracker, date)
             'pending'        => array(),
         );
     }

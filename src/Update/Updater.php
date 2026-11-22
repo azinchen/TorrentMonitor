@@ -9,14 +9,14 @@ use TorrentMonitor\Data\Warnings;
 use TorrentMonitor\Engine\Problems;
 use TorrentMonitor\Notify\Notifications;
 
-//Обновление системы из архива выпуска GitHub Releases.
+// Updating the system from a GitHub Releases archive.
 final class Updater
 {
-    //файлы и каталоги установки, которые обновление не трогает
+    // Installation files and directories the update does not touch
     private static $keep = array('config.php', 'data', 'torrents', 'scripts');
-    //файлы и каталоги прежних версий, которых в новых выпусках нет: удаляются после обновления
+    // Files and directories of previous versions that are absent from new releases: removed after the update
     private static $obsolete = array('class', 'trackers', 'include', 'pages', 'api', 'rss', 'assets', 'img', 'action.php', 'db_schema', 'config.xml', 'changelog.txt');
-    //служебные файлы и каталоги репозитория, которые не нужны в установке
+    // Repository service files and directories that are not needed in an installation
     private static $skip = array('.git', '.github', '.gitignore', '.gitattributes', '.claude', 'wiki', 'tests', 'dist');
 
     private static $NL;
@@ -32,14 +32,14 @@ final class Updater
         return rmdir($dir);
     }
 
-    //выводим строку простого текста: в браузере экранируем, в консоли печатаем как есть
+    // Output a line of plain text: escaped in the browser, printed as is in the console
     private static function say($text)
     {
         echo (self::$isCLI ? $text : nl2br(htmlspecialchars($text))).self::$NL;
     }
 
-    //каталог с файлами системы внутри распакованного архива: либо сам архив,
-    //либо единственный вложенный каталог (так упакованы архивы GitHub)
+    // Directory with the system files inside the unpacked archive: either the archive itself
+    // or its single nested directory (that is how GitHub archives are packed)
     private static function findSourceRoot($dir)
     {
         if (is_file($dir.'/version.txt') && is_file($dir.'/index.php'))
@@ -55,7 +55,7 @@ final class Updater
         return NULL;
     }
 
-    //копируем файлы выпуска поверх установки, возвращаем список файлов, которые не удалось записать
+    // Copy the release files over the installation, return the list of files that could not be written
     private static function copyTree($from, $to, $top = TRUE)
     {
         $failed = array();
@@ -63,10 +63,10 @@ final class Updater
         {
             if ($top && in_array($entry, self::$skip))
                 continue;
-            //настройки пользователя не перезаписываем, но создаём, если их ещё нет
+            // User settings are not overwritten, but are created if they do not exist yet
             if ($top && in_array($entry, self::$keep) && file_exists($to.'/'.$entry))
                 continue;
-            //version.txt записывается последним, после успешного копирования
+            // version.txt is written last, after a successful copy
             if ($top && $entry == 'version.txt')
                 continue;
 
@@ -88,8 +88,8 @@ final class Updater
         return $failed;
     }
 
-    //Удаляет файлы прежней версии, которых нет в новом выпуске: в каталогах программы
-    //и устаревшие каталоги целиком. Данные пользователя не затрагиваются.
+    // Removes files of the previous version that are absent from the new release: in the program directories,
+    // and obsolete directories entirely. User data is not affected.
     private static function removeStale($source, $root)
     {
         foreach (self::$obsolete as $entry)
@@ -132,7 +132,7 @@ final class Updater
         self::$NL = self::$isCLI ? "\r\n" : '<br />'."\r\n";
         $root = rtrim(str_replace('\\', '/', App::root()), '/');
 
-        //сведения о выпуске всегда запрашиваем заново, не из кеша
+        // Release information is always requested anew, not from the cache
         $release = Release::latest(TRUE);
         $current = Release::currentVersion();
         self::say('Текущая версия системы: '.$current);

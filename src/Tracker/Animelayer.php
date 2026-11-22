@@ -28,7 +28,7 @@ final class Animelayer extends ForumTracker
             throw new TrackerException('cant_get_auth_page');
         if (preg_match('/Имя пользователя или пароль неверны/u', $response->body))
             throw new TrackerException('credential_wrong');
-        //сессией считаются все cookie, которые сайт выдал при входе
+        // the session is all the cookies the site issued at login
         $cookie = self::cookies($response);
         if ($cookie !== '')
             return $cookie;
@@ -53,7 +53,7 @@ final class Animelayer extends ForumTracker
     {
         if ( ! preg_match('/<span class=\"(date-updated|date-created)\">(.*)<\/span>/U', $page, $m))
             return NULL;
-        //"5 ноября в 9:15" (текущий год) или "5 ноября 2025 в 9:15"
+        // "5 ноября в 9:15" (current year) or "5 ноября 2025 в 9:15"
         $text = str_replace('&nbsp;', ' ', $m[2]);
         $pieces = explode(' ', $text);
         if (count($pieces) != 4 && count($pieces) != 5)
@@ -78,7 +78,7 @@ final class Animelayer extends ForumTracker
         $name = preg_replace('/\s+(\||::|—|–|-|»|•)\s+Anime\s?Layer(\.ru)?$/iu', '', $title);
         if ($name === NULL || $name === $title)
         {
-            //окончание заголовка не распознано: как и раньше, название сайта - последние 15 байт
+            // the title ending is not recognized: as before, the site name is the last 15 bytes
             if ( ! preg_match('/<title>(.*)<\/title>/sU', $page, $m) || strlen($m[1]) <= 15)
                 return NULL;
             $name = trim(html_entity_decode(substr($m[1], 0, -15), ENT_QUOTES, 'UTF-8'));

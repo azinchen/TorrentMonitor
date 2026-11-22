@@ -4,34 +4,34 @@ namespace TorrentMonitor\Notify;
 use TorrentMonitor\Data\Settings;
 use TorrentMonitor\Messages;
 
-//Отправка уведомлений пользователю согласно настройкам.
+// Sending notifications to the user according to the settings.
 final class Notifications
 {
-    //обновление темы
+    // Topic update
     public static function update(string $tracker, string $message, string $date, string $topicUrl = ''): void
     {
         self::deliver('sendUpdate', 'sendUpdateService', 'Обновление.', self::body($date, $tracker, $message, $topicUrl));
     }
 
-    //ошибка работы
+    // Runtime error
     public static function warning(string $source, string $code, string $topicUrl = ''): void
     {
         self::deliver('sendWarning', 'sendWarningService', 'Предупреждение.', self::body(date('Y-m-d H:i:s'), $source, Messages::text($code), $topicUrl));
     }
 
-    //новость (вышла новая версия)
+    // News (a new version is out)
     public static function news(string $text): void
     {
         self::deliver('sendUpdate', 'sendUpdateService', 'Новость.', htmlspecialchars($text, ENT_QUOTES));
     }
 
-    //произвольное сообщение об обновлении (тема добавлена через API)
+    // Arbitrary update message (a topic was added through the API)
     public static function info(string $source, string $message): void
     {
         self::deliver('sendUpdate', 'sendUpdateService', 'Обновление.', self::body(date('Y-m-d H:i:s'), $source, $message, ''));
     }
 
-    //пробное сообщение через указанный сервис; TRUE, если сервис его принял
+    // Test message through the given service; TRUE if the service accepted it
     public static function test(string $service, string $address): bool
     {
         $notifier = Services::get($service);
@@ -75,7 +75,7 @@ final class Notifications
         }
         catch (\Throwable $e)
         {
-            //уведомление не должно останавливать работу
+            // A notification must not stop the run
         }
     }
 }

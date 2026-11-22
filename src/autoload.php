@@ -1,5 +1,5 @@
 <?php
-//Загрузка классов TorrentMonitor: TorrentMonitor\Http\Client -> src/Http/Client.php
+// TorrentMonitor class loading: TorrentMonitor\Http\Client -> src/Http/Client.php
 spl_autoload_register(function ($class) {
     $prefix = 'TorrentMonitor\\';
     if (strncmp($class, $prefix, strlen($prefix)) !== 0)

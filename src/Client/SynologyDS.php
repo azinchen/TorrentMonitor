@@ -3,8 +3,8 @@ namespace TorrentMonitor\Client;
 
 use TorrentMonitor\Http\Request;
 
-//Synology Download Station. Принимает ссылку на torrent-файл на сервере TorrentMonitor;
-//идентификатор раздачи - номер задачи. Удаление скачанных файлов не поддерживается.
+// Synology Download Station. Takes a link to the torrent file on the TorrentMonitor server;
+// the torrent id is the task id. Deleting downloaded files is not supported.
 final class SynologyDS extends HttpClientBase
 {
     private string $sid = '';
@@ -46,7 +46,7 @@ final class SynologyDS extends HttpClientBase
         if (preg_match('/\"code\":403/i', $response->body))
             throw new ClientException('destination_does_not_exist');
 
-        //API не возвращает номер созданной задачи: ищем её по ссылке, иначе берём последнюю
+        // the API does not return the id of the created task: find it by the link, otherwise take the last one
         $last = NULL;
         $match = NULL;
         foreach ($this->tasks() as $task)

@@ -3,7 +3,7 @@ namespace TorrentMonitor\Tracker;
 
 use TorrentMonitor\Http\Request;
 
-//Учётная запись не нужна. Страницы форума не перекодируются, поиск (search.tfile.cc) - в windows-1251.
+// No account needed. Forum pages are not re-encoded, the search (search.tfile.cc) is in windows-1251.
 final class Tfile extends ForumTracker
 {
     const ADDRESSES = array('http://tfile.cc');
@@ -24,7 +24,7 @@ final class Tfile extends ForumTracker
         return array($d[1].'-'.$d[2].'-'.$d[3].' '.$d[4].':00', $d[3].' '.self::monthName($d[2]).' '.$d[1].' '.$d[4]);
     }
 
-    //у заголовка отрезаются 15 байт в начале и 25 в конце (название сайта)
+    // 15 bytes at the start and 25 at the end of the title are cut off (the site name)
     protected function parseTitle(string $page): ?string
     {
         $title = self::pageTitle($page);
@@ -41,14 +41,14 @@ final class Tfile extends ForumTracker
 
     protected function downloadRequest(string $topicId, string $page): ?Request
     {
-        //в проверке тем искали &ak=, в скачивании тем пользователей - &uk=
+        // topic checking used to look for &ak=, downloading user topics - for &uk=
         if ( ! preg_match('/download\.php\?id=(\d+)&(?:ak|uk)=(\d+)/', $page, $link))
             return NULL;
         return $this->get('/forum/download.php?id='.$link[1].'&ak='.$link[2])
             ->referer($this->url('/forum/viewtopic.php?t='.rawurlencode($topicId)));
     }
 
-    //ссылка на torrent-файл есть только на странице темы
+    // the link to the torrent file is only on the topic page
     public function download(string $topicId): string
     {
         $response = $this->send($this->topicRequest($topicId));
@@ -77,7 +77,7 @@ final class Tfile extends ForumTracker
         if ($page === '' || $response->challenged)
             throw new TrackerException('cant_get_forum_page');
 
-        //раздел: все ссылки на форумы из ячейки через запятую
+        // section: all forum links from the cell, comma-separated
         $sections = array();
         preg_match_all('/<td class=\"f\">\n\t\t\t\t\n\t\t\t\t\t(.*)\n\t\t\t\t<\/td>/', $page, $cells);
         foreach ($cells[1] as $cell)

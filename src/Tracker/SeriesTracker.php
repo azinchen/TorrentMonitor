@@ -3,15 +3,15 @@ namespace TorrentMonitor\Tracker;
 
 use TorrentMonitor\Http\Response;
 
-//Трекер, где отслеживается сериал: новые серии ищутся по названию в RSS-ленте трекера.
-//У темы нет номера: её определяют название и качество (sd, 720, 1080).
+// A tracker where a series is watched: new episodes are looked up by title in the tracker's RSS feed.
+// A topic has no id: it is identified by title and quality (sd, 720, 1080).
 abstract class SeriesTracker extends Tracker
 {
-    /** @var array<string,\SimpleXMLElement|string> разобранные ленты (или код ошибки) по содержимому */
+    /** @var array<string,\SimpleXMLElement|string> parsed feeds (or an error code) keyed by content */
     private array $feeds = array();
 
-    //Разбирает RSS-ленту (один раз на все сериалы трекера).
-    //TrackerException: cant_find_rss - лента не получена, rss_parse_false - в ней ошибка.
+    // Parses the RSS feed (once for all series of the tracker).
+    // TrackerException: cant_find_rss - the feed was not received, rss_parse_false - it is malformed.
     protected function feed(Response $response, bool $escapeAmpersands = FALSE): \SimpleXMLElement
     {
         $key = md5($response->body);
@@ -38,7 +38,7 @@ abstract class SeriesTracker extends Tracker
         return $this->feeds[$key];
     }
 
-    //записи ленты от старых к новым
+    // feed items from oldest to newest
     /** @return \SimpleXMLElement[] */
     protected static function items(\SimpleXMLElement $xml): array
     {
@@ -48,7 +48,7 @@ abstract class SeriesTracker extends Tracker
         return $items;
     }
 
-    //Новее ли серия той, что уже скачана. $have - 'S01E02' или '' (ничего не скачано).
+    // Whether the episode is newer than the one already downloaded. $have - 'S01E02' or '' (nothing downloaded).
     public static function newer(string $have, int $season, int $episode): bool
     {
         if ( ! preg_match('/S(\d+)E(\d+)/i', $have, $m))
@@ -56,7 +56,7 @@ abstract class SeriesTracker extends Tracker
         return $season > (int)$m[1] || ($season == (int)$m[1] && $episode > (int)$m[2]);
     }
 
-    //дата из RSS (RFC 822) в местном времени: array('Y-m-d H:i:s', 'd Мес Y H:i')
+    // date from RSS (RFC 822) in local time: array('Y-m-d H:i:s', 'd Mon Y H:i') with a Russian month
     protected static function feedDate(string $pubDate): array
     {
         $time = strtotime($pubDate);
@@ -65,7 +65,7 @@ abstract class SeriesTracker extends Tracker
         return array(date('Y-m-d H:i:s', $time), date('d', $time).' '.self::monthName(date('n', $time)).' '.date('Y H:i', $time));
     }
 
-    //сообщение об обновлении сериала
+    // series update message
     protected static function message(string $name, string $quality, int $season, int $episode): string
     {
         return $name.' '.$quality.' обновлён до '.$episode.' серии, '.$season.' сезона.';

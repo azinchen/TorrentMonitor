@@ -34,11 +34,11 @@ final class Rutor extends ForumTracker
     protected function parseTitle(string $page): ?string
     {
         $title = self::pageTitle($page);
-        //rutor.info :: Название
+        // rutor.info :: Title
         return $title === NULL ? NULL : preg_replace('/^rutor\.\w+\s*::\s*/iu', '', $title);
     }
 
-    //torrent-файлы лежат на отдельном адресе
+    // torrent files are served from a separate address
     protected function downloadRequest(string $topicId, string $page): ?Request
     {
         return $this->get('https://d.rutor.info/download/'.rawurlencode($topicId))->follow();
