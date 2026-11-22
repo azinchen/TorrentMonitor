@@ -1,0 +1,32 @@
+# Live tests: tracker host names are the real ones. Adds the two Cloudflare
+# solvers TorrentMonitor can work with.
+services:
+  app:
+    environment:
+      # GitHub is not part of live tests; a closed local port fails at once
+      - TM_UPDATE_API=http://127.0.0.1:9
+      - TM_LIVE=1
+      - TM_SOLVER=${TM_SOLVER:-http://byparr:8191}
+    volumes:
+      - ./secrets:/secrets:ro
+
+  byparr:
+    image: ghcr.io/thephaseless/byparr:latest
+    shm_size: 2gb
+    # the image's own check runs every 15 minutes, which would stall the start
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fs http://127.0.0.1:8191/health > /dev/null"]
+      interval: 5s
+      timeout: 10s
+      retries: 36
+
+  flaresolverr:
+    image: ghcr.io/flaresolverr/flaresolverr:latest
+    environment:
+      - PORT=8192
+      - LOG_LEVEL=info
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8192/health')\""]
+      interval: 5s
+      timeout: 10s
+      retries: 36

@@ -1,0 +1,7 @@
+# Integration tests: tracker host names resolve to the fake server, which answers
+# over TLS with a certificate the application container is told to trust.
+services:
+  fake:
+    networks:
+      default:
+        aliases: [rutracker.org, www.rutracker.org]
