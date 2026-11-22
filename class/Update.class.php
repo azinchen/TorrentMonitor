@@ -5,7 +5,7 @@ class Update
     //файлы и каталоги установки, которые обновление не трогает
     private static $keep = array('config.php', 'data', 'torrents');
     //служебные файлы и каталоги репозитория, которые не нужны в установке
-    private static $skip = array('.git', '.github', '.gitignore', '.gitattributes', '.claude', 'wiki', 'tests', 'tools', 'dist');
+    private static $skip = array('.git', '.github', '.gitignore', '.gitattributes', '.claude', 'wiki', 'tests', 'dist');
 
     private static $NL;
     private static $isCLI;

@@ -100,8 +100,16 @@ function body()
     return $_POST;
 }
 
+// повреждённые или недоступные файлы данных — понятный ответ вместо ошибки PHP
+set_exception_handler(function ($e) {
+    if ($e instanceof StorageException)
+        api_respond(false, $e->getMessage(), null, 503);
+    throw $e;
+});
+
 if (Sys::legacyDatabaseNotice() !== null)
     api_respond(false, Sys::legacyDatabaseNotice(), null, 503);
+Database::checkStorage();
 
 // ---- Auth ------------------------------------------------------------------
 

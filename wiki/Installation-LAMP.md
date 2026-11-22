@@ -12,7 +12,7 @@
 |---|---|
 | Веб-сервер | Apache, nginx или lighttpd |
 | PHP | 8.0 или новее |
-| СУБД | MySQL/MariaDB, PostgreSQL или SQLite |
+| База данных | не нужна: данные хранятся в JSON-файлах |
 
 ### Необходимые модули PHP
 
@@ -20,16 +20,10 @@
 php-ctype php-curl php-iconv php-mbstring php-pdo php-simplexml php-xml php-zip
 ```
 
-Плюс PDO-драйвер для выбранной СУБД:
-
-- MySQL — `php-pdo_mysql`
-- PostgreSQL — `php-pdo_pgsql`
-- SQLite — `php-pdo_sqlite`
-
-Пример установки в Debian/Ubuntu (PHP 8.x + MySQL):
+Пример установки в Debian/Ubuntu:
 
 ```bash
-sudo apt install nginx php-fpm php-curl php-mbstring php-xml php-zip php-mysql mariadb-server
+sudo apt install nginx php-fpm php-curl php-mbstring php-xml php-zip
 ```
 
 ---
@@ -47,84 +41,32 @@ unzip master.zip
 mv TorrentMonitor-master torrentmonitor
 ```
 
-## Шаг 2 — Создать базу данных
+## Шаг 2 — Каталог данных
 
-Схемы для всех трёх СУБД лежат в каталоге `db_schema/`.
+Все настройки, учётные данные трекеров и отслеживаемые темы TorrentMonitor хранит
+в трёх JSON-файлах (`config.json`, `torrents.json`, `state.json`) в каталоге данных.
+База данных не нужна, и файл `config.php` для работы не обязателен.
 
-**MySQL:**
+По умолчанию каталог данных — `data/` внутри каталога TorrentMonitor; он создаётся
+при первом запуске. В файлах лежат пароли **в открытом виде**, поэтому:
 
-```bash
-mysql -u root -p -e "CREATE DATABASE torrentmonitor CHARACTER SET utf8; \
-  CREATE USER 'torrentmonitor'@'localhost' IDENTIFIED BY 'ВАШ_ПАРОЛЬ'; \
-  GRANT ALL ON torrentmonitor.* TO 'torrentmonitor'@'localhost';"
-mysql -u torrentmonitor -p torrentmonitor < /var/www/torrentmonitor/db_schema/mysql.sql
-```
+- лучше вынести каталог за пределы каталога сайта — задайте переменную окружения
+  `TM_DATA_DIR` (для веб-сервера **и** для cron) или создайте `config.php`
+  из `config.php.example` со строкой
+  `Config::write('data.dir', '/var/lib/torrentmonitor');`
+- если каталог остаётся внутри сайта, закройте его в настройках веб-сервера
+  (пример для nginx ниже; для Apache в каталоге автоматически создаётся `.htaccess`);
+- страница **Тестирование** проверяет, что каталог данных не открывается из браузера.
 
-**PostgreSQL:**
+Резервная копия установки — это копия каталога данных.
 
-```bash
-sudo -u postgres createuser -P torrentmonitor
-sudo -u postgres createdb -O torrentmonitor torrentmonitor
-psql -U torrentmonitor torrentmonitor < /var/www/torrentmonitor/db_schema/postgresql.sql
-```
+> Переходите с версии 3.x с базой данных? См. [Обновление](Updating#переход-с-версии-с-базой-данных).
 
-**SQLite** (самый простой вариант, отдельный сервер БД не нужен):
+## Шаг 3 — Необязательный config.php
 
-```bash
-sqlite3 /var/www/torrentmonitor/torrentmonitor.sqlite < /var/www/torrentmonitor/db_schema/sqlite.sql
-```
-
-## Шаг 3 — Настроить подключение к БД
-
-Скопируйте пример конфигурации и раскомментируйте блок своей СУБД:
-
-```bash
-cd /var/www/torrentmonitor
-cp config.php.example config.php
-```
-
-**MySQL:**
-
-```php
-Config::write('db.host', 'localhost');
-Config::write('db.type', 'mysql');
-Config::write('db.charset', 'utf8');
-Config::write('db.port', '3306');
-Config::write('db.basename', 'torrentmonitor');
-Config::write('db.user', 'torrentmonitor');
-Config::write('db.password', 'ВАШ_ПАРОЛЬ');
-```
-
-**PostgreSQL:**
-
-```php
-Config::write('db.host', 'localhost');
-Config::write('db.type', 'pgsql');
-Config::write('db.port', '5432');
-Config::write('db.basename', 'torrentmonitor');
-Config::write('db.user', 'torrentmonitor');
-Config::write('db.password', 'ВАШ_ПАРОЛЬ');
-```
-
-**SQLite** (указывайте **абсолютный** путь к файлу БД):
-
-```php
-Config::write('db.type', 'sqlite');
-Config::write('db.basename', '/var/www/torrentmonitor/torrentmonitor.sqlite');
-```
-
-### Шифрование учётных данных (по желанию)
-
-Если в `config.php` задать ключ шифрования, пароли трекеров и торрент-клиента будут
-храниться в базе в зашифрованном виде (AES-256-GCM):
-
-```php
-Config::write('encryption.key', 'HEX_СТРОКА_64_СИМВОЛА');
-```
-
-Ключ можно сгенерировать командой `openssl rand -hex 32`. Без ключа приложение работает
-как обычно, храня значения в открытом виде. Ключ не меняйте и не теряйте — без него
-зашифрованные учётные данные прочитать нельзя.
+`config.php` нужен, только если требуется одна из настроек из `config.php.example`:
+другой каталог данных, путь к CLI-интерпретатору PHP для `POST /api/run`
+или число одновременных запросов к трекерам.
 
 ## Шаг 4 — Права на файлы
 
@@ -151,6 +93,11 @@ server {
 
     location / {
         try_files $uri $uri/ /index.php?$args;
+    }
+
+    # каталог данных содержит пароли
+    location ^~ /data/ {
+        deny all;
     }
 
     location ~ \.php$ {

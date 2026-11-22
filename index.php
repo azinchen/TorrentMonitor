@@ -15,7 +15,7 @@ try
 {
     $storageProblem = Sys::legacyDatabaseNotice();
     if ($storageProblem === NULL)
-        Database::getSetting('auth');
+        Database::checkStorage();
 }
 catch (StorageException $e)
 {

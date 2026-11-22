@@ -27,21 +27,24 @@ Extra arguments go to PHPUnit: `tests/run.sh integration --filter Cloudflare`.
 
 `tests/env/compose.yml` + `compose.offline.yml`:
 
-- **app** – a copy of the working tree served by PHP, with a fresh SQLite database.
-  The repository is mounted read-only; tests cannot write into it.
+- **app** – a copy of the working tree served by PHP, with an empty data directory
+  (`TM_DATA_DIR=/data`). The repository is mounted read-only; tests cannot write into it.
 - **fake** – a fake internet: rutracker.org (login, topic page, torrent download,
   optional Cloudflare challenge), the GitHub Releases API with a release archive,
   and a FlareSolverr/Byparr-compatible solver. The tracker name resolves to this
   container and is served over TLS with a certificate created at start.
 - **qbittorrent**, **transmission** – real clients, to check what TorrentMonitor
   adds to them and removes from them.
+- **mariadb**, **postgres** – hold old-format databases for the tests of
+  `tools/convert-db.php` (the SQLite one is a file). The schemas of version 3.3.6
+  are in `tests/Fixtures/legacy/`.
 
 Tests change the behaviour of the fake through `Env::fake()` and read the state of
 the application through `AppState`. `AppState` is the only class that knows how
 the application stores data, so the tests survive a storage change.
 
-Not covered yet: Deluge, SynologyDS, TorrServer, notifications, MySQL and
-PostgreSQL, every tracker except rutracker.org (offline) and kinozal (live only).
+Not covered yet: Deluge, SynologyDS, TorrServer, notifications, every tracker
+except rutracker.org (offline) and kinozal (live only).
 
 ## Secrets
 

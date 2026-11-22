@@ -64,7 +64,7 @@ cmd_unit() {
     build_images
     for v in "${versions[@]}"; do
         say "unit tests, PHP $v"
-        docker run --rm -v "$root":/src:ro "tm-tests:php$v" phpunit -c /src/tests/phpunit.xml --testsuite unit "$@"
+        docker run --rm --user 1000:1000 -v "$root":/src:ro "tm-tests:php$v" phpunit -c /src/tests/phpunit.xml --testsuite unit "$@"
     done
 }
 

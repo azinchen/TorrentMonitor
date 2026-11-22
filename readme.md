@@ -53,8 +53,8 @@
 
 ### Требования для установки:
 * Веб-сервер (Apache, nginx, lighttpd)
-* PHP 8.0 или выше с расширениями cURL, PDO и zip
-* MySQL, PostgreSQL, SQLite
+* PHP 8.0 или выше с расширениями cURL, mbstring, SimpleXML и zip
+* База данных не нужна: настройки и темы хранятся в JSON-файлах в каталоге `data/`
 
 ### Docker hub:
 https://hub.docker.com/r/alfonder/torrentmonitor

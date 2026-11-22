@@ -5,6 +5,14 @@ include_once dirname(__FILE__).'/Storage.class.php';
 //но данные теперь лежат в JSON-файлах (см. Storage): база данных не используется.
 class Database
 {
+    //читает все файлы данных; StorageException, если какой-то из них повреждён или недоступен
+    public static function checkStorage()
+    {
+        Storage::config()->read();
+        Storage::torrents()->read();
+        Storage::state()->read();
+    }
+
     // ------------------------------------------------------------------ helpers
 
     private static function now()

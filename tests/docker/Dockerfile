@@ -3,9 +3,10 @@
 ARG PHP_VERSION=8.5
 FROM php:${PHP_VERSION}-cli-alpine
 
-RUN apk add --no-cache libzip nginx openssl curl \
- && apk add --no-cache --virtual .build $PHPIZE_DEPS libzip-dev \
- && docker-php-ext-install -j"$(nproc)" zip \
+# pdo_mysql and pdo_pgsql are needed only by the tests of tools/convert-db.php
+RUN apk add --no-cache libzip libpq nginx openssl curl \
+ && apk add --no-cache --virtual .build $PHPIZE_DEPS libzip-dev postgresql-dev \
+ && docker-php-ext-install -j"$(nproc)" zip pdo_mysql pdo_pgsql \
  && apk del .build \
  && curl -fsSL -o /usr/local/bin/phpunit https://phar.phpunit.de/phpunit-9.6.phar \
  && chmod +x /usr/local/bin/phpunit \

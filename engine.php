@@ -23,6 +23,16 @@ function getTimestamp()
 if (Sys::legacyDatabaseNotice() !== NULL)
     die(Sys::legacyDatabaseNotice()."\r\n");
 
+//повреждённые или недоступные файлы данных: сообщаем и ничего не делаем
+try
+{
+    Database::checkStorage();
+}
+catch (StorageException $e)
+{
+    die($e->getMessage()."\r\n");
+}
+
 $debug = Database::getSetting('debug');
 $autoUpdate = Database::getSetting('autoUpdate');
 
