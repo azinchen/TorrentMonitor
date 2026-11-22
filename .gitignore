@@ -1,1 +1,19 @@
 .DS_Store
+
+# local configuration and data
+/config.php
+/laststart.txt
+/release.cache.json
+/torrents/*.torrent
+/*.sqlite
+/*.sqlite-journal
+/logs/
+/tmp/
+/update.zip
+
+# release archives built by tools/release.sh
+/dist/
+
+# test environment secrets and recordings
+/tests/env/secrets/*
+!/tests/env/secrets/*.example

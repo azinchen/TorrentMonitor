@@ -138,7 +138,8 @@ class Deluge
     }
 
     #удаляем раздачу из torrent-клиента (без добавления новой)
-    public static function remove($hash)
+    //$deleteData - удалить вместе с раздачей скачанные файлы
+    public static function remove($hash, $deleteData = FALSE)
     {
         $settings = Database::getAllSetting();
         foreach ($settings as $row)
@@ -167,7 +168,7 @@ class Deluge
                     return array('status' => FALSE, 'msg' => 'connect_fail');
             }
 
-            self::request($torrentAddress, $cookieFile, 'core.remove_torrent', array($hash, ! empty($deleteOldFiles)));
+            self::request($torrentAddress, $cookieFile, 'core.remove_torrent', array($hash, (bool)$deleteData));
 
             Database::clearWarnings('Deluge');
             return array('status' => TRUE);

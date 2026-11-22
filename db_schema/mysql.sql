@@ -143,7 +143,8 @@ VALUES
 	(41,'flaresolverrUrl',''),
 	(42,'ApiKey',''),
 	(43,'qbitCategory',''),
-	(44,'cf_userAgent','');
+	(44,'cf_userAgent',''),
+	(45,'deleteFilesOnRemove','0');
 
 UNLOCK TABLES;
 

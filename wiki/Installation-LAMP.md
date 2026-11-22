@@ -11,7 +11,7 @@
 | Компонент | Варианты |
 |---|---|
 | Веб-сервер | Apache, nginx или lighttpd |
-| PHP | 7.4 или новее |
+| PHP | 8.0 или новее |
 | СУБД | MySQL/MariaDB, PostgreSQL или SQLite |
 
 ### Необходимые модули PHP
@@ -36,11 +36,13 @@ sudo apt install nginx php-fpm php-curl php-mbstring php-xml php-zip php-mysql m
 
 ## Шаг 1 — Скачать TorrentMonitor
 
-Скачайте последний релиз с GitHub и распакуйте в каталог веб-сервера:
+Скачайте архив последней версии со страницы [Releases](https://github.com/azinchen/TorrentMonitor/releases)
+и распакуйте в каталог веб-сервера. Пока версий на этой странице нет, возьмите
+текущее состояние репозитория:
 
 ```bash
 cd /var/www
-wget https://github.com/ElizarovEugene/TorrentMonitor/archive/refs/heads/master.zip
+wget https://github.com/azinchen/TorrentMonitor/archive/refs/heads/master.zip
 unzip master.zip
 mv TorrentMonitor-master torrentmonitor
 ```

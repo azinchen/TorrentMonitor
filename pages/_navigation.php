@@ -24,7 +24,7 @@
             <div class="navigation-badge"><span x-text="countNews"></span></div>
         </template>
     </button>
-    <a class="btn" href="https://github.com/ElizarovEugene/TorrentMonitor/wiki" target="_blank" rel="noopener"><svg><use href="assets/img/sprite.svg#question" /></svg>Справка</a>
+    <a class="btn" href="<?= htmlspecialchars(Release::wikiUrl(), ENT_QUOTES) ?>" target="_blank" rel="noopener"><svg><use href="assets/img/sprite.svg#question" /></svg>Справка</a>
     <div class="navigation-sep"></div>
     <div class="navigation-info">Синхронизация: <br><?= $lastStartTime ?></div>
 </nav>

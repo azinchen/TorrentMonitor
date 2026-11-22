@@ -98,8 +98,8 @@ sqlite3 torrentmonitor.sqlite \
 
 ## Не нашли ответ?
 
-- Раздел **Новости** в интерфейсе TM — там сообщают об известных проблемах трекеров.
+- [Список версий](https://github.com/azinchen/TorrentMonitor/releases) — исправления модулей трекеров выходят с новыми версиями.
 - [Вики Docker-проекта](https://github.com/alfonder/torrentmonitor-dockerized/wiki/Troubleshooting) —
   проблемы, специфичные для контейнера.
 - [Телеграм-чат проекта](https://t.me/joinchat/DFRbKQvV_FQA8TatJjlWRw).
-- [Issues на GitHub](https://github.com/ElizarovEugene/TorrentMonitor/issues).
+- [Issues на GitHub](https://github.com/azinchen/TorrentMonitor/issues).

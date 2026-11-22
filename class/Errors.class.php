@@ -29,7 +29,6 @@ class Errors
 
 		Errors::write('update', 'Невозможно проверить обновление системы.');
         Errors::write('update_fail', 'Невозможно обновить систему.');
-    	Errors::write('update_news', 'Невозможно проверить новости.');
 
         Errors::write('api_invalid_token',   'API: получен запрос с неверным токеном.');
         Errors::write('api_bad_event_type',  'API: получен неподдерживаемый тип события.');

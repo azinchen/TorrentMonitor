@@ -178,6 +178,20 @@ curl -X DELETE "http://ВАШ_АДРЕС_ТМ/api/torrents/15" \
   -H "Authorization: Bearer ВАШ_КЛЮЧ"
 ```
 
+Необязательные параметры запроса:
+
+| Параметр | Значение |
+|---|---|
+| `removeFromClient=1` | удалить раздачу также из торрент-клиента |
+| `deleteData=1` / `deleteData=0` | удалять ли скачанные файлы. Если параметр не указан, действует настройка «Удалять скачанные файлы при удалении раздачи из torrent-клиента». Работает только вместе с `removeFromClient=1` |
+
+```bash
+curl -X DELETE "http://ВАШ_АДРЕС_ТМ/api/torrents/15?removeFromClient=1&deleteData=1" \
+  -H "Authorization: Bearer ВАШ_КЛЮЧ"
+```
+
+Удаление файлов поддерживают Transmission, qBittorrent и Deluge.
+
 ## POST /api/run — запустить проверку
 
 Запускает `engine.php` в фоне — то же, что запуск проверки из интерфейса.

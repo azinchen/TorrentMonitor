@@ -1,8 +1,11 @@
 # TorrentMonitor
 Приложение мониторит изменения на популярных торрент-трекерах рунета и автоматизирует закачку обновлений (сериалы, раздачи которые ведутся *путем добавления новых серий/новых версий*, перезалитые торрент-файлы и т.д.)
 
-### Страница проекта:
-http://tormon.ru
+Это продолжение проекта [ElizarovEugene/TorrentMonitor](https://github.com/ElizarovEugene/TorrentMonitor) Евгения Елизарова.
+
+### Документация и версии:
+* [Вики](https://github.com/azinchen/TorrentMonitor/wiki)
+* [Версии и список изменений](https://github.com/azinchen/TorrentMonitor/releases)
 
 ### Список возможностей приложения:
 - Слежение за темами
@@ -50,13 +53,8 @@ http://tormon.ru
 
 ### Требования для установки:
 * Веб-сервер (Apache, nginx, lighttpd)
-* PHP (5.2 или выше) с поддержкой cURL и PDO
+* PHP 8.0 или выше с расширениями cURL, PDO и zip
 * MySQL, PostgreSQL, SQLite
-
-### Technical Details
-* Minimum PHP Version: 7.4.0
-* Alpine Linux Support: 3.15+ (includes PHP 7.4.33)
-* Полная совместимость с PHP 7.4+ и PHP 8+
 
 ### Docker hub:
 https://hub.docker.com/r/alfonder/torrentmonitor
@@ -70,4 +68,5 @@ https://hub.docker.com/r/alfonder/torrentmonitor
  ![Screenshot5](https://habrastorage.org/webt/nz/n9/zd/nzn9zdlnhje6blm7dsbk7nnzxnk.png "Screenshot5")
  ![Screenshot6](https://habrastorage.org/webt/ta/wl/pz/tawlpzlptcv1frusl8lv_tyyc-u.png "Screenshot6")
 
-
+### Лицензия:
+[MIT](LICENSE). Сведения о стороннем коде — в файле [NOTICE](NOTICE).

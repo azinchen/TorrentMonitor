@@ -1,4 +1,6 @@
 <?php
+include_once dirname(__FILE__).'/Release.class.php';
+
 class Sys
 {
     //URL для проверки наличия подключения к интернету
@@ -110,84 +112,26 @@ class Sys
         return $ver;
     }
 
-    //проверка обновлений системы
+    //проверка обновлений системы: есть ли в GitHub Releases выпуск новее установленного
     public static function checkUpdate()
     {
-        //получаем страницу
-        $page = Sys::getUrlContent(
-            array(
-                'type'           => 'GET',
-                'returntransfer' => 1,
-                'url'            => 'https://xml.tormon.ru/version.xml',
-            )
-        );
-
-        //читаем xml
-        $xml = @simplexml_load_string($page);
-        $dir = dirname(__FILE__);
-        $dir = str_replace('class', '', $dir);
-        $version = json_decode(file_get_contents($dir.'version.txt'));
-
-        if (false !== $xml)
-        {
-            if ($version->system < $xml->current_version)
-                return TRUE;
-            elseif ($version->database < $xml->current_version)
-                return TRUE;
-            else
-                return FALSE;
-        }
+        return Release::isNewer(Release::latest());
     }
 
+    //номер последней выпущенной версии
     public static function getLatestVersion()
     {
-        $page = Sys::getUrlContent(
-            array(
-                'type'           => 'GET',
-                'returntransfer' => 1,
-                'url'            => 'https://xml.tormon.ru/version.xml',
-            )
-        );
-        $xml = @simplexml_load_string($page);
-        if (false !== $xml && isset($xml->current_version))
-            return strval($xml->current_version);
-        return NULL;
+        $release = Release::latest();
+        return is_array($release) ? $release['version'] : NULL;
     }
 
+    //описание выпуска указанной версии (берётся из GitHub Releases)
     public static function getChangelog($version)
     {
-        if (empty($version))
+        $release = Release::latest();
+        if (empty($version) || ! is_array($release) || $release['version'] != Release::normalizeVersion($version))
             return '';
-        $txt = Sys::getUrlContent(
-            array(
-                'type'           => 'GET',
-                'returntransfer' => 1,
-                'url'            => 'https://raw.githubusercontent.com/ElizarovEugene/TorrentMonitor/master/changelog.txt',
-            )
-        );
-        if (empty($txt))
-            return '';
-        $lines = explode("\n", $txt);
-        $found = false;
-        $result = [];
-        foreach ($lines as $line)
-        {
-            if ( ! $found)
-            {
-                if (strpos($line, '- ' . $version . ':') !== false)
-                {
-                    $found = true;
-                    $result[] = rtrim($line);
-                }
-            }
-            else
-            {
-                if (preg_match('/^\d{2}\.\d{2}\.\d{4}\s+-\s+\d+/', trim($line)))
-                    break;
-                $result[] = rtrim($line);
-            }
-        }
-        return trim(implode("\n", $result));
+        return $release['notes'];
     }
 
     //формируем curl-опции прокси для заданного url (общие настройки + потрекерный ext_proxy)
@@ -671,10 +615,14 @@ class Sys
 
     //удаляем раздачу из torrent-клиента (вызывается при удалении темы из ТМ).
     //best-effort: ошибка не блокирует удаление темы из ТМ, только пишется в варнинги.
-    public static function removeFromClient($hash)
+    //$deleteData: TRUE/FALSE - удалять ли скачанные файлы, NULL - как задано в настройке deleteFilesOnRemove.
+    public static function removeFromClient($hash, $deleteData = NULL)
     {
         if (empty($hash) || empty(Database::getSetting('useTorrent')))
             return;
+
+        if ($deleteData === NULL)
+            $deleteData = ! empty(Database::getSetting('deleteFilesOnRemove'));
 
         $torrentClient = Database::getSetting('torrentClient');
         if (empty($torrentClient))
@@ -683,7 +631,7 @@ class Sys
         $dir = dirname(__FILE__).'/';
         include_once $dir.$torrentClient.'.class.php';
 
-        $status = call_user_func($torrentClient.'::remove', $hash);
+        $status = call_user_func($torrentClient.'::remove', $hash, (bool)$deleteData);
         if (empty($status['status']))
             Errors::setWarnings($torrentClient, ! empty($status['msg']) ? $status['msg'] : 'unknown');
     }
@@ -822,36 +770,6 @@ class Sys
         		$i++;
             }
         }
-    }
-
-    //получаем важные новости и кладём в БД
-    public static function getNews()
-    {
-        //получаем страницу
-        $page = Sys::getUrlContent(
-            array(
-                'type'           => 'GET',
-                'returntransfer' => 1,
-                'url'            => 'https://xml.tormon.ru/news.xml',
-            )
-        );
-
-        //читаем xml
-        $page = @simplexml_load_string($page);
-        if (!empty($page) && isset($page->news->id) && is_countable($page->news->id))
-        {
-            for ($i=0; $i<count($page->news->id); $i++)
-            {
-                if ( ! Database::checkNewsExist($page->news->id[$i]))
-                {
-                    Database::insertNews($page->news->id[$i], $page->news->text[$i]);
-                    Notification::sendNotification('news', date('r'), 0, $page->news->text[$i], 0);
-                }
-            }
-            Database::clearWarnings('TorrentMonitor');
-        }
-        else
-            Errors::setWarnings('TorrentMonitor', 'update_news');
     }
 
     //ф-ция преобразования true/false в int

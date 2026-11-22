@@ -589,6 +589,7 @@ if (isset($_POST['action']))
         Database::updateSettings('pathToDownload', Sys::checkPath($_POST['pathToDownload']));
         Database::updateSettings('deleteDistribution', Sys::strBoolToInt($_POST['deleteDistribution']));
         Database::updateSettings('deleteOldFiles', Sys::strBoolToInt($_POST['deleteOldFiles']));
+        Database::updateSettings('deleteFilesOnRemove', Sys::strBoolToInt($_POST['deleteFilesOnRemove'] ?? 0));
         Database::updateSettings('qbitCategory', $_POST['qbitCategory'] ?? '');
 
         $return['error'] = FALSE;

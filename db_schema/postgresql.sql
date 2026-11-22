@@ -117,6 +117,7 @@ INSERT INTO settings VALUES (41, 'flaresolverrUrl', '');
 INSERT INTO settings VALUES (42, 'ApiKey', '');
 INSERT INTO settings VALUES (43, 'qbitCategory', '');
 INSERT INTO settings VALUES (44, 'cf_userAgent', '');
+INSERT INTO settings VALUES (45, 'deleteFilesOnRemove', '0');
 
 CREATE TABLE "temp" (
   "id" INTEGER PRIMARY KEY NOT NULL,

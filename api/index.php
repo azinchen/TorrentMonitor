@@ -275,11 +275,26 @@ elseif ($resource === 'torrents' && $httpMethod === 'DELETE')
     if (!$id)
         api_respond(false, 'Укажите ID: DELETE /api/torrents/{id}', null, 422);
 
-    if (!is_array(Database::getTorrent($id)))
+    $torrent = Database::getTorrent($id);
+    if (!is_array($torrent))
         api_respond(false, 'Тема не найдена.', null, 404);
 
+    // ?removeFromClient=1 — удалить раздачу и из торрент-клиента;
+    // ?deleteData=1|0 — удалять ли скачанные файлы (по умолчанию — как в настройках)
+    $flag = function ($name) {
+        if (!isset($_GET[$name]))
+            return null;
+        return in_array(strtolower((string)$_GET[$name]), ['1', 'true', 'yes'], true);
+    };
+    $removedFromClient = false;
+    if ($flag('removeFromClient') && !empty($torrent[0]['hash']))
+    {
+        Sys::removeFromClient($torrent[0]['hash'], $flag('deleteData'));
+        $removedFromClient = true;
+    }
+
     Database::deletItem($id);
-    api_respond(true, 'Тема удалена.');
+    api_respond(true, $removedFromClient ? 'Тема удалена, раздача удалена из торрент-клиента.' : 'Тема удалена.');
 }
 
 // ---- POST /api/run ---------------------------------------------------------

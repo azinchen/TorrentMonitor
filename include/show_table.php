@@ -21,6 +21,7 @@ if (isset($_COOKIE['order']) && isset($_COOKIE['orderDir']))
     }
 }
 $torrents_list = Database::getTorrentsList($order, $orderDir);
+$deleteFilesOnRemove = Database::getSetting('deleteFilesOnRemove');
 ?>
 <?php if (empty($torrents_list)) { ?>
     <div class="torrents-fs --empty"><div>Нет тем для мониторинга</div></div>
@@ -172,6 +173,9 @@ $torrents_list = Database::getTorrentsList($order, $orderDir);
                         <div class="toggler" :class="removeFromClient && '--done'"></div> Удалить из торрент-клиента
                     </div>
                 </label>
+                <?php if ( ! empty($deleteFilesOnRemove)) { ?>
+                <div class="form-help" x-show="removeFromClient">Скачанные файлы тоже будут удалены (включено в настройках торрент-клиента).</div>
+                <?php } ?>
             </div>
 
             <div class="modal__buttons">

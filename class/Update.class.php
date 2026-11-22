@@ -1,257 +1,188 @@
 <?php
-    
-class Update {
-    protected static $systemFail;
-    protected static $databaseFail;
-    protected static $isCLI;
+//Обновление системы из архива выпуска GitHub Releases.
+class Update
+{
+    //файлы и каталоги установки, которые обновление не трогает
+    private static $keep = array('config.php', 'config.xml', 'torrents', 'laststart.txt', 'release.cache.json');
+    //служебные файлы и каталоги репозитория, которые не нужны в установке
+    private static $skip = array('.git', '.github', '.gitignore', '.gitattributes', '.claude', 'wiki', 'tests', 'tools', 'dist');
 
-    protected static $versionSystem;
-    protected static $versionDatabase;
-    protected static $updVersion;
-
-    protected static $isUpdated;
-    protected static $notNeeded;
+    private static $NL;
+    private static $isCLI;
 
     private static function delTree($dir)
     {
-        $files = array_diff(scandir($dir), array('.','..')); 
+        if ( ! is_dir($dir))
+            return TRUE;
+        $files = array_diff(scandir($dir), array('.', '..'));
         foreach ($files as $file)
-            (is_dir($dir.'/'.$file)) ? Update::delTree($dir.'/'.$file) : unlink($dir.'/'.$file);
-        return rmdir($dir); 
+            (is_dir($dir.'/'.$file) && ! is_link($dir.'/'.$file)) ? Update::delTree($dir.'/'.$file) : unlink($dir.'/'.$file);
+        return rmdir($dir);
     }
-    
-    private static function quary($query)
+
+    //выводим строку простого текста: в браузере экранируем, в консоли печатаем как есть
+    private static function say($text)
     {
-        $error = Database::updateQuery($query);
-        if (is_string($error))
-        {
-            Update::$databaseFail = TRUE;
-            echo $error.'<br />'."\r\n";
-        }
-        else
-            Update::$databaseFail = FALSE;
+        echo (Update::$isCLI ? $text : nl2br(htmlspecialchars($text))).Update::$NL;
     }
-    
+
+    //каталог с файлами системы внутри распакованного архива: либо сам архив,
+    //либо единственный вложенный каталог (так упакованы архивы GitHub)
+    private static function findSourceRoot($dir)
+    {
+        if (is_file($dir.'/version.txt') && is_file($dir.'/index.php'))
+            return $dir;
+
+        $entries = array_values(array_diff(scandir($dir), array('.', '..')));
+        if (count($entries) == 1 && is_dir($dir.'/'.$entries[0]))
+        {
+            $nested = $dir.'/'.$entries[0];
+            if (is_file($nested.'/version.txt') && is_file($nested.'/index.php'))
+                return $nested;
+        }
+        return NULL;
+    }
+
+    //копируем файлы выпуска поверх установки, возвращаем список файлов, которые не удалось записать
+    private static function copyTree($from, $to, $top = TRUE)
+    {
+        $failed = array();
+        foreach (array_diff(scandir($from), array('.', '..')) as $entry)
+        {
+            if ($top && in_array($entry, Update::$skip))
+                continue;
+            //настройки пользователя не перезаписываем, но создаём, если их ещё нет
+            if ($top && in_array($entry, Update::$keep) && file_exists($to.'/'.$entry))
+                continue;
+            //version.txt записывается последним, после успешного копирования
+            if ($top && $entry == 'version.txt')
+                continue;
+
+            $src = $from.'/'.$entry;
+            $dst = $to.'/'.$entry;
+            if (is_dir($src))
+            {
+                if ( ! is_dir($dst) && ! @mkdir($dst, 0755, TRUE))
+                {
+                    $failed[] = $entry.'/';
+                    continue;
+                }
+                foreach (Update::copyTree($src, $dst, FALSE) as $file)
+                    $failed[] = $entry.'/'.$file;
+            }
+            elseif ( ! @copy($src, $dst))
+                $failed[] = $entry;
+        }
+        return $failed;
+    }
+
+    private static function fail($text)
+    {
+        Update::say($text);
+        Errors::setWarnings('system', 'update_fail');
+        return FALSE;
+    }
+
     public static function main()
     {
-        if (Sys::checkUpdate())
+        Update::$isCLI = (php_sapi_name() == 'cli');
+        Update::$NL = Update::$isCLI ? "\r\n" : '<br />'."\r\n";
+        $root = rtrim(str_replace('\\', '/', dirname(dirname(__FILE__))), '/');
+
+        //сведения о выпуске всегда запрашиваем заново, не из кеша
+        $release = Release::latest(TRUE);
+        $current = Release::currentVersion();
+        Update::say('Текущая версия системы: '.$current);
+
+        if ( ! is_array($release))
         {
-            $page = Sys::getUrlContent(
-                array(
-                    'type'           => 'GET',
-                    'returntransfer' => 1,
-                    'url'            => 'https://xml.tormon.ru/update.xml',
-                )
-            );
-    
-            (php_sapi_name() == 'cli') ? Update::$isCLI = TRUE : Update::$isCLI = FALSE;
-    
-            $xml_page = @simplexml_load_string($page);
-            $ROOTPATH = str_replace('class', '', dirname(__FILE__));
-            $dbType = Config::read('db.type');
-
-            if ($xml_page === false || !isset($xml_page->update))
-            {
-                Errors::setWarnings('system', 'update_fail');
-                echo 'Не удалось загрузить update.xml' . "\r\n" . '<br />';
-                return;
-            }
-
-            $count = is_countable($xml_page->update) ? count($xml_page->update) - 1 : 0;
-            
-            $version = json_decode(file_get_contents($ROOTPATH.'version.txt'));
-            Update::$versionSystem = $version->system;
-            Update::$versionDatabase = $version->database;
-    
-            echo 'Текущая версия системы: '.$version->system."\r\n".'<br />';
-            echo 'Текущая версия базы данных: '.$version->database."\r\n".'<br />';
-            for ($i=$count; $i>=0; $i--)
-            {
-                Update::$updVersion = strval($xml_page->update[$i]->version);
-                $description = $xml_page->update[$i]->description;
-                $files = $xml_page->update[$i]->files;
-                $queryes = $xml_page->update[$i]->$dbType;
-                $queryes_common = $xml_page->update[$i]->queryes;
-                $deleteFolders = $xml_page->update[$i]->deleteFolders;
-                $createFolders = $xml_page->update[$i]->createFolders;
-    
-                if (Update::$versionSystem < Update::$updVersion)
-                {
-                    Update::$isUpdated = FALSE;
-                    echo 'Актуальная версия: ' . Update::$updVersion . "\r\n" . '<br />';
-                    echo 'Changelog for ' . Update::$updVersion . ':' . "\r\n" . '<br />';
-                    echo $description . "\r\n" . '<br />';
-    
-                    $file = Sys::getUrlContent(
-                        array(
-                            'type' => 'GET',
-                            'returntransfer' => 1,
-                            'follow' => 1,
-                            'url' => 'https://github.com/ElizarovEugene/TorrentMonitor/archive/refs/heads/master.zip',
-                        )
-                    );
-    
-                    #Обновление файлов системы
-                    if (!empty($file))
-                    {
-                        if (file_put_contents($ROOTPATH . 'master.zip', $file))
-                        {
-                            $zip = new ZipArchive;
-                            if ($zip->open($ROOTPATH . 'master.zip') === TRUE)
-                            {
-    
-                                if (isset($deleteFolders->folder) && !empty($deleteFolders->folder))
-                                {
-                                    foreach ($deleteFolders->folder as $folder)
-                                    {
-                                        Update::delTree($ROOTPATH . $folder);
-                                    }
-                                }
-                                if (isset($createFolders->create) && !empty($createFolders->create))
-                                {
-                                    foreach ($createFolders->create as $folder)
-                                    {
-                                        if (!is_dir($ROOTPATH . $folder) && !mkdir($ROOTPATH . $folder, 0777, true))
-                                        {
-                                            echo 'Не удалось создать директорию: ' . $folder . ', обновление прервано.' . "\r\n" . '<br />';
-                                            Update::$systemFail = TRUE;
-                                        }
-                                        else
-                                        {
-                                            Update::$systemFail = FALSE;
-                                            Update::$isUpdated = TRUE;
-                                        }
-                                    }
-                                }
-    
-                                $zip->extractTo($ROOTPATH . 'tmp');
-                                $zip->close();
-                                unlink($ROOTPATH . 'master.zip');
-    
-                                if (isset($files->file) && !empty($files->file))
-                                {
-                                    foreach ($files->file as $file)
-                                    {
-                                        if (!copy($ROOTPATH . 'tmp/TorrentMonitor-master/' . $file, $ROOTPATH . $file))
-                                        {
-                                            echo 'Не удалось скопировать файл: ' . $file . ', обновление прервано.' . "\r\n" . '<br />';
-                                            Update::$systemFail = TRUE;
-                                        }
-                                        else
-                                        {
-                                            echo 'Файл: ' . $file . ' обновлён.' . "\r\n" . '<br />';
-                                            Update::$systemFail = FALSE;
-                                            Update::$isUpdated = TRUE;
-                                        }
-                                    }
-    
-                                    if (!Update::$systemFail)
-                                        Update::$versionSystem = Update::$updVersion;
-                                }
-                                else
-                                    Update::$versionSystem = Update::$updVersion;
-    
-                                Update::delTree($ROOTPATH . 'tmp');
-                            }
-                            else
-                            {
-                                echo 'Не могу разархивировать master.zip'."\r\n".'<br />';
-                                Update::$systemFail = TRUE;
-                            }
-                        }
-                        else
-                        {
-                            echo 'Не могу сохранить master.zip'."\r\n".'<br />';
-                            Update::$systemFail = TRUE;
-                        }
-                    }
-                    else
-                    {
-                        echo 'Не удалось скачать master.zip'."\r\n".'<br />';
-                        Update::$systemFail = TRUE;
-                    }
-                }
-                else
-                    Update::$notNeeded = TRUE;
-    
-                if (!Update::$systemFail)
-                {
-                    #Обновление базы данных
-                    if (Update::$versionDatabase < Update::$updVersion)
-                    {
-                        if (isset($queryes->query) && ! empty($queryes->query))
-                        {
-                            foreach($queryes->query as $query)
-                            {
-                                Update::quary($query);
-                            }
-                        }
-                        else
-                            Update::$versionDatabase = Update::$updVersion;
-                                    
-                        if (isset($queryes_common->query) && ! empty($queryes_common->query) )
-                        {
-                            foreach($queryes_common->query as $query)
-                            {
-                                Update::quary($query);
-                            }
-                        }
-                        else
-                            Update::$versionDatabase = Update::$updVersion;
-        
-                        if (!Update::$databaseFail)
-                        {
-                            Update::$versionDatabase = Update::$updVersion;
-                            Update::$isUpdated = TRUE;
-                        }
-                    }
-                    else
-                        Update::$notNeeded = TRUE;
-                }
-            }
-
-            $version = NULL;
-            $version['system'] = strval(Update::$versionSystem);
-            $version['database'] = strval(Update::$versionSystem);
-            file_put_contents($ROOTPATH . 'version.txt', json_encode($version));
-    
-            if (Update::$isUpdated)
-            {
-                $changelog = Sys::getChangelog(Update::$updVersion);
-                $msg = 'Обновление до версии: ' . Update::$updVersion . ' выполнено успешно.' . "\r\n" . '<br />';
-                echo $msg;
-                $serverAddress = Database::getSetting('serverAddress');
-                Database::clearWarnings('system');
-                Database::setUpdateNotification(0);
-                $newsId = 'updated_' . Update::$updVersion;
-                if ( ! Database::checkNewsExist($newsId))
-                {
-                    if ( ! empty($changelog))
-                    {
-                        $lines = explode("\n", $changelog);
-                        $htmlLines = [];
-                        foreach ($lines as $i => $line)
-                            $htmlLines[] = ($i === 0) ? '<b>' . htmlspecialchars($line) . '</b>' : htmlspecialchars($line);
-                        $newsHtml = implode('<br />', $htmlLines);
-                    }
-                    else
-                        $newsHtml = '<b>Обновление до версии ' . htmlspecialchars(Update::$updVersion) . ' выполнено успешно.</b>';
-                    Database::insertNews($newsId, $newsHtml);
-                }
-                $notifyMsg = 'Обновление до версии: ' . Update::$updVersion . ' выполнено успешно.';
-                if ( ! empty($changelog))
-                    $notifyMsg .= "\n\n" . $changelog;
-                if (Update::$isCLI)
-                    Notification::sendNotification('news', date('r'), 0, $notifyMsg, 0);
-                else
-                    echo 'Перейти на <a href="' . $serverAddress . '">главную страницу</a>.<br />';
-            }
-            else
-            {
-                Errors::setWarnings('system', 'update_fail');
-                echo 'Обновление до версии: ' . Update::$updVersion . ' <b>не</b> выполнено.'  . "\r\n" . '<br />';
-            }
+            Update::say('Не удалось получить сведения о выпусках или выпусков ещё нет: '.Release::pageUrl());
+            return FALSE;
         }
+
+        Update::say('Актуальная версия: '.$release['version']);
+        if ( ! Release::isNewer($release))
+        {
+            Update::say('Обновление не требуется.');
+            return TRUE;
+        }
+
+        if ( ! empty($release['notes']))
+            Update::say($release['notes']);
+
+        if ( ! class_exists('ZipArchive'))
+            return Update::fail('Для обновления необходимо расширение PHP zip.');
+        if (empty($release['zip']))
+            return Update::fail('В выпуске нет архива для обновления.');
+        if ( ! is_writable($root) || ! is_writable($root.'/version.txt'))
+            return Update::fail('Нет прав на запись в каталог системы, обновление прервано.');
+
+        $archive = $root.'/update.zip';
+        $tmp = $root.'/tmp_update';
+
+        if ( ! Release::download($release['zip'], $archive))
+            return Update::fail('Не удалось скачать архив выпуска.');
+
+        Update::delTree($tmp);
+        $zip = new ZipArchive;
+        if ($zip->open($archive) !== TRUE || ! $zip->extractTo($tmp))
+        {
+            @unlink($archive);
+            Update::delTree($tmp);
+            return Update::fail('Не удалось распаковать архив выпуска.');
+        }
+        $zip->close();
+        @unlink($archive);
+
+        $source = Update::findSourceRoot($tmp);
+        if ($source === NULL)
+        {
+            Update::delTree($tmp);
+            return Update::fail('Архив выпуска не содержит файлов системы.');
+        }
+
+        $failed = Update::copyTree($source, $root);
+        Update::delTree($tmp);
+
+        if ( ! empty($failed))
+        {
+            foreach ($failed as $file)
+                Update::say('Не удалось записать файл: '.$file);
+            return Update::fail('Обновление до версии: '.$release['version'].' не выполнено.');
+        }
+
+        $version = array('system' => $release['version'], 'database' => $release['version']);
+        if (file_put_contents($root.'/version.txt', json_encode($version)) === FALSE)
+            return Update::fail('Не удалось записать version.txt.');
+
+        if (function_exists('opcache_reset'))
+            @opcache_reset();
+
+        $msg = 'Обновление до версии: '.$release['version'].' выполнено успешно.';
+        Update::say($msg);
+        Database::clearWarnings('system');
+        Database::setUpdateNotification(0);
+
+        $newsId = 'updated_'.$release['version'];
+        if ( ! Database::checkNewsExist($newsId))
+        {
+            $newsHtml = '<b>'.htmlspecialchars($msg).'</b>';
+            if ( ! empty($release['notes']))
+                $newsHtml .= '<br />'.nl2br(htmlspecialchars($release['notes']));
+            Database::insertNews($newsId, $newsHtml);
+        }
+
+        if (Update::$isCLI)
+        {
+            $notifyMsg = $msg;
+            if ( ! empty($release['notes']))
+                $notifyMsg .= "\n\n".$release['notes'];
+            Notification::sendNotification('news', date('r'), 0, $notifyMsg, 0);
+        }
+        else
+            echo 'Перейти на <a href="'.htmlspecialchars(strval(Database::getSetting('serverAddress'))).'">главную страницу</a>.<br />';
+
+        return TRUE;
     }
 }
 ?>

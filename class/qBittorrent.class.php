@@ -212,7 +212,8 @@ class qBittorrent
     }
 
     #удаляем раздачу из torrent-клиента (без добавления новой)
-    public static function remove($hash)
+    //$deleteData - удалить вместе с раздачей скачанные файлы
+    public static function remove($hash, $deleteData = FALSE)
     {
         $settings = Database::getAllSetting();
         foreach ($settings as $row)
@@ -249,7 +250,7 @@ class qBittorrent
 
         $data = array(
             'hashes' => $hash,
-            'deleteFiles' => ! empty($deleteOldFiles) ? 'true' : 'false'
+            'deleteFiles' => $deleteData ? 'true' : 'false'
         );
         curl_setopt($MainCurl, CURLOPT_URL, $torrentAddress."/api/v2/torrents/delete");
         curl_setopt($MainCurl, CURLOPT_POSTFIELDS, http_build_query($data));

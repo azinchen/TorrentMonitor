@@ -7,8 +7,9 @@ TorrentMonitor следит за страницами раздач (темами
 обнаруживает обновления (новые серии, перезаливки раздач) и автоматически скачивает свежие
 `.torrent`-файлы или передаёт их напрямую в ваш торрент-клиент.
 
-- 🏠 Сайт проекта: [tormon.ru](https://tormon.ru/)
-- 📦 Репозиторий: [ElizarovEugene/TorrentMonitor](https://github.com/ElizarovEugene/TorrentMonitor)
+- 📦 Репозиторий: [azinchen/TorrentMonitor](https://github.com/azinchen/TorrentMonitor) — продолжение проекта
+  [ElizarovEugene/TorrentMonitor](https://github.com/ElizarovEugene/TorrentMonitor) Евгения Елизарова
+- 🆕 Новые версии и список изменений: [Releases](https://github.com/azinchen/TorrentMonitor/releases)
 - 🐳 Docker-образ: [alfonder/torrentmonitor-dockerized](https://github.com/alfonder/torrentmonitor-dockerized) —
   отдельный проект, поддерживаемый [Александром Фомичёвым (alfonder)](https://github.com/alfonder);
   у него есть [собственная вики](https://github.com/alfonder/torrentmonitor-dockerized/wiki)

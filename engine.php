@@ -280,43 +280,29 @@ if (Sys::checkCurl())
 	    echo 'Время выполнения: '.$time.$NL;
     }
     echo getTimestamp();
-	echo 'Обновление новостей.'.$NL;
-	$time_start = microtime(true);
-	Sys::getNews();
-	$time_end = microtime(true);
-	$time = $time_end - $time_start;
-	if ($debug)
-	{
-    	echo getTimestamp();
-        echo 'Время выполнения: '.$time.$NL;
-    }
-    echo getTimestamp();
 	echo 'Удаление старых torrent-файлов.'.$NL;
 	Sys::deleteOldTorrents();
-    if ($autoUpdate)
+    if (Sys::checkUpdate())
     {
-        echo getTimestamp();
-        echo 'Установка обновлений.'.$NL;
-        include_once $dir.'class/Update.class.php';
-        Update::main();
-    }
-    else
-    {
-        if (Sys::checkUpdate())
+        if ($autoUpdate)
         {
-            if ( ! Database::getUpdateNotification())
-            {
-                $latestVersion = Sys::getLatestVersion();
-                $changelog     = Sys::getChangelog($latestVersion);
-                $msg = 'Выпущена новая версия ТМ' . ($latestVersion ? ' ' . $latestVersion : '') . ', автоматическое обновление отключено, обновите систему самостоятельно.';
-                if ( ! empty($changelog))
-                    $msg .= "\n\n" . $changelog;
-                $newsId = 'update_' . ($latestVersion ?: time());
-                if ( ! Database::checkNewsExist($newsId))
-                    Database::insertNews($newsId, $msg);
-                Notification::sendNotification('news', date('r'), 0, $msg, 0);
-                Database::setUpdateNotification(1);
-            }
+            echo getTimestamp();
+            echo 'Установка обновлений.'.$NL;
+            include_once $dir.'class/Update.class.php';
+            Update::main();
+        }
+        elseif ( ! Database::getUpdateNotification())
+        {
+            $latestVersion = Sys::getLatestVersion();
+            $changelog     = Sys::getChangelog($latestVersion);
+            $msg = 'Выпущена новая версия ТМ' . ($latestVersion ? ' ' . $latestVersion : '') . ', автоматическое обновление отключено, обновите систему самостоятельно.';
+            if ( ! empty($changelog))
+                $msg .= "\n\n" . $changelog;
+            $newsId = 'update_' . ($latestVersion ?: time());
+            if ( ! Database::checkNewsExist($newsId))
+                Database::insertNews($newsId, nl2br(htmlspecialchars($msg)));
+            Notification::sendNotification('news', date('r'), 0, $msg, 0);
+            Database::setUpdateNotification(1);
         }
     }
 }	

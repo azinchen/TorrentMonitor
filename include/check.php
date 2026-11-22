@@ -79,10 +79,10 @@ if ($dbOk)
 <div class="check">
     <div class="check-title">Окружение</div>
 
-<?php if (version_compare(PHP_VERSION, '7.4.0', '>=')) { ?>
+<?php if (version_compare(PHP_VERSION, '8.0.0', '>=')) { ?>
     <div class="check-item">Версия PHP <strong><?= htmlspecialchars(PHP_VERSION, ENT_QUOTES) ?></strong> поддерживается.</div>
 <?php } else { ?>
-    <div class="check-item --error">Версия PHP <strong><?= htmlspecialchars(PHP_VERSION, ENT_QUOTES) ?></strong> не поддерживается, требуется не ниже 7.4.0.</div>
+    <div class="check-item --error">Версия PHP <strong><?= htmlspecialchars(PHP_VERSION, ENT_QUOTES) ?></strong> не поддерживается, требуется не ниже 8.0.0.</div>
 <?php } ?>
 
 <?php

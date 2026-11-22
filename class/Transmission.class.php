@@ -109,7 +109,8 @@ class Transmission
     }
 
     #удаляем раздачу из torrent-клиента (без добавления новой)
-    public static function remove($hash)
+    //$deleteData - удалить вместе с раздачей скачанные файлы
+    public static function remove($hash, $deleteData = FALSE)
     {
         $settings = Database::getAllSetting();
         foreach ($settings as $row)
@@ -124,8 +125,7 @@ class Transmission
             $rpc = new TransmissionRPC($torrentAddress.'/transmission/rpc', $torrentLogin, $torrentPassword);
             if ($debug)
                 $rpc->debug = true;
-            $delOpt = ! empty($deleteOldFiles) ? 'true' : 'false';
-            $rpc->remove($hash, $delOpt);
+            $rpc->remove($hash, (bool)$deleteData);
 
             Database::clearWarnings('Transmission');
             $return['status'] = TRUE;

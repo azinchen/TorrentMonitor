@@ -94,7 +94,8 @@ class TorrServer
     }
 
     #удаляем раздачу из torrent-клиента (без добавления новой)
-    public static function remove($hash)
+    //$deleteData не поддерживается этим клиентом: скачанные файлы остаются на диске
+    public static function remove($hash, $deleteData = FALSE)
     {
         $settings = Database::getAllSetting();
         foreach ($settings as $row)

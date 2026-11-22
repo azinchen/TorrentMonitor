@@ -345,6 +345,20 @@ if (file_exists($config))
                         <div class="form-help">Только для lostfilm.tv, baibako.tv и newstudio.tv</div>
                     </div>
                 </div>
+
+                <label class="row" @click="options.deleteFilesOnRemove = !options.deleteFilesOnRemove">
+                    <div class="col --2:lg"></div>
+                    <div class="col --10:lg toggler-wrap">
+                        <div class="toggler" :class="options.deleteFilesOnRemove && '--done'"></div> Удалять скачанные файлы при удалении раздачи из torrent-клиента
+                    </div>
+                </label>
+
+                <div class="row">
+                    <div class="col --2:lg"></div>
+                    <div class="col --5:lg mb-2">
+                        <div class="form-help">Действует, когда тема удаляется из TorrentMonitor вместе с раздачей в клиенте. Поддерживается в Transmission, qBittorrent и Deluge</div>
+                    </div>
+                </div>
             </div>
         </div>
 

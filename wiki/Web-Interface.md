@@ -61,8 +61,8 @@
 
 ## Новости
 
-Новости проекта TorrentMonitor (загружаются с tormon.ru) — обновления, изменения
-в работе трекеров.
+Сообщения о выходе и установке новых версий TorrentMonitor с описанием изменений.
+Список всех версий — на странице [Releases](https://github.com/azinchen/TorrentMonitor/releases).
 
 ## Справка
 
