@@ -14,7 +14,8 @@
 #   tests/run.sh hooks         install the pre-push hook that blocks pushing secrets
 #
 # Environment: TM_PHP=8.0|8.5 (PHP for the stack, default 8.5), TM_PORT (default 8088),
-#              TM_SOLVER (live: solver address, default Byparr), TM_VPN_COUNTRY (default Portugal).
+#              TM_SOLVER (live: solver address, default Byparr), TM_VPN_COUNTRY (default Portugal),
+#              TM_KEEP=1 (live: leave the stack running afterwards, e.g. for "record").
 set -euo pipefail
 
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
@@ -90,7 +91,11 @@ cmd_live() {
     live up -d --wait --quiet-pull fake app byparr flaresolverr > /dev/null 2>&1
     local status=0
     phpunit_in_app live live "$@" || status=$?
-    live down -v --remove-orphans > /dev/null 2>&1 || true
+    if [[ "${TM_KEEP:-0}" == 1 ]]; then
+        echo "live stack left running (TM_KEEP=1): tests/run.sh down removes it"
+    else
+        live down -v --remove-orphans > /dev/null 2>&1 || true
+    fi
     return $status
 }
 
@@ -132,5 +137,5 @@ case "$command" in
     up)          build_images; remove_stack; offline up -d --wait; echo "application: http://127.0.0.1:${TM_PORT:-8088}" ;;
     down)        remove_stack; echo "stack removed" ;;
     hooks)       cmd_hooks ;;
-    *)           sed -n '2,19p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 2 ;;
+    *)           sed -n '2,20p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 2 ;;
 esac

@@ -14,24 +14,30 @@ final class TrackerLiveTest extends TestCase
         AppState::setSettings(array('flaresolverrUrl' => (string)getenv('TM_SOLVER')));
     }
 
+    // only names here: PHPUnit prints data set values, and they must not contain logins
     public function trackers()
+    {
+        return array('rutracker' => array('rutracker'), 'kinozal' => array('kinozal'));
+    }
+
+    private function account($name)
     {
         $s = Env::secrets('trackers');
         $get = function ($key) use ($s) { return isset($s[$key]) ? $s[$key] : ''; };
+        if ($name == 'rutracker')
+            return array('rutracker.org', $get('RUTRACKER_LOGIN'), $get('RUTRACKER_PASSWORD'), $get('RUTRACKER_TOPIC'),
+                'https://rutracker.org/forum/viewtopic.php?t=');
         $kinozal = $get('KINOZAL_DOMAIN') ?: 'kinozal.me';
-        return array(
-            'rutracker' => array('rutracker.org', $get('RUTRACKER_LOGIN'), $get('RUTRACKER_PASSWORD'), $get('RUTRACKER_TOPIC'),
-                'https://rutracker.org/forum/viewtopic.php?t='),
-            'kinozal'   => array($kinozal, $get('KINOZAL_LOGIN'), $get('KINOZAL_PASSWORD'), $get('KINOZAL_TOPIC'),
-                'https://'.$kinozal.'/details.php?id='),
-        );
+        return array($kinozal, $get('KINOZAL_LOGIN'), $get('KINOZAL_PASSWORD'), $get('KINOZAL_TOPIC'),
+            'https://'.$kinozal.'/details.php?id=');
     }
 
     /** @dataProvider trackers */
-    public function testTopicIsCheckedAndTorrentDownloaded($tracker, $login, $password, $topic, $urlPrefix)
+    public function testTopicIsCheckedAndTorrentDownloaded($name)
     {
+        list($tracker, $login, $password, $topic, $urlPrefix) = $this->account($name);
         if ($login === '' || $password === '' || $topic === '')
-            $this->markTestSkipped('no account for '.$tracker.' in tests/env/secrets/trackers.env');
+            $this->markTestSkipped('no login, password or topic for '.$tracker.' in tests/env/secrets/trackers.env');
 
         AppState::setCredentials($tracker, $login, $password);
         $created = Env::api('POST', 'torrents', array('json' => array('url' => $urlPrefix.$topic)));
@@ -40,7 +46,7 @@ final class TrackerLiveTest extends TestCase
         $output = Env::runEngine();
 
         $stored = AppState::topics()[0];
-        $this->assertSame(array(), AppState::warningReasons(), "engine output:\n".Scrubber::scrub($output, Env::secrets('trackers')));
+        $this->assertSame(array(), AppState::warningReasons(), "engine output:\n".Scrubber::scrub($output, array('LOGIN' => $login, 'PASSWORD' => $password)));
         $this->assertNotSame('0000-00-00 00:00:00', $stored['timestamp'], 'date of the torrent was read from the page');
         $this->assertNotSame('', $stored['name'], 'topic name was read from the page');
 
