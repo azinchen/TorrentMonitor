@@ -8,7 +8,7 @@ final class ScrubberTest extends TestCase
     public function testSecretValuesAreReplacedInEveryEncoding()
     {
         $page = 'Привет, Вася Pupkin! <a href="?u='.urlencode('Вася Pupkin').'">'.htmlspecialchars('p@ss&word').'</a> '
-            .iconv('utf-8', 'windows-1251', 'Вася Pupkin');
+            .mb_convert_encoding('Вася Pupkin', 'windows-1251', 'UTF-8');
 
         $clean = Scrubber::scrub($page, $this->secrets);
 

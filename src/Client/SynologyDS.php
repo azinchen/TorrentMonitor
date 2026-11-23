@@ -46,19 +46,17 @@ final class SynologyDS extends HttpClientBase
         if (preg_match('/\"code\":403/i', $response->body))
             throw new ClientException('destination_does_not_exist');
 
-        // the API does not return the id of the created task: find it by the link, otherwise take the last one
-        $last = NULL;
-        $match = NULL;
-        foreach ($this->tasks() as $task)
-        {
-            $last = $task['id'];
-            if (isset($task['additional']['detail']['uri']) && $task['additional']['detail']['uri'] == $options['url'])
-                $match = $task['id'];
-        }
-        $id = $match !== NULL ? $match : $last;
-        if (empty($id))
+        if ( ! preg_match('/\"success\":\s*true/i', $response->body))
             throw new ClientException('add_fail');
-        return (string)$id;
+
+        // the API does not return the id of the created task: find it by the link. Never guess:
+        // a wrong id would make the next update delete somebody else's download. Without an id
+        // the old task simply stays in Download Station.
+        $match = '';
+        foreach ($this->tasks() as $task)
+            if (isset($task['additional']['detail']['uri']) && $task['additional']['detail']['uri'] == $options['url'])
+                $match = (string)$task['id'];
+        return $match;
     }
 
     public function remove(string $id, bool $deleteData): void

@@ -74,7 +74,7 @@ final class Rutracker extends ForumTracker
 
     public function userTopics(string $user): ?array
     {
-        $body = 'prev_new=0&prev_oop=0&f%5B%5D=-1&o=1&s=2&tm=-1&pn='.rawurlencode((string)@iconv('utf-8', 'windows-1251', $user)).'&nm=';
+        $body = 'prev_new=0&prev_oop=0&f%5B%5D=-1&o=1&s=2&tm=-1&pn='.rawurlencode(\TorrentMonitor\Text::fromUtf8($user, 'windows-1251')).'&nm=';
         $response = $this->send($this->post('/forum/tracker.php', $body));
         $page = str_replace("\t", '', $response->body);
         if ($page === '' || $response->challenged)

@@ -10,7 +10,7 @@ class Scrubber
         {
             if (strlen($value) < 4)
                 continue;
-            foreach (array_unique(array($value, urlencode($value), htmlspecialchars($value), @iconv('utf-8', 'windows-1251', $value))) as $variant)
+            foreach (array_unique(array($value, urlencode($value), htmlspecialchars($value), mb_convert_encoding($value, 'windows-1251', 'UTF-8'))) as $variant)
                 if ($variant !== false && $variant !== '')
                     $text = str_replace($variant, '{{'.$name.'}}', $text);
         }

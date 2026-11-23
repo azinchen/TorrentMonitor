@@ -79,7 +79,7 @@ final class Pornolab extends ForumTracker
     public function userTopics(string $user): ?array
     {
         $body = 'prev_my=0&prev_new=0&prev_oop=0&f%5B%5D=-1&o=1&s=2&tm=-1&pn='
-            .rawurlencode((string)@iconv('utf-8', 'windows-1251', $user)).'&nm=&submit=%CF%EE%E8%F1%EA';
+            .rawurlencode(\TorrentMonitor\Text::fromUtf8($user, 'windows-1251')).'&nm=&submit=%CF%EE%E8%F1%EA';
         $response = $this->send($this->post('/forum/tracker.php', $body));
         $page = $response->body;
         if ($page === '' || $response->challenged)

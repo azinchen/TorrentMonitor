@@ -70,7 +70,7 @@ final class Tfile extends ForumTracker
 
     public function userTopics(string $user): ?array
     {
-        $request = $this->get('http://search.tfile.cc/?q=&c=0&g=&act=&y=&ql=&a='.rawurlencode((string)@iconv('utf-8', 'windows-1251', $user))
+        $request = $this->get('http://search.tfile.cc/?q=&c=0&g=&act=&y=&ql=&a='.rawurlencode(\TorrentMonitor\Text::fromUtf8($user, 'windows-1251'))
             .'&d=&o=&size_min=0&size_max=0')->charset('windows-1251');
         $response = $this->send($request);
         $page = $response->body;

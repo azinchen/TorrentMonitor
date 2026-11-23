@@ -262,4 +262,57 @@ final class CoreTest extends TestCase
         $this->assertSame('Янв', Tracker::monthName('01'));
         $this->assertSame('Дек', Tracker::monthName(12));
     }
+
+    // ---- text encodings (mbstring only, no iconv)
+
+    public function testTextConversionDropsWhatCannotBeConverted()
+    {
+        $cp1251 = "\xCF\xF0\xE8\xE2\xE5\xF2";
+        $this->assertSame('Привет', \TorrentMonitor\Text::toUtf8($cp1251, 'windows-1251'));
+        $this->assertSame('Привет', \TorrentMonitor\Text::toUtf8($cp1251."\x98", 'windows-1251'), 'a byte with no meaning in cp1251');
+        $this->assertSame($cp1251.' ', \TorrentMonitor\Text::fromUtf8('Привет 日本', 'windows-1251'), 'letters missing in cp1251');
+        $this->assertSame('abcd', \TorrentMonitor\Text::cleanUtf8("ab\xFFcd"));
+        $this->assertSame('При', \TorrentMonitor\Text::cleanUtf8(substr('Прив', 0, 7)), 'a letter cut in half');
+        $this->assertSame('', \TorrentMonitor\Text::toUtf8('abc', 'no-such-encoding'));
+        $this->assertSame('?', mb_convert_encoding("\xFF", 'UTF-8', 'UTF-8'), 'the global substitute character is restored');
+    }
+
+    public function testSourceDoesNotUseIconv()
+    {
+        $files = new RecursiveIteratorIterator(new RecursiveDirectoryIterator(TM_ROOT.'/src', FilesystemIterator::SKIP_DOTS));
+        foreach ($files as $file)
+            if ($file->getExtension() == 'php')
+                $this->assertDoesNotMatchRegularExpression('/\biconv(_\w+)?\s*\(/', file_get_contents($file->getPathname()), $file->getPathname());
+    }
+
+    // ---- topic dates
+
+    public function testNnmclubDate()
+    {
+        $tracker = Registry::get('nnmclub.to');
+        $expected = array('2026-11-22 04:57:11', '22 Ноя 2026 04:57:11');
+        // as the site sends it (plus the later "checked by a moderator" date that must not win)
+        $page = '<td class="genmed">&nbsp;Зарегистрирован:&nbsp;</td>'."\n".'  <td class="genmed">&nbsp;22 Ноя 2026 04:57:11</td></tr>'
+            .'<td class="genmed">&nbsp;Оформление проверено модератором 22 Ноя 2026 04:58:26</td>';
+        $this->assertSame($expected, $this->call($tracker, 'parseDate', $page));
+        // as a solver's browser returns it: real no-break spaces
+        $this->assertSame($expected, $this->call($tracker, 'parseDate', str_replace('&nbsp;', "\u{A0}", $page)));
+        // other markup around the label
+        $this->assertSame($expected, $this->call($tracker, 'parseDate', '<td>Зарегистрирован:</td><td class="x"> 22 Ноя 2026 04:57:11 </td>'));
+        // no label: the old cell
+        $this->assertSame($expected, $this->call($tracker, 'parseDate', '<td class="genmed">&nbsp;22 Ноя 2026 04:57:11</td>'));
+        $this->assertNull($this->call($tracker, 'parseDate', '<td class="genmed">&nbsp;Зарегистрирован:&nbsp;</td>'));
+    }
+
+    public function testBooktrackerDate()
+    {
+        $tracker = Registry::get('booktracker.org');
+        foreach (array(
+            'Зарегистрирован &nbsp; [ <span title="6 дней назад">2026-11-21 10:00</span> ]',
+            "Зарегистрирован\n\t&nbsp;\n\t[\n\t<span>2026-11-21 10:00</span>\n\t]",
+            "Зарегистрирован\u{A0}[ <span class=\"d\" title=\"x\">2026-11-21 10:00</span> ]",
+        ) as $page)
+            $this->assertSame('2026-11-21 10:00:00', $this->call($tracker, 'parseDate', $page)[0], $page);
+        $this->assertNull($this->call($tracker, 'parseDate', 'Зарегистрирован [ <span>когда-то</span> ]'));
+    }
 }

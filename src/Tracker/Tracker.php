@@ -167,7 +167,7 @@ abstract class Tracker
     {
         $login = $this->account['login'];
         if (static::CHARSET !== NULL)
-            $login = (string)@iconv('utf-8', static::CHARSET, $login);
+            $login = \TorrentMonitor\Text::fromUtf8($login, static::CHARSET);
         return rawurlencode($login);
     }
 

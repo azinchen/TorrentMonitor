@@ -277,7 +277,7 @@ final class Client
                 $body = (string)curl_multi_getcontent($ch);
                 $charset = $requests[$key]->charset;
                 if ($charset !== NULL && $body !== '' && ! mb_check_encoding($body, 'UTF-8'))
-                    $body = (string)@iconv($charset, 'utf-8//IGNORE', $body);
+                    $body = \TorrentMonitor\Text::toUtf8($body, $charset);
                 $response->body = $body;
                 $responses[$key] = $response;
 

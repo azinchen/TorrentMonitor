@@ -71,7 +71,7 @@ final class Anidub extends ForumTracker
             return NULL;
         $title = trim(html_entity_decode(substr($m[1], 0, -114), ENT_QUOTES, 'UTF-8'));
         // cutting by bytes may have split a letter
-        $title = (string)@iconv('UTF-8', 'UTF-8//IGNORE', $title);
+        $title = \TorrentMonitor\Text::cleanUtf8($title);
         return $title === '' ? NULL : $title;
     }
 

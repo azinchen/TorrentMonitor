@@ -43,7 +43,10 @@ final class Nnmclub extends ForumTracker
     protected function parseDate(string $page): ?array
     {
         // 21 Ноя 2026 10:00:05 (\D{6} - three Russian letters in UTF-8)
-        if ( ! preg_match('/<td class=\"genmed\">&nbsp;(\d{2}\s\D{6}\s\d{4}\s\d{2}:\d{2}:\d{2})<\/td>/', $page, $m))
+        // the cell after the "Зарегистрирован:" label; a solver returns the page with real no-break spaces
+        $gap = '(?:&nbsp;|\x{A0}|\s)*';
+        if ( ! preg_match('/Зарегистрирован:'.$gap.'<\/td>\s*<td[^>]*>'.$gap.'(\d{2}\s\S+\s\d{4}\s\d{2}:\d{2}:\d{2})/u', $page, $m)
+            && ! preg_match('/<td class=\"genmed\">'.$gap.'(\d{2}\s\S+\s\d{4}\s\d{2}:\d{2}:\d{2})'.$gap.'<\/td>/u', $page, $m))
             return NULL;
         if ( ! preg_match('/^(\d{2})\s(\S+)\s(\d{4})\s(\d{2}:\d{2}:\d{2})$/u', $m[1], $d) || self::monthNumber($d[2]) === NULL)
             return NULL;
@@ -95,7 +98,7 @@ final class Nnmclub extends ForumTracker
     {
         $body = 'prev_sd=0&prev_a=0&prev_my=0&prev_n=0&prev_shc=0&prev_shf=1&prev_sha=1&prev_shs=0&prev_shr=0&prev_sht=0'
             .'&f%5B%5D=-1&o=1&s=2&tm=-1&shf=1&sha=1&ta=-1&sns=-1&sds=-1&nm=&pn='
-            .rawurlencode((string)@iconv('utf-8', 'windows-1251', $user)).'&submit=%CF%EE%E8%F1%EA';
+            .rawurlencode(\TorrentMonitor\Text::fromUtf8($user, 'windows-1251')).'&submit=%CF%EE%E8%F1%EA';
         $response = $this->send($this->post('/forum/tracker.php', $body));
         $page = $response->body;
         if ($page === '' || $response->challenged)

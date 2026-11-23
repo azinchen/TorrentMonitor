@@ -17,7 +17,7 @@
 ### Необходимые модули PHP
 
 ```
-php-ctype php-curl php-iconv php-mbstring php-pdo php-simplexml php-xml php-zip
+php-ctype php-curl php-mbstring php-pdo php-simplexml php-xml php-zip
 ```
 
 Пример установки в Debian/Ubuntu:

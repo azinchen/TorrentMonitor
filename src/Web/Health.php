@@ -58,7 +58,7 @@ final class Health
         $this->add($g, NULL, 'TorrentMonitor '.App::version().', PHP '.PHP_VERSION.'.');
         $this->add($g, version_compare(PHP_VERSION, '8.0', '>='), 'Нужен PHP 8.0 или новее.');
         $missing = array();
-        foreach (array('curl' => 'cURL', 'mbstring' => 'mbstring', 'simplexml' => 'SimpleXML', 'dom' => 'DOM', 'json' => 'JSON', 'iconv' => 'iconv') as $ext => $label)
+        foreach (array('curl' => 'cURL', 'mbstring' => 'mbstring', 'simplexml' => 'SimpleXML', 'dom' => 'DOM', 'json' => 'JSON') as $ext => $label)
             if ( ! extension_loaded($ext))
                 $missing[] = $label;
         $this->add($g, empty($missing), empty($missing) ? 'Нужные расширения PHP установлены.' : 'Не хватает расширений PHP: '.implode(', ', $missing).'.');

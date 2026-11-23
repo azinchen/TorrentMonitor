@@ -20,14 +20,15 @@ final class Booktracker extends ForumTracker
 
         // with a wrong password the site may set a cookie too, so check the error text first
         $wrong = (bool)preg_match('/profile\.php\?mode=register/', $response->headers.$response->body);
-        // the session is the first cookie of the response (except Cloudflare's own)
+        // the session is the bb_data cookie; if the site renamed it, the first cookie of the response
+        // (except Cloudflare's own and the ones the site resets with "deleted")
         $session = '';
         foreach ($response->cookies as $name => $value)
         {
             if ($value === '' || $value == 'deleted' || preg_match('/^(cf_|__cf)/', $name))
                 continue;
-            $session = $name.'='.$value;
-            break;
+            if ($session === '' || $name == 'bb_data')
+                $session = $name.'='.$value;
         }
         if ( ! $wrong && $session !== '')
             return $session;
@@ -45,7 +46,7 @@ final class Booktracker extends ForumTracker
 
     protected function parseDate(string $page): ?array
     {
-        if ( ! preg_match('/Зарегистрирован\s&nbsp;\s*\[\s<span title=".*["]>(.+)<\/span>/U', $page, $m))
+        if ( ! preg_match('/Зарегистрирован(?:&nbsp;|\x{A0}|\s)*\[\s*<span[^>]*>([^<]+)<\/span>/u', $page, $m))
             return NULL;
         //2026-11-21 10:00
         $time = strtotime(trim($m[1]));

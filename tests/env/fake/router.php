@@ -63,7 +63,7 @@ function send_json($data, $status = 200)
 
 function cp1251($html)
 {
-    return iconv('utf-8', 'windows-1251//IGNORE', $html);
+    return mb_convert_encoding($html, 'windows-1251', 'UTF-8');
 }
 
 function rutracker_page($title, $inner)
@@ -285,7 +285,7 @@ if ($path == '/solver/v1' && $method == 'POST')
             'url'       => $request['url'],
             'status'    => $status,
             // a real solver returns the rendered page, always in UTF-8
-            'response'  => $isHtml ? iconv('windows-1251', 'utf-8//IGNORE', $out) : '',
+            'response'  => $isHtml ? mb_convert_encoding($out, 'UTF-8', 'windows-1251') : '',
             'cookies'   => $solutionCookies,
             'userAgent' => 'Mozilla/5.0 (FakeSolver) TorrentMonitorTests/1.0',
         ),

@@ -82,7 +82,7 @@ final class Animelayer extends ForumTracker
             if ( ! preg_match('/<title>(.*)<\/title>/sU', $page, $m) || strlen($m[1]) <= 15)
                 return NULL;
             $name = trim(html_entity_decode(substr($m[1], 0, -15), ENT_QUOTES, 'UTF-8'));
-            $name = (string)@iconv('UTF-8', 'UTF-8//IGNORE', $name);
+            $name = \TorrentMonitor\Text::cleanUtf8($name);
         }
         return $name === '' ? NULL : $name;
     }
