@@ -144,7 +144,7 @@ final class Health
             elseif ($r->status >= 200 && $r->status < 500)
                 $this->add($g, TRUE, $name.' ('.$base.') доступен.');
             else
-                $this->add($g, FALSE, $name.' ('.$base.') недоступен: '.($r->status == 0 ? 'нет ответа' : 'HTTP '.$r->status).'.');
+                $this->add($g, FALSE, $name.' ('.$base.') недоступен: '.($r->status == 0 ? $r->failureText() : 'HTTP '.$r->status).'.');
             if (Registry::needsAccount($name) && ! Registry::ready($name))
                 $this->add($g, FALSE, $name.': не указаны учётные данные.');
         }

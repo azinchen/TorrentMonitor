@@ -37,7 +37,7 @@ abstract class ForumTracker extends Tracker
         if ($response->challenged)
             throw new TrackerException('cloudflare');
         if ($page === '')
-            throw new TrackerException('cant_get_forum_page');
+            throw new TrackerException($response->failure() ?: 'cant_get_forum_page');
 
         $date = $this->parseDate($page);
         if ($date === NULL || empty($date[0]))

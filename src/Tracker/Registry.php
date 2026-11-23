@@ -13,7 +13,6 @@ final class Registry
         'nnmclub.to'       => array(Nnmclub::class, 'topic'),
         'lostfilm.tv'      => array(Lostfilm::class, 'series'),
         'rutor.is'         => array(Rutor::class, 'topic'),
-        'tfile.cc'         => array(Tfile::class, 'topic'),
         'kinozal.me'       => array(Kinozal::class, 'topic'),
         'anidub.com'       => array(Anidub::class, 'topic'),
         'baibako.tv'       => array(Baibako::class, 'series'),

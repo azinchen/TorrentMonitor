@@ -170,8 +170,7 @@ Results so far (23.11.2026):
 
 - rutracker.org, kinozal.me and lostfilm-mirror pass the whole tracker test with an
   automatically chosen topic or series. kinozal.me also passes with FlareSolverr.
-- tfile.cc answers with a parking page on every address: there is no tracker
-  behind it any more.
+- tfile.cc answered with a parking page on every address and was removed from the program.
 - rutor.is, baibako.tv, newstudio.tv and kinozal.tv do not answer, neither
   directly nor through the VPN (exit in Portugal).
 - The other trackers, the notification services and SynologyDS wait for accounts.

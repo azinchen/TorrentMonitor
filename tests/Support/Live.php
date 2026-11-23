@@ -16,7 +16,6 @@ class Live
         'pornolab.net'     => array('PORNOLAB',    array('/forum/tracker.php', '/forum/index.php')),
         'rustorka.com'     => array('RUSTORKA',    array('/forum/tracker.php', '/forum/index.php')),
         'booktracker.org'  => array('BOOKTRACKER', array('/tracker.php', '/index.php')),
-        'tfile.cc'         => array('TFILE',       array('/forum/', '/')),
         'rutor.is'         => array('RUTOR',       array('/', '/new')),
         'anidub.com'       => array('ANIDUB',      array('/')),
         'animelayer.ru'    => array('ANIMELAYER',  array('/torrents/anime/', '/')),

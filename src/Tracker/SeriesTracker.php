@@ -20,7 +20,7 @@ abstract class SeriesTracker extends Tracker
             if ($response->challenged)
                 $this->feeds[$key] = 'cloudflare';
             elseif ($response->body === '')
-                $this->feeds[$key] = 'cant_find_rss';
+                $this->feeds[$key] = $response->failure() ?: 'cant_find_rss';
             else
             {
                 $body = $response->body;

@@ -37,6 +37,8 @@ abstract class Tracker
     private bool $reached = FALSE;
     // the site's last response was an unsolved Cloudflare challenge
     private bool $blocked = FALSE;
+    // the last request got no response: 'proxy_fail' or 'tracker_unreachable'
+    private ?string $failure = NULL;
 
     public function __construct(string $name, Client $http)
     {
@@ -84,7 +86,7 @@ abstract class Tracker
             if ($saved !== '' && $this->sessionAlive($saved))
                 $this->session = $saved;
             elseif ( ! Accounts::filled($this->name))
-                throw new TrackerException($saved !== '' ? ($this->blocked ? 'cloudflare' : 'credential_wrong') : 'credential_miss');
+                throw new TrackerException($saved !== '' ? ($this->blocked ? 'cloudflare' : ($this->failure ?: 'credential_wrong')) : 'credential_miss');
             else
             {
                 try
@@ -93,7 +95,10 @@ abstract class Tracker
                 }
                 catch (TrackerException $e)
                 {
-                    throw $this->blocked ? new TrackerException('cloudflare') : $e;
+                    // no connection at all says more than "no login page" or "no cookie"
+                    if ($this->blocked)
+                        throw new TrackerException('cloudflare');
+                    throw $this->failure !== NULL && $e->getMessage() != 'credential_wrong' ? new TrackerException($this->failure) : $e;
                 }
                 Accounts::setCookie($this->name, $this->session);
             }
@@ -208,6 +213,7 @@ abstract class Tracker
         if ($response->status != 0)
             $this->reached = TRUE;
         $this->blocked = $response->challenged;
+        $this->failure = $response->failure();
         return $response;
     }
 

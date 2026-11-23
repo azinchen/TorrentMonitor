@@ -273,6 +273,8 @@ final class Client
                 $response->headers = $headers[$key];
                 $response->cookies = Cookies::fromHeaders($headers[$key]);
                 $response->error = $info['result'] === CURLE_OK ? '' : (curl_error($ch) ?: 'curl error '.$info['result']);
+                $response->errno = (int)$info['result'];
+                $response->proxy = $this->proxyFor($requests[$key]);
                 $response->sentClearance = $sent[$key];
                 $body = (string)curl_multi_getcontent($ch);
                 $charset = $requests[$key]->charset;

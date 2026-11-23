@@ -185,6 +185,7 @@ final class CoreTest extends TestCase
         $this->assertFalse(Registry::watchesUsers('kinozal.me'));
         $this->assertSame('series', Registry::kind('lostfilm.tv'));
         $this->assertNull(Registry::kind('casstudio.tk'));
+        $this->assertNull(Registry::kind('tfile.cc'));
     }
 
     /** @dataProvider topicUrls */
@@ -210,7 +211,6 @@ final class CoreTest extends TestCase
             array('https://booktracker.org/viewtopic.php?t=8', 'booktracker.org', '8'),
             array('http://baibako.tv/details.php?id=12', 'baibako.tv_forum', '12'),
             array('http://rustorka.com/forum/viewtopic.php?t=31', 'rustorka.com', '31'),
-            array('http://tfile.cc/forum/viewtopic.php?t=66', 'tfile.cc', '66'),
         );
     }
 
@@ -314,5 +314,34 @@ final class CoreTest extends TestCase
         ) as $page)
             $this->assertSame('2026-11-21 10:00:00', $this->call($tracker, 'parseDate', $page)[0], $page);
         $this->assertNull($this->call($tracker, 'parseDate', 'Зарегистрирован [ <span>когда-то</span> ]'));
+    }
+
+    // ---- why a request got no response
+
+    public function testConnectionFailureNamesTheProxyOrTheSite()
+    {
+        $response = function ($status, $errno, $proxy) {
+            $r = new \TorrentMonitor\Http\Response();
+            $r->status = $status;
+            $r->errno = $errno;
+            $r->proxy = $proxy;
+            $r->error = $errno ? 'curl says so' : '';
+            return $r;
+        };
+        $this->assertNull($response(200, 0, NULL)->failure());
+        $this->assertNull($response(503, 0, 'socks5h://p:1080')->failure(), 'an answer, even a bad one, is not a connection failure');
+        $this->assertSame('', $response(200, 0, NULL)->failureText());
+
+        foreach (array(5, 7, 97) as $errno)
+            $this->assertSame('proxy_fail', $response(0, $errno, 'socks5h://p:1080')->failure(), (string)$errno);
+        $this->assertSame('tracker_unreachable', $response(0, 7, NULL)->failure(), 'without a proxy the site itself refused');
+        $this->assertSame('tracker_unreachable', $response(0, 28, 'socks5h://p:1080')->failure(), 'a timeout through a proxy does not prove the proxy is to blame');
+        $this->assertSame('tracker_unreachable', $response(0, 6, NULL)->failure());
+
+        $this->assertSame('прокси socks5h://p:1080 не отвечает', $response(0, 7, 'socks5h://p:1080')->failureText());
+        $this->assertStringContainsString('не смог соединиться с сайтом', $response(0, 97, 'socks5h://p:1080')->failureText());
+        $this->assertSame('адрес сайта не найден (DNS)', $response(0, 6, NULL)->failureText());
+        $this->assertSame('нет ответа за отведённое время через прокси socks5h://p:1080', $response(0, 28, 'socks5h://p:1080')->failureText());
+        $this->assertSame('нет ответа (curl says so)', $response(0, 99, NULL)->failureText());
     }
 }

@@ -160,15 +160,40 @@ final class StorageTest extends IntegrationTestCase
         $this->assertTrue($saved['json']['ok'], $saved['body']);
         $this->assertSame(array('rutracker.org' => array('use' => 'yes', 'address' => '127.0.0.1:1', 'type' => 'HTTP')), json_decode(AppState::file('config.json'), true)['trackerProxy']);
         Env::runEngine();
-        $this->assertNotEmpty(AppState::warnings());
+        $this->assertSame(array('rutracker.org:proxy_fail'), array_values(array_unique(AppState::warningReasons())), 'the proxy is named as the cause, not the tracker');
         $this->assertSame('', AppState::topic($id)['timestamp']);
         $this->assertEmpty(Env::fakeRequests('/forum/'), 'no request reached the tracker directly');
+        $health = json_encode(Env::ui('health')['json'], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        $this->assertStringContainsString('прокси http://127.0.0.1:1 не отвечает', $health);
 
         // "off" switches the proxy off for this tracker
         Env::ui('tracker.save', array('name' => 'rutracker.org', 'login' => Env::TRACKER_USER, 'proxy' => 'off'));
         $this->assertSame(array('rutracker.org' => array('use' => 'no')), json_decode(AppState::file('config.json'), true)['trackerProxy']);
         Env::runEngine();
         $this->assertSame('2026-11-21 10:00:00', AppState::topic($id)['timestamp']);
+    }
+
+    public function testUnreachableTrackerIsReportedAsSuch()
+    {
+        // booktracker.org resolves to this container, where nothing listens on port 443
+        $hosts = file_get_contents('/etc/hosts');
+        file_put_contents('/etc/hosts', $hosts."127.0.0.1 booktracker.org\n");
+        try
+        {
+            AppState::setCredentials('booktracker.org', Env::TRACKER_USER, Env::TRACKER_PASS);
+            $created = Env::api('POST', 'torrents', array('json' => array('url' => 'https://booktracker.org/viewtopic.php?t=721', 'name' => 'Книга')));
+            $this->assertSame(201, $created['status'], $created['body']);
+
+            Env::runEngine();
+
+            $this->assertSame(array('booktracker.org:tracker_unreachable'), array_values(array_unique(AppState::warningReasons())));
+            $health = json_encode(Env::ui('health')['json'], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+            $this->assertStringContainsString('booktracker.org (https://booktracker.org) недоступен: сайт не принимает соединения', $health);
+        }
+        finally
+        {
+            file_put_contents('/etc/hosts', $hosts);
+        }
     }
 
     public function testHealthPageChecksTheDataDirectory()
