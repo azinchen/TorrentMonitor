@@ -45,6 +45,27 @@ class Live
         'rustorka.com'    => array('no' => 'the site shows its captcha to every visitor'),
     );
 
+    // Trackers that answer only from some networks: tracker => what to run the tests with.
+    // When such a tracker does not answer, its tests are skipped with this hint instead of failing.
+    const NETWORKS = array(
+        'newstudio.tv' => 'TM_VPN_COUNTRY=Ukraine (it answered from Ukraine, Russia and some US networks)',
+        'rutor.is'     => 'the VPN, any country (it does not answer from some networks directly)',
+    );
+
+    // NULL if the tracker answers from here or is expected to answer from everywhere;
+    // otherwise why its tests cannot run in this network
+    public static function wrongNetwork($tracker)
+    {
+        self::app();
+        if ( ! isset(self::NETWORKS[$tracker]))
+            return NULL;
+        $object = Registry::get($tracker);
+        $response = self::call($object, 'send', self::call($object, 'get', '/', '')->follow()->timeout(20));
+        if ($response->status != 0)
+            return NULL;
+        return $tracker.' does not answer from this network ('.$response->error.'). Run its tests with '.self::NETWORKS[$tracker].'.';
+    }
+
     public static function guest($name)
     {
         $key = isset(self::TRACKERS[$name]) ? $name : 'kinozal';

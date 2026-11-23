@@ -66,6 +66,8 @@ final class TrackerLiveTest extends TestCase
         $tracker = $account['tracker'];
         $hide = Live::secretsOf($account);
         Live::configure($account);
+        if (($network = Live::wrongNetwork($tracker)) !== NULL)
+            $this->markTestSkipped($network);
         $series = \TorrentMonitor\Tracker\Registry::kind($tracker) == 'series';
 
         // ---- choose what to watch and run the first check
@@ -172,6 +174,8 @@ final class TrackerLiveTest extends TestCase
         // no account at all, whatever the secrets hold
         $account = array('login' => '', 'password' => '', 'passkey' => '', 'cookie' => '', 'topic' => '') + $account;
         Live::configure($account);
+        if (($network = Live::wrongNetwork($tracker)) !== NULL)
+            $this->markTestSkipped($network);
 
         if (\TorrentMonitor\Tracker\Registry::kind($tracker) == 'series')
         {

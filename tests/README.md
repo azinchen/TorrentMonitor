@@ -151,6 +151,12 @@ rutracker.org, pornolab.net and booktracker.org hide the date, nnmclub.to, bookt
 and riperam.org hide the torrent link, rustorka.com shows only its captcha (skipped).
 `TM_LIVE_GUEST=1` runs this test for the trackers that have an account too.
 
+**Trackers that answer only from some networks.** newstudio.tv and rutor.is do not answer
+from every network. When such a tracker does not answer, its tests are skipped and the
+message says what to run them with, for example
+`TM_VPN_COUNTRY=Ukraine tests/run.sh live --filter newstudio`. A tracker that is expected
+to answer from everywhere still fails when it does not.
+
 Two more checks per tracker: `<NAME>_WATCH_USER` makes the test look up the topics
 of that user (watching users), and `TM_LIVE_WRONG_PASSWORD=1` checks that a wrong
 password is reported as such. The second is off by default, because repeated
