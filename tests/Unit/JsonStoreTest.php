@@ -26,9 +26,9 @@ final class JsonStoreTest extends TestCase
         rmdir($this->dir);
     }
 
-    private function store($version = 1, $migrations = array(), $backup = true)
+    private function store($version = 1, $migrations = array(), $backup = true, $compatible = null)
     {
-        return new JsonStore($this->file, array('items' => array(), 'name' => 'default'), $version, $migrations, $backup);
+        return new JsonStore($this->file, array('items' => array(), 'name' => 'default'), $version, $migrations, $backup, $compatible);
     }
 
     private function write($data)
@@ -175,13 +175,51 @@ final class JsonStoreTest extends TestCase
         $this->store()->read();
     }
 
-    public function testFileFromNewerVersionIsRefused()
+    public function testFileFromNewerVersionIsUsedAndItsUnknownDataIsKept()
     {
-        $this->write(array('version' => 5, 'items' => array()));
+        $this->write(array('version' => 5, 'compatible' => 2, 'items' => array('a'), 'future' => array('x' => 1)));
+        $store = $this->store(2);
+
+        $data = $store->read();
+        $this->assertSame(array('a'), $data['items']);
+        $this->assertSame('default', $data['name'], 'sections missing in the file come from the defaults');
+
+        $store->update(function (&$data) { $data['items'][] = 'b'; $data['version'] = 1; });
+
+        $saved = json_decode(file_get_contents($this->file), true);
+        $this->assertSame(5, $saved['version'], 'an older program does not lower the format number');
+        $this->assertSame(2, $saved['compatible']);
+        $this->assertSame(array('x' => 1), $saved['future'], 'what this version does not know is kept');
+        $this->assertSame(array('a', 'b'), $saved['items']);
+    }
+
+    public function testNewerFileWithoutACompatibilityMarkIsUsedToo()
+    {
+        $this->write(array('version' => 5, 'items' => array('a')));
+
+        $this->assertSame(array('a'), $this->store(2)->read()['items']);
+    }
+
+    public function testFileThatNeedsANewerProgramIsRefused()
+    {
+        $this->write(array('version' => 5, 'compatible' => 4, 'items' => array()));
 
         $this->expectException(StorageException::class);
         $this->expectExceptionMessage('более новой версией');
         $this->store(2)->read();
+    }
+
+    public function testWrittenFileSaysWhichFormatCanReadIt()
+    {
+        $this->store(3, array(), true, 2)->update(function (&$data) { $data['items'][] = 'a'; });
+        $saved = json_decode(file_get_contents($this->file), true);
+        $this->assertSame(array('version', 'compatible'), array_slice(array_keys($saved), 0, 2));
+        $this->assertSame(array(3, 2), array($saved['version'], $saved['compatible']));
+
+        // by default a format is compatible only with itself
+        unlink($this->file);
+        $this->store(3)->update(function (&$data) { $data['items'][] = 'a'; });
+        $this->assertSame(3, json_decode(file_get_contents($this->file), true)['compatible']);
     }
 
     public function testOldFormatIsMigratedStepByStepOnFirstRead()
