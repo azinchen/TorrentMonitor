@@ -67,8 +67,12 @@
 
 **API**
 
-- Имена полей изменены: `torrent_id` → `topicId`, `hd` → `quality`, `ep` → `episode`,
-  `timestamp` → `updatedAt` и другие. Подробности — в вики, страница «API».
+- Имена полей темы изменены: `torrent_id` → `topicId`, `hd` (`0`, `1`, `2`) → `quality`
+  (`sd`, `720`, `1080`), `ep` → `episode`, `timestamp` → `updatedAt`, `auto_update` → `autoRename`,
+  `pause` → `paused`. Логические значения стали настоящими `true`/`false` (были `0`/`1`).
+- Новые поля темы: `url`, `stopAfterDays`, `addedAt`, `lastActivityAt`, `stopped`. Список и одна
+  тема возвращают одинаковый набор полей.
+- В `GET /api/errors` поля переименованы: `reason` → `code`, `tracker` → `source`, `id` → `topic`.
 
 **Обновления**
 

@@ -31,14 +31,12 @@ sudo apt install nginx php-fpm php-curl php-mbstring php-xml php-zip
 ## Шаг 1 — Скачать TorrentMonitor
 
 Скачайте архив последней версии со страницы [Releases](https://github.com/azinchen/TorrentMonitor/releases)
-и распакуйте на сервере. Пока версий на этой странице нет, возьмите
-текущее состояние репозитория:
+и распакуйте на сервере:
 
 ```bash
 cd /var/www
-wget https://github.com/azinchen/TorrentMonitor/archive/refs/heads/master.zip
-unzip master.zip
-mv TorrentMonitor-master torrentmonitor
+unzip TorrentMonitor-*.zip
+mv TorrentMonitor-*/ torrentmonitor
 ```
 
 ## Шаг 2 — Каталог данных
@@ -61,7 +59,7 @@ mv TorrentMonitor-master torrentmonitor
 
 Резервная копия установки — это копия каталога данных.
 
-> Переходите с версии 3.x с базой данных? См. [Обновление](Updating#переход-с-версии-с-базой-данных).
+> Переходите с версии 3.x? См. [Обновление](Updating#переход-с-версии-3x).
 
 ## Шаг 3 — Необязательный config.php
 
