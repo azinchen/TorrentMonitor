@@ -8,7 +8,8 @@ use TorrentMonitor\Storage\Files;
 // quality (sd|720|1080, for series), episode (S01E02), updatedAt (torrent date on the tracker),
 // autoRename (take the name from the tracker), hash (the torrent in the torrent client), path, category, script,
 // paused, error, closed, stopAfterDays (NULL - as in the settings), sonarrSeries (series number in Sonarr,
-// if the topic was added by it), addedAt, lastActivityAt.
+// if the topic was added by it), sonarrSeasons (season numbers of the releases Sonarr grabbed for the topic),
+// addedAt, lastActivityAt.
 final class Topics
 {
     public static function now(): string
@@ -27,7 +28,13 @@ final class Topics
     /** @return array[] */
     public static function all(): array
     {
-        return Files::torrents()->read()['topics'];
+        return array_map(array(__CLASS__, 'complete'), Files::torrents()->read()['topics']);
+    }
+
+    // fields added after the topic was saved get their default values
+    private static function complete(array $topic): array
+    {
+        return $topic + array('sonarrSeasons' => array());
     }
 
     public static function get($id): ?array
@@ -80,7 +87,8 @@ final class Topics
         return array(
             'tracker' => '', 'name' => '', 'topicId' => '', 'quality' => 'sd', 'episode' => '', 'updatedAt' => '',
             'autoRename' => FALSE, 'hash' => '', 'path' => '', 'category' => '', 'script' => '', 'paused' => FALSE,
-            'error' => FALSE, 'closed' => FALSE, 'stopAfterDays' => NULL, 'sonarrSeries' => NULL, 'addedAt' => self::now(), 'lastActivityAt' => '',
+            'error' => FALSE, 'closed' => FALSE, 'stopAfterDays' => NULL, 'sonarrSeries' => NULL, 'sonarrSeasons' => array(),
+            'addedAt' => self::now(), 'lastActivityAt' => '',
         );
     }
 
@@ -104,7 +112,7 @@ final class Topics
                 if ($i === NULL)
                     continue;
                 $found++;
-                $before = $data['topics'][$i];
+                $before = self::complete($data['topics'][$i]);
                 $fields = array_intersect_key($fields, $before);
                 unset($fields['id']);
                 // A change of the torrent date counts as a topic update

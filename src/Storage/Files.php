@@ -113,6 +113,10 @@ final class Files
             'stopAfterDays'        => '0',
             // Delete the topic and the torrent when Sonarr reports that the series was deleted
             'removeOnSeriesDelete' => '0',
+            // When Sonarr grabs a season pack: delete the older topic of the same series and season
+            'sonarrReplaceTopic'   => '0',
+            // ...and remove its torrent from the torrent client (only together with the previous one)
+            'sonarrReplaceTorrent' => '0',
             'send'                 => '0',
             'sendUpdate'           => '0',
             'sendUpdateService'    => '',

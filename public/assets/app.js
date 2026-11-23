@@ -273,7 +273,7 @@ document.addEventListener('alpine:init', () => {
         editableSettings(s) {
             const form = Object.assign({}, s, { torrentPassword: '', clearTorrentPassword: false });
             for (const key of ['auth', 'rss', 'debug', 'autoUpdate', 'proxy', 'useTorrent', 'deleteDistribution', 'deleteOldFiles',
-                'deleteFilesOnRemove', 'removeOnSeriesDelete', 'send', 'sendUpdate', 'sendWarning']) {
+                'deleteFilesOnRemove', 'removeOnSeriesDelete', 'sonarrReplaceTopic', 'sonarrReplaceTorrent', 'send', 'sendUpdate', 'sendWarning']) {
                 form[key] = s[key] === '1';
             }
             return form;

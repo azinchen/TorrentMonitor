@@ -438,6 +438,12 @@
         <form @submit.prevent="saveSettings()">
             <label class="check"><input type="checkbox" x-model="settingsForm.removeOnSeriesDelete" @change="saveSettings()">
                 При удалении сериала в Sonarr удалять его темы и раздачи (событие On Series Delete)</label>
+            <label class="check"><input type="checkbox" x-model="settingsForm.sonarrReplaceTopic" @change="saveSettings()">
+                Когда Sonarr загружает сезон целиком, удалять прежнюю тему этого сезона</label>
+            <label class="check" x-show="settingsForm.sonarrReplaceTopic"><input type="checkbox" x-model="settingsForm.sonarrReplaceTorrent" @change="saveSettings()">
+                …и её раздачу из torrent-клиента</label>
+            <small x-show="settingsForm.sonarrReplaceTopic && settingsForm.sonarrReplaceTorrent">Скачанные файлы удаляются, если в блоке «Torrent-клиент»
+                отмечено «При удалении темы вместе с раздачей по умолчанию удалять и скачанные файлы».</small>
         </form>
     </div>
 </section>

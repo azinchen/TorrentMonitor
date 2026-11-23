@@ -61,11 +61,12 @@ final class Transmission extends HttpClientBase
 
     public function info(string $id): ?array
     {
-        $data = $this->rpc('torrent-get', array('ids' => array(strtolower($id)), 'fields' => array('comment', 'downloadDir')));
+        $data = $this->rpc('torrent-get', array('ids' => array(strtolower($id)), 'fields' => array('comment', 'downloadDir', 'name')));
         if (empty($data['arguments']['torrents'][0]))
             return NULL;
         $torrent = $data['arguments']['torrents'][0];
         return array('comment' => isset($torrent['comment']) ? (string)$torrent['comment'] : '',
-            'path' => isset($torrent['downloadDir']) ? (string)$torrent['downloadDir'] : '', 'category' => '');
+            'path' => isset($torrent['downloadDir']) ? (string)$torrent['downloadDir'] : '', 'category' => '',
+            'content' => isset($torrent['downloadDir'], $torrent['name']) && $torrent['name'] !== '' ? rtrim((string)$torrent['downloadDir'], '/').'/'.$torrent['name'] : '');
     }
 }

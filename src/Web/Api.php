@@ -253,6 +253,7 @@ final class Api
     //Sonarr webhook. Grab: the torrent that Sonarr sent to the torrent client is added to monitoring
     //(the topic URL is taken from the torrent file's comment). SeriesDelete: the series' topics are deleted if this
     //is enabled in the settings. Other events are accepted and skipped.
+    //A Grab of a season pack can also replace the older topic of the same series and season (see replaced()).
     private static function sonarr(): void
     {
         $body = json_decode((string)file_get_contents('php://input'), TRUE);
@@ -294,12 +295,22 @@ final class Api
 
         $title = isset($body['series']['title']) ? (string)$body['series']['title'] : '';
         $category = isset($_GET['category']) ? (string)$_GET['category'] : NULL;
+        //seasons of the grabbed episodes; a season pack is told by the release type (newer Sonarr) or by several episodes
+        $episodes = isset($body['episodes']) && is_array($body['episodes']) ? $body['episodes'] : array();
+        $seasons = array();
+        foreach ($episodes as $episode)
+            if (is_array($episode) && isset($episode['seasonNumber']) && is_numeric($episode['seasonNumber']))
+                $seasons[(int)$episode['seasonNumber']] = (int)$episode['seasonNumber'];
+        $seasons = array_values($seasons);
+        $type = isset($body['release']['releaseType']) ? (string)$body['release']['releaseType'] : '';
+        $pack = $type !== '' && strcasecmp($type, 'Unknown') != 0 ? strcasecmp($type, 'SeasonPack') == 0 : count($episodes) > 1;
+
         self::respondAndContinue('Принято.');
-        self::grab($hash, $title, $seriesId, $category);
+        self::grab($hash, $title, $seriesId, $category, $seasons, $pack);
         exit;
     }
 
-    private static function grab(string $hash, string $title, ?int $seriesId, ?string $category): void
+    private static function grab(string $hash, string $title, ?int $seriesId, ?string $category, array $seasons = array(), bool $pack = FALSE): void
     {
         //the torrent may not appear in the client right after the event
         $info = NULL;
@@ -341,18 +352,72 @@ final class Api
         {
             $fields = array('hash' => strtolower($hash));
             if ($seriesId !== NULL)
+            {
                 $fields['sonarrSeries'] = $seriesId;
+                //seasons add up only while the topic belongs to the same series
+                $before = $known['sonarrSeries'] !== NULL && $known['sonarrSeries'] == $seriesId ? $known['sonarrSeasons'] : array();
+                $fields['sonarrSeasons'] = array_values(array_unique(array_merge($before, $seasons)));
+            }
             Topics::update($known['id'], $fields);
+            if ($pack)
+                self::replaced($known['id'], strtolower($hash), $seriesId, $seasons);
             return;
         }
 
         //the torrent's directory and category are saved in the topic: the updated torrent will go to the same place
-        Topics::add(array(
+        $id = Topics::add(array(
             'tracker' => $parsed['tracker'], 'topicId' => $parsed['topicId'], 'name' => $title, 'autoRename' => TRUE,
-            'hash' => strtolower($hash), 'path' => $info['path'], 'sonarrSeries' => $seriesId,
+            'hash' => strtolower($hash), 'path' => $info['path'], 'sonarrSeries' => $seriesId, 'sonarrSeasons' => $seriesId !== NULL ? $seasons : array(),
             'category' => $category !== NULL && $category !== '' ? $category : $info['category'],
         ));
         Warnings::clear('api');
         Notifications::info('api', 'Тема «'.($title !== '' ? $title : $info['comment']).'» ('.$info['comment'].') добавлена на мониторинг через Sonarr.');
+        if ($pack)
+            self::replaced($id, strtolower($hash), $seriesId, $seasons);
+    }
+
+    //Sonarr grabbed a season pack and its topic ($newId, torrent $newHash) is monitored now: the older topics
+    //of the same series and season are deleted, if this is enabled in the settings. Only topics that Sonarr
+    //itself added (they carry its series number and seasons) can be replaced, never the ones added by hand.
+    private static function replaced(int $newId, string $newHash, ?int $seriesId, array $seasons): void
+    {
+        if ( ! Settings::on('sonarrReplaceTopic') || $seriesId === NULL || empty($seasons))
+            return;
+        foreach (Topics::all() as $old)
+        {
+            if ($old['id'] == $newId || $old['sonarrSeries'] === NULL || $old['sonarrSeries'] != $seriesId
+                || empty(array_intersect((array)$old['sonarrSeasons'], $seasons)))
+                continue;
+            $removed = FALSE;
+            if (Settings::on('sonarrReplaceTorrent') && $old['hash'] !== '' && strcasecmp($old['hash'], $newHash) != 0)
+                $removed = Delivery::removeFromClient($old['hash'], Settings::on('deleteFilesOnRemove') && ! self::sharedContent($old['hash'], $newHash));
+            Topics::delete($old['id']);
+            $name = $old['name'] !== '' ? $old['name'] : 'Тема '.$old['topicId'];
+            Notifications::info('api', 'Тема «'.$name.'» ('.$old['tracker'].') удалена: Sonarr загрузил другую раздачу этого сезона.'
+                .($removed ? ' Её раздача удалена из torrent-клиента.' : ''));
+        }
+    }
+
+    //Whether deleting the files of the old torrent could delete files of the new one: both are downloaded
+    //to the same place. Unknown counts as shared, so that files are kept when in doubt.
+    private static function sharedContent(string $oldHash, string $newHash): bool
+    {
+        try
+        {
+            $client = Clients::current();
+            $old = $client->info($oldHash);
+            $new = $client->info($newHash);
+        }
+        catch (ClientException $e)
+        {
+            return TRUE;
+        }
+        if ($old === NULL)
+            return FALSE;
+        if ($new === NULL || empty($old['content']) || empty($new['content']))
+            return TRUE;
+        $a = rtrim(str_replace('\\', '/', $old['content']), '/');
+        $b = rtrim(str_replace('\\', '/', $new['content']), '/');
+        return $a === $b || strncmp($a.'/', $b.'/', strlen($b) + 1) === 0 || strncmp($b.'/', $a.'/', strlen($a) + 1) === 0;
     }
 }

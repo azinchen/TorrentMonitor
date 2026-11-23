@@ -62,10 +62,11 @@ final class Deluge extends HttpClientBase
     public function info(string $id): ?array
     {
         $this->connect();
-        $status = $this->rpc('web.get_torrent_status', array(strtolower($id), array('comment', 'download_location')));
+        $status = $this->rpc('web.get_torrent_status', array(strtolower($id), array('comment', 'download_location', 'name')));
         if (empty($status) || ! is_array($status))
             return NULL;
         return array('comment' => isset($status['comment']) ? (string)$status['comment'] : '',
-            'path' => isset($status['download_location']) ? (string)$status['download_location'] : '', 'category' => '');
+            'path' => isset($status['download_location']) ? (string)$status['download_location'] : '', 'category' => '',
+            'content' => isset($status['download_location'], $status['name']) && $status['name'] !== '' ? rtrim((string)$status['download_location'], '/').'/'.$status['name'] : '');
     }
 }

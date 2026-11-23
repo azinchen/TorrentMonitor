@@ -76,6 +76,7 @@ final class QBittorrent extends HttpClientBase
             'comment'  => isset($data['comment']) ? (string)$data['comment'] : '',
             'path'     => isset($data['save_path']) ? (string)$data['save_path'] : '',
             'category' => isset($list[0]['category']) ? (string)$list[0]['category'] : '',
+            'content'  => isset($list[0]['content_path']) ? (string)$list[0]['content_path'] : '',
         );
     }
 }

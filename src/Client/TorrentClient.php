@@ -14,7 +14,8 @@ interface TorrentClient
     public function remove(string $id, bool $deleteData): void;
 
     // Details of the torrent in the client: array('comment' => comment from the torrent file (trackers put
-    // the topic address there), 'path' => download directory, 'category' => category).
+    // the topic address there), 'path' => download directory, 'category' => category,
+    // 'content' => path of the downloaded file or folder, '' if the client does not tell).
     // NULL if there is no such torrent or the client cannot do this.
     public function info(string $id): ?array;
 }
