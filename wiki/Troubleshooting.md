@@ -49,7 +49,7 @@ TorrentMonitor. Страница появляется, если веб-серв�
   «проверка прекращена». См.
   [Настройки](Settings#прекращение-проверки-тем-без-обновлений).
 - Предупреждение «Трекер больше не поддерживается.» — трекер удалён из TorrentMonitor
-  (casstudio.tk, hamsterstudio.org, tfile.cc).
+  (casstudio.tk, hamsterstudio.org, tfile.cc, baibako.tv).
 
 ## Ошибка авторизации на трекере
 

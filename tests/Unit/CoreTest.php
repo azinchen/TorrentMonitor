@@ -186,6 +186,8 @@ final class CoreTest extends TestCase
         $this->assertSame('series', Registry::kind('lostfilm.tv'));
         $this->assertNull(Registry::kind('casstudio.tk'));
         $this->assertNull(Registry::kind('tfile.cc'));
+        $this->assertNull(Registry::kind('baibako.tv'));
+        $this->assertNull(Registry::fromUrl('http://baibako.tv/details.php?id=12'));
     }
 
     /** @dataProvider topicUrls */
@@ -209,7 +211,6 @@ final class CoreTest extends TestCase
             array('https://kinozal.guru/details.php?id=99', 'kinozal.guru', '99'),
             array('http://rutor.is/torrent/4321/some-name', 'rutor.is', '4321'),
             array('https://booktracker.org/viewtopic.php?t=8', 'booktracker.org', '8'),
-            array('http://baibako.tv/details.php?id=12', 'baibako.tv_forum', '12'),
             array('http://rustorka.com/forum/viewtopic.php?t=31', 'rustorka.com', '31'),
         );
     }
@@ -343,5 +344,14 @@ final class CoreTest extends TestCase
         $this->assertSame('адрес сайта не найден (DNS)', $response(0, 6, NULL)->failureText());
         $this->assertSame('нет ответа за отведённое время через прокси socks5h://p:1080', $response(0, 28, 'socks5h://p:1080')->failureText());
         $this->assertSame('нет ответа (curl says so)', $response(0, 99, NULL)->failureText());
+    }
+
+    public function testKinozalEntriesFallBackToTheOtherAddresses()
+    {
+        $addresses = function ($name) { return $this->call(Registry::get($name), 'defaultAddresses'); };
+        $this->assertSame(array('https://kinozal.me', 'https://kinozal.guru'), $addresses('kinozal.me'));
+        $this->assertSame(array('https://kinozal.guru', 'https://kinozal.me'), $addresses('kinozal.guru'));
+        // the dead domain stays first only so that its entry keeps its name; the others take over
+        $this->assertSame(array('https://kinozal.tv', 'https://kinozal.me', 'https://kinozal.guru'), $addresses('kinozal.tv'));
     }
 }

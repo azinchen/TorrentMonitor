@@ -200,7 +200,7 @@ lostfilm.tv и newstudio.tv не принимаются — это RSS-трек�
 
 | Параметр | Обязателен | Описание |
 |---|---|---|
-| `tracker` | да | `lostfilm.tv`, `lostfilm-mirror`, `newstudio.tv` или `baibako.tv` |
+| `tracker` | да | `lostfilm.tv`, `lostfilm-mirror` или `newstudio.tv` |
 | `name` | да | название сериала на английском, например `House` |
 | `quality` | нет | качество: `sd` (по умолчанию), `720` или `1080` |
 | `path` | нет | директория для скачивания (если пусто — берётся из глобальных настроек) |

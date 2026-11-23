@@ -20,10 +20,8 @@ class Live
         'anidub.com'       => array('ANIDUB',      array('/')),
         'animelayer.ru'    => array('ANIMELAYER',  array('/torrents/anime/', '/')),
         'riperam.org'      => array('RIPERAM',     array('/', '/search.php?search_id=active_topics')),
-        'baibako.tv_forum' => array('BAIBAKO',     array('/browse.php', '/')),
         'lostfilm.tv'      => array('LOSTFILM',        array()),
         'lostfilm-mirror'  => array('LOSTFILM_MIRROR', array()),
-        'baibako.tv'       => array('BAIBAKO',         array()),
         'newstudio.tv'     => array('NEWSTUDIO',       array()),
     );
 
@@ -51,13 +49,11 @@ class Live
             return isset($secrets[$prefix.'_'.$key]) ? $secrets[$prefix.'_'.$key] : '';
         };
         $tracker = $name == 'kinozal' ? ($get('DOMAIN') ?: 'kinozal.me') : $name;
-        // the forum and the RSS feed of baibako.tv share the account but not the topic
-        $own = $name == 'baibako.tv_forum' ? 'FORUM_' : '';
         return array(
             'tracker' => $tracker, 'login' => $get('LOGIN'), 'password' => $get('PASSWORD'), 'passkey' => $get('PASSKEY'),
             // TM_LIVE_AUTO=1 ignores the topics fixed in the secrets
-            'cookie' => $get('COOKIE'), 'address' => $get('ADDRESS'), 'topic' => getenv('TM_LIVE_AUTO') === '1' ? '' : $get($own.'TOPIC'), 'quality' => $get('QUALITY'),
-            'watchUser' => $get('WATCH_USER'), 'skip' => $get($own.'SKIP') === '1',
+            'cookie' => $get('COOKIE'), 'address' => $get('ADDRESS'), 'topic' => getenv('TM_LIVE_AUTO') === '1' ? '' : $get('TOPIC'), 'quality' => $get('QUALITY'),
+            'watchUser' => $get('WATCH_USER'), 'skip' => $get('SKIP') === '1',
         );
     }
 
@@ -81,8 +77,6 @@ class Live
             return NULL;
         if ($account['cookie'] === '' && ($account['login'] === '' || $account['password'] === ''))
             return 'no login and password (or cookie) for '.$account['tracker'].' in tests/env/secrets/trackers.env';
-        if ($account['tracker'] == 'baibako.tv' && $account['passkey'] === '')
-            return 'no passkey for baibako.tv in tests/env/secrets/trackers.env';
         return NULL;
     }
 
@@ -94,12 +88,6 @@ class Live
         Accounts::set($tracker, array('login' => $account['login'], 'password' => $account['password'],
             'passkey' => $account['passkey'], 'address' => $account['address']));
         Accounts::setCookie($tracker, $account['cookie']);
-        // the same account serves both baibako entries
-        if ($tracker == 'baibako.tv_forum' || $tracker == 'baibako.tv')
-        {
-            $other = $tracker == 'baibako.tv' ? 'baibako.tv_forum' : 'baibako.tv';
-            Accounts::set($other, array('login' => $account['login'], 'password' => $account['password'], 'passkey' => $account['passkey']));
-        }
         App::resetHttp();
         Registry::reset();
     }
@@ -201,7 +189,7 @@ class Live
         $object->login();
         $response = self::call($object, 'send', $object->request(array('name' => '', 'quality' => 'sd', 'episode' => '')));
         $body = $response->body;
-        if ($tracker == 'lostfilm.tv' || $tracker == 'baibako.tv')
+        if ($tracker == 'lostfilm.tv')
             $body = str_replace(array('<![CDATA[', ']]>'), '', str_replace('&', '&amp;', str_replace('&amp;', '&', $body)));
         $body = (string)preg_replace('/^(\s*<\?xml[^>]*encoding=["\'])[^"\']*/i', '$1utf-8', $body);
         $before = libxml_use_internal_errors(TRUE);
@@ -248,18 +236,6 @@ class Live
             $name = trim(str_replace('.', ' ', $n[1]));
             foreach (array('1080' => 'mkv|MKV', '720' => 'mp4|MP4', 'sd' => 'avi|AVI') as $q => $pattern)
                 if ($quality === NULL && preg_match('/'.$pattern.'/', $link) && ($wanted === '' || $wanted == $q))
-                    $quality = $q;
-        }
-        elseif ($tracker == 'baibako.tv')
-        {
-            if ( ! preg_match('/s(\d{2})\.?e(\d{2})/i', $link, $se) && ! preg_match('/s(\d{2})\.?e\d{2}-(\d{2})/i', $title, $se))
-                return NULL;
-            // the name is the text before the season mark or the first slash
-            if ( ! preg_match('~^\s*([^/\[(]+?)\s*(/|\(|\[|s\d{2}e\d{2}|$)~iu', $title, $n))
-                return NULL;
-            $name = trim($n[1]);
-            foreach (array('1080' => 'HD(TV)?1080', '720' => 'HD(TV)?720', 'sd' => 'x264') as $q => $pattern)
-                if ($quality === NULL && preg_match('/'.$pattern.'/', $title) && ($wanted === '' || $wanted == $q))
                     $quality = $q;
         }
         elseif ($tracker == 'newstudio.tv')

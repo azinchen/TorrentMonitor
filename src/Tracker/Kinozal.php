@@ -3,7 +3,9 @@ namespace TorrentMonitor\Tracker;
 
 use TorrentMonitor\Http\Request;
 
-// kinozal.tv and its mirrors kinozal.me, kinozal.guru: one site under different addresses.
+// kinozal.me and its mirrors kinozal.guru, kinozal.tv: one site under different addresses, with the
+// same accounts. The kinozal.tv domain no longer resolves (November 2026); its entry is kept so that
+// topics added under it keep working through the other addresses.
 final class Kinozal extends ForumTracker
 {
     const CHARSET = 'windows-1251';
@@ -11,7 +13,8 @@ final class Kinozal extends ForumTracker
 
     protected function defaultAddresses(): array
     {
-        return array('https://'.$this->name);
+        // the own address first, the other mirrors as fallbacks
+        return array_values(array_unique(array('https://'.$this->name, 'https://kinozal.me', 'https://kinozal.guru')));
     }
 
     protected function sessionAlive(string $cookie): bool

@@ -10,6 +10,9 @@ rm -f /app/src/AddedByRelease.php
 cat > /app/config.php <<CONFIG
 <?php
 Config::write('update.api', '${TM_UPDATE_API:-http://fake:8080/github}');
-// the test network has no internet: the connectivity check asks the fake instead
-Config::write('connectivity.url', 'http://fake:8080/__control/state');
 CONFIG
+# offline tests must not depend on the internet: the connectivity check asks the fake instead.
+# Live tests use the real check (through the VPN the fake is not even reachable by name).
+if [ "${TM_LIVE:-0}" != 1 ]; then
+    echo "Config::write('connectivity.url', 'http://fake:8080/__control/state');" >> /app/config.php
+fi

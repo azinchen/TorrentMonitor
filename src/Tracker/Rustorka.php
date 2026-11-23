@@ -5,7 +5,7 @@ use TorrentMonitor\Http\Request;
 
 final class Rustorka extends ForumTracker
 {
-    const ADDRESSES = array('http://rustorka.com');
+    const ADDRESSES = array('https://rustorka.com');
     const CHARSET = 'windows-1251';
 
     protected function sessionAlive(string $cookie): bool
@@ -19,6 +19,9 @@ final class Rustorka extends ForumTracker
         $body = 'login_username='.$this->encodedLogin().'&login_password='.rawurlencode($this->account['password']).'&login=%C2%F5%EE%E4';
         $response = $this->send($this->post('/forum/login.php', $body, '')->referer($this->url('/forum/index.php')));
 
+        // the site shows its own captcha ("pick the colour") to visitors: only a person can pass it
+        if (strpos($response->body, 'captcha_answer') !== FALSE)
+            throw new TrackerException('site_captcha');
         $wrong = (bool)preg_match('/profile\.php\?mode=register/', $response->headers.$response->body);
         $session = $response->cookie('bb_data');
         if ( ! $wrong && $session !== NULL && $session !== '' && $session != 'deleted')

@@ -15,14 +15,12 @@ final class Registry
         'rutor.is'         => array(Rutor::class, 'topic'),
         'kinozal.me'       => array(Kinozal::class, 'topic'),
         'anidub.com'       => array(Anidub::class, 'topic'),
-        'baibako.tv'       => array(Baibako::class, 'series'),
         'newstudio.tv'     => array(Newstudio::class, 'series'),
         'animelayer.ru'    => array(Animelayer::class, 'topic'),
         'rustorka.com'     => array(Rustorka::class, 'topic'),
         'pornolab.net'     => array(Pornolab::class, 'topic'),
         'lostfilm-mirror'  => array(LostfilmMirror::class, 'series'),
         'booktracker.org'  => array(Booktracker::class, 'topic'),
-        'baibako.tv_forum' => array(BaibakoForum::class, 'topic'),
         'riperam.org'      => array(Riperam::class, 'topic'),
         'kinozal.tv'       => array(Kinozal::class, 'topic'),
         'kinozal.guru'     => array(Kinozal::class, 'topic'),
@@ -31,7 +29,6 @@ final class Registry
     // other addresses of the same trackers: host => tracker
     const HOSTS = array(
         'tr.anidub.com' => 'anidub.com',
-        'baibako.tv'    => 'baibako.tv_forum',
         'rutracker.net' => 'rutracker.org',
         'rutracker.nl'  => 'rutracker.org',
         'nnm-club.me'   => 'nnmclub.to',

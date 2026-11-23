@@ -11,9 +11,8 @@
 - Слежение за темами
   - anidub.com
   - animelayer.ru
-  - baibako.tv
   - booktracker.org
-  - kinozal.me
+  - kinozal.me / kinozal.guru
   - lostfilm.tv
   - newstudio.tv
   - nnmclub.to
@@ -28,7 +27,6 @@
   - pornolab.net
   - rutracker.org
 - Поиск новых серий (SD/HD 720/HD 1080 версии на выбор)
-  - baibako.tv 
   - lostfilm.tv (+ собственное зеркало)
   - newstudio.tv
 - Работа через proxy (SOCKS5/HTTP), зеркала трекеров, FlareSolverr/Byparr для Cloudflare

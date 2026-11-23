@@ -19,8 +19,8 @@ TorrentMonitor следит за страницами раздач (темами
 
 ## Возможности
 
-- **Мониторинг раздач** на 14 трекерах: rutracker.org, lostfilm.tv, kinozal (три зеркала),
-  nnmclub.to, anidub.com, baibako.tv, newstudio.tv, rutor.is и других —
+- **Мониторинг раздач** на 12 трекерах: rutracker.org, lostfilm.tv, kinozal (два адреса),
+  nnmclub.to, anidub.com, newstudio.tv, rutor.is и других —
   см. [полный список](Supported-Trackers).
 - **Автоматическое скачивание**: передача новых и обновлённых раздач в торрент-клиент —
   Transmission, qBittorrent, Deluge, TorrServer, Synology Download Station

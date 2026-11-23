@@ -204,7 +204,7 @@ final class Ui
             $trackers[] = array(
                 'name' => $name, 'kind' => Registry::kind($name), 'needsAccount' => Registry::needsAccount($name), 'watchesUsers' => Registry::watchesUsers($name),
                 'ready' => Registry::ready($name), 'login' => $account['login'], 'hasPassword' => $account['password'] !== '', 'passkey' => $account['passkey'],
-                'usesPasskey' => $name == 'baibako.tv', 'address' => $account['address'], 'defaultAddress' => Registry::get($name)->base(),
+                'usesPasskey' => FALSE, 'address' => $account['address'], 'defaultAddress' => Registry::get($name)->base(),
                 'hasCookie' => Accounts::cookie($name) !== '',
                 'proxy' => isset($proxy['use']) ? ($proxy['use'] == 'yes' ? 'own' : 'off') : 'default',
                 'proxyAddress' => isset($proxy['address']) ? (string)$proxy['address'] : '', 'proxyType' => isset($proxy['type']) ? strtoupper((string)$proxy['type']) : 'SOCKS5',

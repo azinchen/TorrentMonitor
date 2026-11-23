@@ -13,7 +13,7 @@ use TorrentMonitor\Tracker\Registry;
 
 $solver = (string)getenv('TM_SOLVER');
 Settings::set('flaresolverrUrl', '');
-$exit = App::http()->send(Request::get('https://ifconfig.co/country-iso')->timeout(15));
+$exit = App::http()->send(Request::get('https://ipinfo.io/country')->timeout(15));
 echo 'exit country: '.(trim($exit->body) ?: 'unknown')."\n";
 
 $requests = array();

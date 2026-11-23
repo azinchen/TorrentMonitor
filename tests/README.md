@@ -168,11 +168,15 @@ FlareSolverr listens on port 8192 in the live stack, not on its usual 8191:
 
 Results so far (23.11.2026):
 
-- rutracker.org, kinozal.me and lostfilm-mirror pass the whole tracker test with an
-  automatically chosen topic or series. kinozal.me also passes with FlareSolverr.
+- rutracker.org, kinozal.me, rutor.is and lostfilm-mirror pass the whole tracker test
+  with an automatically chosen topic or series, through the VPN.
+  kinozal.me also passes with FlareSolverr.
+- The kinozal.tv domain resolves to 127.0.0.1 on every DNS server; its entry logs in
+  through kinozal.me (checked with the real account).
+- rustorka.com shows its own captcha to every visitor: login by password is impossible.
+- rutor.is answers from most networks tried, not from all. newstudio.tv answers from
+  some networks only. baibako.tv answered from none and was removed from the program.
 - tfile.cc answered with a parking page on every address and was removed from the program.
-- rutor.is, baibako.tv, newstudio.tv and kinozal.tv do not answer, neither
-  directly nor through the VPN (exit in Portugal).
 - The other trackers, the notification services and SynologyDS wait for accounts.
 
 ## Reachability
