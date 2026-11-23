@@ -371,5 +371,19 @@ final class CoreTest extends TestCase
         $this->assertFalse(Topics::sameTitle('House', 'House of the Dragon'));
         $this->assertFalse(Topics::sameTitle('', ''));
         $this->assertFalse(Topics::sameTitle('!!!', '???'));
+
+        // Sonarr adds the year to some titles; its page address holds the same name
+        $this->assertTrue(Topics::sameTitle('The Kitchen', 'The Kitchen (2012)'));
+        $this->assertTrue(Topics::sameTitle('the kitchen 2012', 'The Kitchen (2012)'));
+        $this->assertTrue(Topics::sameTitle('the-kitchen-2012', 'The Kitchen (2012)'));
+        $this->assertFalse(Topics::sameTitle('The Kitchen (2020)', 'The Kitchen (2012)'), 'another year is another series');
+        $this->assertTrue(Topics::sameTitle('2012', '2012 (2009)'), 'a title that is only a year stays a title');
+        $this->assertTrue(Topics::sameTitle('1923', '1923'));
+        $this->assertTrue(Topics::sameTitle("The Boy's Word: Blood on the Asphalt", 'the boys word blood on the asphalt'));
+        $this->assertFalse(Topics::sameTitle('Кухня', 'The Kitchen (2012)'), 'the Russian name is not what Sonarr sends');
+
+        $this->assertSame('the-kitchen-2012', Topics::sonarrName(' http://sonarr.local:8989/series/the-kitchen-2012 '));
+        $this->assertSame('the-kitchen-2012', Topics::sonarrName('https://example.org/sonarr/series/the-kitchen-2012/'));
+        $this->assertSame('The Kitchen (2012)', Topics::sonarrName(' The Kitchen (2012) '));
     }
 }

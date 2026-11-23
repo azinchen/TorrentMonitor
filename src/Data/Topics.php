@@ -180,7 +180,7 @@ final class Topics
     /** @return array|string */
     public static function sonarrLink(string $title, $seasons, ?array $topic = NULL)
     {
-        $title = trim($title);
+        $title = self::sonarrName($title);
         // a topic Sonarr added before titles were stored has a series number and no title: the form
         // then sends an empty title, which must not be taken as a broken link
         if ($title === '' && $topic !== NULL && $topic['sonarrSeries'] !== NULL && $topic['sonarrTitle'] === '')
@@ -200,25 +200,55 @@ final class Topics
         return $fields;
     }
 
-    // Titles are compared without regard to case, punctuation and extra spaces
-    public static function sameTitle(string $a, string $b): bool
+    // What the user may put into the "series in Sonarr" field: the title as Sonarr shows it, or
+    // the address of the series page in Sonarr (its last part is the name Sonarr sends in events).
+    public static function sonarrName(string $text): string
     {
-        $plain = function ($text) {
-            // an apostrophe does not split a word: "Marvel's" is "marvels"
-            $text = str_replace(array("'", '’', '`'), '', mb_strtolower($text, 'UTF-8'));
-            return trim((string)preg_replace('/[^\p{L}\p{N}]+/u', ' ', $text));
-        };
-        return $plain($a) !== '' && $plain($a) === $plain($b);
+        $text = trim($text);
+        if (preg_match('~^https?://~i', $text))
+        {
+            $parts = array_values(array_filter(explode('/', (string)parse_url($text, PHP_URL_PATH)), 'strlen'));
+            if ( ! empty($parts))
+                return rawurldecode(end($parts));
+        }
+        return $text;
     }
 
-    // Sonarr named a series: the topics linked to it by title get its number, so that later
-    // events (which are matched by the number) find them. Returns how many topics were linked.
-    public static function bindSonarr(int $seriesId, string $title): int
+    // array(words of the title in lower case, year or NULL): "The Kitchen (2012)" and
+    // "the-kitchen-2012" both give array('the kitchen', '2012')
+    private static function titleKey(string $text): array
+    {
+        // an apostrophe does not split a word: "Marvel's" is "marvels"
+        $text = str_replace(array("'", '’', '`'), '', mb_strtolower($text, 'UTF-8'));
+        $text = trim((string)preg_replace('/[^\p{L}\p{N}]+/u', ' ', $text));
+        // Sonarr adds the year to tell apart series with the same title
+        if (preg_match('/^(.+) ((?:19|20)\d{2})$/u', $text, $m))
+            return array($m[1], $m[2]);
+        return array($text, NULL);
+    }
+
+    // Titles are compared without regard to case, punctuation and extra spaces. The year at the
+    // end may be left out on either side; two different years are two different series.
+    public static function sameTitle(string $a, string $b): bool
+    {
+        list($titleA, $yearA) = self::titleKey($a);
+        list($titleB, $yearB) = self::titleKey($b);
+        return $titleA !== '' && $titleA === $titleB && ($yearA === NULL || $yearB === NULL || $yearA === $yearB);
+    }
+
+    // Sonarr named a series ($title, and $slug - its name in the addresses of Sonarr): the topics
+    // linked to it by the user get its number, so that later events (which are matched by the
+    // number) find them, and the title as Sonarr writes it. Returns how many topics were linked.
+    public static function bindSonarr(int $seriesId, string $title, string $slug = ''): int
     {
         $updates = array();
         foreach (self::all() as $topic)
-            if ($topic['sonarrSeries'] === NULL && $topic['sonarrTitle'] !== '' && self::sameTitle($topic['sonarrTitle'], $title))
-                $updates[$topic['id']] = array('sonarrSeries' => $seriesId);
+        {
+            if ($topic['sonarrSeries'] !== NULL || $topic['sonarrTitle'] === '')
+                continue;
+            if (self::sameTitle($topic['sonarrTitle'], $title) || ($slug !== '' && self::sameTitle($topic['sonarrTitle'], $slug)))
+                $updates[$topic['id']] = array('sonarrSeries' => $seriesId) + ($title !== '' ? array('sonarrTitle' => $title) : array());
+        }
         return self::updateMany($updates);
     }
 

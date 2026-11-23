@@ -561,10 +561,11 @@
                 <small>Запускается на сервере после добавления раздачи в torrent-клиент.</small></label>
             <div x-show="topicForm.kind == 'topic'">
                 <label class="field"><span>Сериал в Sonarr</span>
-                    <input type="text" x-model="topicForm.sonarrTitle" list="sonarr-titles" placeholder="название, как в Sonarr">
+                    <input type="text" x-model="topicForm.sonarrTitle" list="sonarr-titles" placeholder="название в Sonarr или адрес страницы сериала">
                     <datalist id="sonarr-titles"><template x-for="s in sonarrTitles" :key="s"><option :value="s"></option></template></datalist>
-                    <small>Связывает тему с сериалом: когда Sonarr загрузит этот сезон целиком другой раздачей, тема может быть заменена
-                        (если это включено в Настройки → API и Sonarr).</small></label>
+                    <small>Название так, как оно написано в Sonarr (русские сериалы там обычно названы по-английски:
+                        «Кухня» — The Kitchen (2012)), либо адрес страницы сериала в Sonarr. Связывает тему с сериалом: когда Sonarr
+                        загрузит этот сезон целиком другой раздачей, тема может быть заменена (если это включено в Настройки → API и Sonarr).</small></label>
                 <label class="field"><span>Сезон</span>
                     <input type="text" x-model="topicForm.sonarrSeasons" placeholder="например: 2" :required="!!topicForm.sonarrTitle">
                     <small>Номер сезона, который раздаётся в теме. Несколько — через запятую.</small></label>

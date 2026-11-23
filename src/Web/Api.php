@@ -270,7 +270,7 @@ final class Api
         //Sonarr names a series in every event about it: the topics the user linked to the series
         //by its title are found by its number from now on
         if ($seriesId !== NULL && isset($body['series']['title']) && trim((string)$body['series']['title']) !== '')
-            Topics::bindSonarr($seriesId, (string)$body['series']['title']);
+            Topics::bindSonarr($seriesId, (string)$body['series']['title'], isset($body['series']['titleSlug']) ? (string)$body['series']['titleSlug'] : '');
 
         if ($event == 'SeriesDelete')
         {

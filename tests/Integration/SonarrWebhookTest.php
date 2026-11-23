@@ -348,6 +348,21 @@ final class SonarrWebhookTest extends IntegrationTestCase
         $this->event(array('eventType' => 'Grab', 'downloadId' => str_repeat('cd', 20), 'series' => array('id' => 91, 'title' => 'show')));
         Env::waitFor(function () use ($id) { return AppState::topic($id)['sonarrSeries'] === 91; }, 'the topic to get the series number');
 
+        $this->assertSame('show', AppState::topic($id)['sonarrTitle'], 'the title is kept as Sonarr writes it');
+
+        // the address of the series page in Sonarr works as well, and the year may be left out
+        Env::setTopic(662, 'Кухня', '01-Ноя-26 10:00', 1);
+        Env::setTopic(663, 'Мажор', '01-Ноя-26 10:00', 1);
+        $this->assertTrue(Env::ui('topic.add', array('kind' => 'topic', 'url' => self::TOPIC.'662', 'sonarrTitle' => 'http://sonarr.local:8989/series/the-kitchen-2012', 'sonarrSeasons' => '1'))['json']['ok']);
+        $this->assertTrue(Env::ui('topic.add', array('kind' => 'topic', 'url' => self::TOPIC.'663', 'sonarrTitle' => 'Silver Spoon', 'sonarrSeasons' => '1'))['json']['ok']);
+        $this->event(array('eventType' => 'Rename', 'series' => array('id' => 92, 'title' => 'The Kitchen (2012)', 'titleSlug' => 'the-kitchen-2012')));
+        $this->event(array('eventType' => 'Rename', 'series' => array('id' => 93, 'title' => 'Silver Spoon (2014)', 'titleSlug' => 'silver-spoon-2014')));
+        $linked = array();
+        foreach (AppState::topics() as $topic)
+            $linked[$topic['torrent_id']] = array($topic['sonarrSeries'], $topic['sonarrTitle']);
+        $this->assertSame(array(92, 'The Kitchen (2012)'), $linked['662']);
+        $this->assertSame(array(93, 'Silver Spoon (2014)'), $linked['663']);
+
         // an edit that does not touch the link keeps it
         Env::ui('topic.pause', array('id' => $id, 'paused' => true));
         $this->assertSame(91, AppState::topic($id)['sonarrSeries']);
