@@ -290,4 +290,98 @@ final class SonarrWebhookTest extends IntegrationTestCase
         $this->assertFileExists($newFile, 'the file both torrents share is kept');
         $this->assertTrue(Qbt::has($same));
     }
+
+    // ---- topics added by hand and linked to a Sonarr series by its title and season
+
+    public function testTopicLinkedByHandIsReplacedBySeasonPackOfItsSeries()
+    {
+        AppState::setSettings(array('sonarrReplaceTopic' => '1', 'sonarrReplaceTorrent' => '1'));
+        $this->loginToTracker();
+        AppState::useQbittorrent();
+        Env::setTopic(651, 'Сезон 1, своя тема', '01-Ноя-26 10:00', 1);
+        Env::setTopic(652, 'Сезон 2, своя тема', '01-Ноя-26 10:00', 1);
+        Env::setTopic(653, 'Без связи', '01-Ноя-26 10:00', 1);
+        // the title is written a little differently than in Sonarr: case, spaces and punctuation do not matter
+        $this->assertTrue(Env::ui('topic.add', array('kind' => 'topic', 'url' => self::TOPIC.'651', 'sonarrTitle' => ' сериал  ИЗ sonarr! ', 'sonarrSeasons' => '1'))['json']['ok']);
+        $this->assertTrue(Env::ui('topic.add', array('kind' => 'topic', 'url' => self::TOPIC.'652', 'sonarrTitle' => 'Сериал из Sonarr', 'sonarrSeasons' => '2, 3'))['json']['ok']);
+        $this->assertTrue(Env::ui('topic.add', array('kind' => 'topic', 'url' => self::TOPIC.'653'))['json']['ok']);
+        Env::runEngine();
+        $own = array();
+        foreach (AppState::topics() as $topic)
+            $own[$topic['torrent_id']] = $topic['hash'];
+        $this->assertTrue(Qbt::has($own['651']));
+
+        // a single episode of season 1 replaces nothing
+        $this->grabSeason(654, $this->torrentFromSonarr(654), 1, 1);
+        sleep(2);
+        $this->assertSame(array('651', '652', '653', '654'), $this->trackedTopics());
+
+        $this->grabSeason(655, $this->torrentFromSonarr(655), 1);
+
+        $this->waitForTopics(array(652, 653, 655));
+        Env::waitFor(function () use ($own) { return ! Qbt::has($own['651']); }, 'torrent of the replaced topic removed');
+        $this->assertTrue(Qbt::has($own['652']), 'another season stays');
+        $this->assertTrue(Qbt::has($own['653']), 'a topic without a link stays');
+        $this->assertNoWarnings();
+    }
+
+    public function testLinkIsCheckedAndCanBeChangedAndRemoved()
+    {
+        $this->loginToTracker();
+        Env::setTopic(661, 'Тема', '01-Ноя-26 10:00', 1);
+        $add = array('kind' => 'topic', 'url' => self::TOPIC.'661');
+
+        $noSeason = Env::ui('topic.add', $add + array('sonarrTitle' => 'Show'))['json'];
+        $this->assertFalse($noSeason['ok']);
+        $this->assertStringContainsString('сезон', $noSeason['message']);
+        $this->assertFalse(Env::ui('topic.add', $add + array('sonarrSeasons' => '1'))['json']['ok'], 'a season without a series');
+        $this->assertFalse(Env::ui('topic.add', $add + array('sonarrTitle' => 'Show', 'sonarrSeasons' => 'first'))['json']['ok']);
+        $this->assertCount(0, AppState::topics());
+
+        $added = Env::ui('topic.add', $add + array('sonarrTitle' => 'Show', 'sonarrSeasons' => '2,1 2'))['json'];
+        $this->assertTrue($added['ok']);
+        $this->assertSame(array('Show', array(1, 2)), array($added['topics'][0]['sonarrTitle'], $added['topics'][0]['sonarrSeasons']));
+        $this->assertSame(array('Show'), $added['sonarrTitles'], 'known series are suggested in the form');
+        $id = $added['topics'][0]['id'];
+
+        // Sonarr names the series: the topic is found by its number from now on
+        $this->event(array('eventType' => 'Grab', 'downloadId' => str_repeat('cd', 20), 'series' => array('id' => 91, 'title' => 'show')));
+        Env::waitFor(function () use ($id) { return AppState::topic($id)['sonarrSeries'] === 91; }, 'the topic to get the series number');
+
+        // an edit that does not touch the link keeps it
+        Env::ui('topic.pause', array('id' => $id, 'paused' => true));
+        $this->assertSame(91, AppState::topic($id)['sonarrSeries']);
+        // another series: the number of the previous one is dropped
+        $edit = array('id' => $id, 'kind' => 'topic', 'url' => self::TOPIC.'661', 'name' => 'Тема');
+        $this->assertTrue(Env::ui('topic.save', $edit + array('sonarrTitle' => 'Other Show', 'sonarrSeasons' => '4'))['json']['ok']);
+        $topic = AppState::topic($id);
+        $this->assertSame(array(null, 'Other Show', array(4)), array($topic['sonarrSeries'], $topic['sonarrTitle'], $topic['sonarrSeasons']));
+        // both fields emptied: no link
+        $this->assertTrue(Env::ui('topic.save', $edit + array('sonarrTitle' => '', 'sonarrSeasons' => ''))['json']['ok']);
+        $topic = AppState::topic($id);
+        $this->assertSame(array(null, '', array()), array($topic['sonarrSeries'], $topic['sonarrTitle'], $topic['sonarrSeasons']));
+    }
+
+    public function testLinkThroughTheApiAndSeriesDeleteOfALinkedTopic()
+    {
+        AppState::setSettings(array('removeOnSeriesDelete' => '1'));
+        $this->loginToTracker();
+        Env::setTopic(671, 'Тема', '01-Ноя-26 10:00', 1);
+        Env::setTopic(672, 'Другая', '01-Ноя-26 10:00', 1);
+
+        $bad = Env::api('POST', 'torrents', array('json' => array('url' => self::TOPIC.'671', 'sonarrTitle' => 'Show')));
+        $this->assertSame(422, $bad['status']);
+        $created = Env::api('POST', 'torrents', array('json' => array('url' => self::TOPIC.'671', 'sonarrTitle' => 'Show', 'sonarrSeasons' => array(3))));
+        $this->assertSame(201, $created['status'], $created['body']);
+        Env::api('POST', 'torrents', array('json' => array('url' => self::TOPIC.'672')));
+        $listed = Env::api('GET', 'torrents')['json']['data'];
+        $byTopic = array();
+        foreach ($listed as $topic)
+            $byTopic[$topic['topicId']] = array($topic['sonarrTitle'], $topic['sonarrSeasons']);
+        $this->assertSame(array('671' => array('Show', array(3)), '672' => array('', array())), $byTopic);
+
+        // the series is deleted in Sonarr: the linked topic goes, the other one stays
+        $this->event(array('eventType' => 'SeriesDelete', 'series' => array('id' => 55, 'title' => 'Show'), 'deletedFiles' => false));
+        $this->assertSame(array('672'), $this->trackedTopics());
+    }
 }

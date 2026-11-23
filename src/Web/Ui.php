@@ -179,6 +179,7 @@ final class Ui
                 'error' => (bool)$t['error'], 'inClient' => $t['hash'] !== '', 'stopAfterDays' => $t['stopAfterDays'],
                 'stopped' => Topics::expired($t, $stopAfter), 'waiting' => isset($pending[(string)$t['id']]),
                 'addedAt' => $t['addedAt'], 'lastActivityAt' => $t['lastActivityAt'], 'supported' => $known,
+                'sonarrTitle' => $t['sonarrTitle'], 'sonarrSeasons' => array_values((array)$t['sonarrSeasons']),
             );
         }
 
@@ -229,7 +230,7 @@ final class Ui
 
         return array(
             'topics' => $topics, 'users' => $users, 'trackers' => $trackers, 'settings' => $shown, 'warnings' => $warnings, 'news' => $news,
-            'categories' => Topics::categories(), 'clients' => array_keys(Clients::CLASSES),
+            'categories' => Topics::categories(), 'sonarrTitles' => Topics::sonarrTitles(), 'clients' => array_keys(Clients::CLASSES),
             'services' => array_values(array_unique(array_column(Settings::notificationServices(), 'service'))),
             'status' => array(
                 'version' => App::version(), 'lastRun' => State::lastRun(), 'running' => Lock::busy(), 'client' => Clients::currentName(),
@@ -250,6 +251,15 @@ final class Ui
         $days = isset($this->in['stopAfterDays']) ? $this->in['stopAfterDays'] : NULL;
         $fields['stopAfterDays'] = ($days === NULL || $days === '') ? NULL : max(0, (int)$days);
         return $fields;
+    }
+
+    //link of a forum topic to a series in Sonarr, from the form
+    private function sonarrLink(?array $topic): array
+    {
+        $link = Topics::sonarrLink($this->str('sonarrTitle'), isset($this->in['sonarrSeasons']) ? $this->in['sonarrSeasons'] : '', $topic);
+        if (is_string($link))
+            $this->fail($link);
+        return $link;
     }
 
     private function quality(): string
@@ -284,6 +294,7 @@ final class Ui
             $this->fail('Сначала укажите учётные данные для '.$parsed['tracker'].' на странице «Трекеры».');
         if (Topics::find($parsed['tracker'], $parsed['topicId']) !== NULL)
             $this->fail('Эта тема уже отслеживается.');
+        $fields += $this->sonarrLink(NULL);
         $name = $this->str('name');
         Topics::add($fields + $parsed + array('name' => $name !== '' ? $name : self::title($parsed), 'autoRename' => $name === '' || $this->flag('autoRename')));
         return array('message' => 'Тема добавлена.') + $this->doOverview();
@@ -321,6 +332,9 @@ final class Ui
         else
         {
             $fields['autoRename'] = $this->flag('autoRename');
+            //the link to Sonarr changes only when the form sends it (other callers leave it as it is)
+            if (array_key_exists('sonarrTitle', $this->in) || array_key_exists('sonarrSeasons', $this->in))
+                $fields = $this->sonarrLink($topic) + $fields;
             if ($this->str('url') !== '')
             {
                 $parsed = Registry::fromUrl($this->str('url'));

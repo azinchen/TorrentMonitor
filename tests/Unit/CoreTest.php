@@ -354,4 +354,22 @@ final class CoreTest extends TestCase
         // the dead domain stays first only so that its entry keeps its name; the others take over
         $this->assertSame(array('https://kinozal.tv', 'https://kinozal.me', 'https://kinozal.guru'), $addresses('kinozal.tv'));
     }
+
+    // ---- link of a topic to a Sonarr series
+
+    public function testSeasonsAndSeriesTitles()
+    {
+        $this->assertSame(array(1, 2), Topics::seasons('2, 1 2;1'));
+        $this->assertSame(array(0, 12), Topics::seasons(array(12, '0')));
+        $this->assertSame(array(), Topics::seasons(''));
+        $this->assertNull(Topics::seasons('first'));
+        $this->assertNull(Topics::seasons(array(1.5)));
+        $this->assertNull(Topics::seasons('-1'));
+
+        $this->assertTrue(Topics::sameTitle("Marvel's Agents of S.H.I.E.L.D.", 'marvels agents of s h i e l d'));
+        $this->assertTrue(Topics::sameTitle(' Дом   Дракона ', 'дом дракона'));
+        $this->assertFalse(Topics::sameTitle('House', 'House of the Dragon'));
+        $this->assertFalse(Topics::sameTitle('', ''));
+        $this->assertFalse(Topics::sameTitle('!!!', '???'));
+    }
 }
