@@ -250,9 +250,23 @@ final class SonarrWebhookTest extends IntegrationTestCase
         $this->assertSame(array('631', '632', '633', '634', '635', '636'), $this->trackedTopics());
         $this->assertTrue(Qbt::has($season1));
 
+        // a release named after an episode stays a single episode
+        $event = function ($topicId, $releaseTitle, $seriesId) {
+            $this->assertTrue($this->event(array('eventType' => 'Grab', 'downloadId' => strtoupper($this->torrentFromSonarr($topicId)),
+                'series' => array('id' => $seriesId, 'title' => 'Сериал из Sonarr'), 'release' => array('releaseTitle' => $releaseTitle),
+                'episodes' => array(array('id' => 1, 'episodeNumber' => 1, 'seasonNumber' => 1))))['json']['ok']);
+            Env::waitFor(function () use ($topicId) { return in_array((string)$topicId, $this->trackedTopics(), true); }, 'topic '.$topicId);
+        };
+        $event(638, 'Show.S01E01.1080p.WEB-DL-TM', 78);
+        sleep(2);
+        $this->assertSame(array('631', '632', '633', '634', '635', '636', '638'), $this->trackedTopics());
+        // a release named after the season is a pack even with one episode listed (as Sonarr 4.0.20 sends no release type)
+        $event(639, 'Show.S01.1080p.WEB-DL-TM', 78);
+        $this->waitForTopics(array(631, 632, 633, 634, 635, 639));
+
         // a season pack by the release type, even with one episode listed: season 1 topics of series 77 go, the rest stay
         $this->grabSeason(637, $this->torrentFromSonarr(637), 1, 1, 77, 'SeasonPack');
-        $this->waitForTopics(array(632, 635, 636, 637));
+        $this->waitForTopics(array(632, 635, 637, 639));
         $this->assertNoWarnings();
     }
 

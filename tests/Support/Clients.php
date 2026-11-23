@@ -3,21 +3,35 @@
 // TorrentMonitor did to them.
 class Qbt
 {
+    private static $jar = null;
+
     private static function jar()
     {
-        static $jar;
-        if ($jar === null)
+        if (self::$jar === null)
         {
-            $jar = tempnam(sys_get_temp_dir(), 'qbt');
-            Http::post(Env::qbt().'/api/v2/auth/login', array('username' => Env::CLIENT_USER, 'password' => Env::CLIENT_PASS), array('jar' => $jar));
+            self::$jar = tempnam(sys_get_temp_dir(), 'qbt');
+            Http::post(Env::qbt().'/api/v2/auth/login', array('username' => Env::CLIENT_USER, 'password' => Env::CLIENT_PASS), array('jar' => self::$jar));
         }
-        return $jar;
+        return self::$jar;
+    }
+
+    // A request with the session of the tests. qBittorrent drops old sessions when another
+    // program (Sonarr) keeps logging in: then the request is repeated with a new session.
+    private static function request($method, $path, $options = array())
+    {
+        $response = Http::request($method, Env::qbt().$path, $options + array('jar' => self::jar()));
+        if ($response['status'] == 403 || $response['status'] == 401)
+        {
+            self::$jar = null;
+            $response = Http::request($method, Env::qbt().$path, $options + array('jar' => self::jar()));
+        }
+        return $response;
     }
 
     // hash => torrent info
     public static function torrents()
     {
-        $list = (array)Http::get(Env::qbt().'/api/v2/torrents/info', array('jar' => self::jar()))['json'];
+        $list = (array)self::request('GET', '/api/v2/torrents/info')['json'];
         $byHash = array();
         foreach ($list as $torrent)
             $byHash[strtolower($torrent['hash'])] = $torrent;
@@ -32,12 +46,12 @@ class Qbt
     // new torrents are added stopped: live tests must not download real content
     public static function keepStopped()
     {
-        Http::post(Env::qbt().'/api/v2/app/setPreferences', array('json' => json_encode(array('add_stopped_enabled' => true, 'start_paused_enabled' => true))), array('jar' => self::jar()));
+        self::request('POST', '/api/v2/app/setPreferences', array('body' => array('json' => json_encode(array('add_stopped_enabled' => true, 'start_paused_enabled' => true)))));
     }
 
     public static function removeAll()
     {
-        Http::post(Env::qbt().'/api/v2/torrents/delete', array('hashes' => 'all', 'deleteFiles' => 'true'), array('jar' => self::jar()));
+        self::request('POST', '/api/v2/torrents/delete', array('body' => array('hashes' => 'all', 'deleteFiles' => 'true')));
         Env::waitFor(function () { return count(Qbt::torrents()) == 0; }, 'qBittorrent to become empty');
     }
 
@@ -49,7 +63,7 @@ class Qbt
         foreach (array('savepath' => $savePath, 'category' => $category, 'autoTMM' => 'false') as $name => $value)
             $body .= "--$boundary\r\nContent-Disposition: form-data; name=\"$name\"\r\n\r\n$value\r\n";
         $body .= "--$boundary\r\nContent-Disposition: form-data; name=\"torrents\"; filename=\"t.torrent\"\r\nContent-Type: application/x-bittorrent\r\n\r\n$torrentBytes\r\n--$boundary--\r\n";
-        return Http::post(Env::qbt().'/api/v2/torrents/add', $body, array('jar' => self::jar(), 'headers' => array('Content-Type: multipart/form-data; boundary='.$boundary)));
+        return self::request('POST', '/api/v2/torrents/add', array('body' => $body, 'headers' => array('Content-Type: multipart/form-data; boundary='.$boundary)));
     }
 }
 

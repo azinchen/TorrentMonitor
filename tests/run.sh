@@ -12,6 +12,7 @@
 #   tests/run.sh record <tracker> <path> <name>   save a scrubbed tracker page as a fixture
 #   tests/run.sh up            start the local stack and leave it running (http://127.0.0.1:8088)
 #   tests/run.sh down          remove the stack and its data
+#   tests/run.sh sonarr        the whole Sonarr flow against a real Sonarr, once per torrent client
 #   tests/run.sh screenshots   retake the interface screenshots in wiki/images (made-up data)
 #   tests/run.sh hooks         install the pre-push hook that blocks pushing secrets
 #
@@ -61,9 +62,12 @@ live_up() {
     fi
 }
 
-remove_stack() { offline down -v --remove-orphans > /dev/null 2>&1 || true; }
+remove_stack() {
+    offline down -v --remove-orphans > /dev/null 2>&1 || true
+    docker compose --project-directory "$env_dir" -f "$env_dir/compose.yml" -f "$env_dir/compose.offline.yml" -f "$env_dir/compose.sonarr.yml" down -v --remove-orphans > /dev/null 2>&1 || true
+}
 
-phpunit_in_app() { "$1" exec -T -e TM_ROOT=/app -e TM_LIVE_WRONG_PASSWORD="${TM_LIVE_WRONG_PASSWORD:-0}" -e TM_LIVE_AUTO="${TM_LIVE_AUTO:-0}" -e TM_LIVE_GUEST="${TM_LIVE_GUEST:-0}" app phpunit -c /src/tests/phpunit.xml --testsuite "$2" "${@:3}"; }
+phpunit_in_app() { "$1" exec -T -e TM_ROOT=/app -e TM_SONARR="${TM_SONARR:-0}" -e TM_LIVE_WRONG_PASSWORD="${TM_LIVE_WRONG_PASSWORD:-0}" -e TM_LIVE_AUTO="${TM_LIVE_AUTO:-0}" -e TM_LIVE_GUEST="${TM_LIVE_GUEST:-0}" app phpunit -c /src/tests/phpunit.xml --testsuite "$2" "${@:3}"; }
 
 cmd_lint() {
     build_images
@@ -114,6 +118,32 @@ cmd_live() {
         echo "live stack left running (TM_KEEP=1): tests/run.sh down removes it"
     else
         live down -v --remove-orphans > /dev/null 2>&1 || true
+    fi
+    return $status
+}
+
+# The offline stack plus a real Sonarr. The tracker and the indexer are fake; Sonarr itself
+# needs the internet to load the description of a series.
+sonarr_stack() { docker compose --project-directory "$env_dir" -f "$env_dir/compose.yml" -f "$env_dir/compose.offline.yml" -f "$env_dir/compose.sonarr.yml" "$@"; }
+
+cmd_sonarr() {
+    build_images
+    say "Sonarr flow, PHP $TM_PHP"
+    remove_stack
+    sonarr_stack down -v --remove-orphans > /dev/null 2>&1 || true
+    local log
+    if ! log=$(sonarr_stack up -d --wait --quiet-pull fake app qbittorrent transmission deluge sonarr 2>&1); then
+        echo "$log" | tail -15
+        echo "the Sonarr stack did not start"
+        sonarr_stack down -v --remove-orphans > /dev/null 2>&1 || true
+        exit 1
+    fi
+    local status=0
+    TM_SONARR=1 phpunit_in_app sonarr_stack sonarr "$@" || status=$?
+    if [[ "${TM_KEEP:-0}" == 1 || $status -ne 0 ]]; then
+        echo "stack left running: tests/run.sh down removes it"
+    else
+        sonarr_stack down -v --remove-orphans > /dev/null 2>&1 || true
     fi
     return $status
 }
@@ -202,6 +232,7 @@ case "$command" in
     all)         cmd_lint; cmd_unit; cmd_integration; say "all passed" ;;
     live)        cmd_live "$@" ;;
     reach)       cmd_reach ;;
+    sonarr)      cmd_sonarr "$@" ;;
     record)      cmd_record "$@" ;;
     up)          build_images; remove_stack; offline up -d --wait; echo "application: http://127.0.0.1:${TM_PORT:-8088}" ;;
     down)        remove_stack; echo "stack removed" ;;
