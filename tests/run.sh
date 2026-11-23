@@ -12,6 +12,7 @@
 #   tests/run.sh record <tracker> <path> <name>   save a scrubbed tracker page as a fixture
 #   tests/run.sh up            start the local stack and leave it running (http://127.0.0.1:8088)
 #   tests/run.sh down          remove the stack and its data
+#   tests/run.sh screenshots   retake the interface screenshots in wiki/images (made-up data)
 #   tests/run.sh hooks         install the pre-push hook that blocks pushing secrets
 #
 # Environment: TM_PHP=8.0|8.5 (PHP for the stack, default 8.5), TM_PORT (default 8088),
@@ -166,6 +167,28 @@ cmd_staging() {
     esac
 }
 
+# Retakes wiki/images/*.png from the current code: the stack is started, filled with made-up
+# data and photographed with headless Chrome. Run before a release: the readme shows these files.
+cmd_screenshots() {
+    build_images
+    remove_stack
+    offline up -d --wait --quiet-pull fake app qbittorrent > /dev/null 2>&1 || { echo "the stack did not start"; exit 1; }
+    offline exec -T app php /src/tests/tools/demo-data.php
+    local out="$root/wiki/images" port="${TM_PORT:-8088}" status=0
+    shot() {  # name, page, width,height
+        rm -f "$out/$1.png"
+        timeout 90 docker run --rm --network host --user "$(id -u):$(id -g)" -v "$out":/out zenika/alpine-chrome:latest \
+            --no-sandbox --headless --disable-gpu --hide-scrollbars --force-device-scale-factor=1 \
+            --virtual-time-budget=6000 --window-size="$3" --screenshot="/out/$1.png" "http://127.0.0.1:$port/#$2" > /dev/null 2>&1
+        [[ -s "$out/$1.png" ]] && echo "saved wiki/images/$1.png" || { echo "FAILED wiki/images/$1.png"; status=1; }
+    }
+    shot topics topics 1280,620
+    shot trackers trackers 1280,880
+    shot status status 1280,1140
+    remove_stack
+    return $status
+}
+
 cmd_hooks() {
     install -m 755 "$root/tests/hooks/pre-push" "$(git -C "$root" rev-parse --git-path hooks)/pre-push"
     echo "pre-push hook installed"
@@ -183,6 +206,7 @@ case "$command" in
     up)          build_images; remove_stack; offline up -d --wait; echo "application: http://127.0.0.1:${TM_PORT:-8088}" ;;
     down)        remove_stack; echo "stack removed" ;;
     staging)     cmd_staging "$@" ;;
+    screenshots) cmd_screenshots ;;
     hooks)       cmd_hooks ;;
     *)           sed -n '2,20p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 2 ;;
 esac

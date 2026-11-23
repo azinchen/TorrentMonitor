@@ -59,9 +59,13 @@ repo=$(git remote get-url origin | sed -E 's#^(git@github\.com:|https://github\.
 
 git tag -a "$tag" -m "version $version"
 git push origin "$tag"
+# a version with a suffix (4.0.0-beta1) is a pre-release: GitHub does not report it as the latest
+# release, so installed copies are not offered it as an update
+flags=()
+[[ "$version" == *-* ]] && flags+=(--prerelease)
 if [[ -n "$notes" ]]; then
-    gh release create "$tag" "$archive" --repo "$repo" --title "$version" --notes-file "$notes"
+    gh release create "$tag" "$archive" --repo "$repo" --title "$version" --notes-file "$notes" ${flags[@]+"${flags[@]}"}
 else
-    gh release create "$tag" "$archive" --repo "$repo" --title "$version" --generate-notes
+    gh release create "$tag" "$archive" --repo "$repo" --title "$version" --generate-notes ${flags[@]+"${flags[@]}"}
 fi
 echo "published https://github.com/$repo/releases/tag/$tag"

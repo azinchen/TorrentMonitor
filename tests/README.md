@@ -19,6 +19,7 @@ Docker with Compose v2. PHP is not needed on the host.
 | `tests/run.sh reach` | which trackers answer from here, which show Cloudflare, and whether the solver passes it | – |
 | `tests/run.sh record <tracker> <path> <name>` | save a scrubbed tracker page as a fixture | a running live stack |
 | `tests/run.sh up` / `down` | start the stack for manual work at http://127.0.0.1:8088 / remove it | – |
+| `tests/run.sh screenshots` | retake the interface screenshots in `wiki/images` | – |
 | `tests/run.sh hooks` | install the pre-push hook that blocks pushing secrets | – |
 
 `TM_PHP=8.0 tests/run.sh integration` runs the stack on PHP 8.0 (default 8.5).
@@ -95,10 +96,12 @@ rutracker.org, the notification services other than Gotify and e-mail, SynologyD
 
 ## Screenshots of the interface
 
-Not part of the suite; a manual step for visual checks. Start the stack with
-`tests/run.sh up` (http://127.0.0.1:8088) and take screenshots with headless
-Chrome from the `zenika/alpine-chrome` image pointed at that address.
-`tests/run.sh down` removes the stack.
+`tests/run.sh screenshots` retakes the three pictures the readme shows
+(`wiki/images/topics.png`, `trackers.png`, `status.png`) from the current code: it starts
+the stack, fills it with made-up data (`tests/tools/demo-data.php`) and photographs the
+pages with headless Chrome (`zenika/alpine-chrome`). Run it before a release, and after a
+change of the interface or of the tracker list. The "Состояние" picture shows whether the
+real tracker sites answer from this network.
 
 ## Secrets
 
