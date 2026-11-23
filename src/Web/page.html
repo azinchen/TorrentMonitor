@@ -166,6 +166,7 @@
                         <span x-show="!t.updatedAt">ещё не скачивалась</span>
                         <span x-show="t.category" x-text="t.category"></span>
                         <span x-show="t.path" x-text="t.path"></span>
+                        <span x-show="t.sonarrTitle" x-text="'Sonarr: ' + t.sonarrTitle + (t.sonarrSeasons.length ? ', сезон ' + t.sonarrSeasons.join(', ') : '')"></span>
                     </div>
                     <div class="row__flags">
                         <span class="tag tag--bad" x-show="!t.supported">трекер не поддерживается</span>
@@ -558,6 +559,17 @@
             <label class="field"><span>Скрипт</span>
                 <input type="text" x-model="topicForm.script" placeholder="/path/to/script.sh">
                 <small>Запускается на сервере после добавления раздачи в torrent-клиент.</small></label>
+            <div x-show="topicForm.kind == 'topic'">
+                <label class="field"><span>Сериал в Sonarr</span>
+                    <input type="text" x-model="topicForm.sonarrTitle" list="sonarr-titles" placeholder="название в Sonarr или адрес страницы сериала">
+                    <datalist id="sonarr-titles"><template x-for="s in sonarrTitles" :key="s"><option :value="s"></option></template></datalist>
+                    <small>Название так, как оно написано в Sonarr (русские сериалы там обычно названы по-английски:
+                        «Кухня» — The Kitchen (2012)), либо адрес страницы сериала в Sonarr. Связывает тему с сериалом: когда Sonarr
+                        загрузит этот сезон целиком другой раздачей, тема может быть заменена (если это включено в Настройки → API и Sonarr).</small></label>
+                <label class="field"><span>Сезон</span>
+                    <input type="text" x-model="topicForm.sonarrSeasons" placeholder="например: 2" :required="!!topicForm.sonarrTitle">
+                    <small>Номер сезона, который раздаётся в теме. Несколько — через запятую.</small></label>
+            </div>
             <label class="field"><span>Прекращать проверку через</span>
                 <input type="number" min="0" x-model="topicForm.stopAfterDays" placeholder="как в настройках">
                 <small>Дней без обновлений. 0 — проверять всегда.</small></label>

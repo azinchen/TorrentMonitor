@@ -134,6 +134,7 @@ final class Api
             'paused' => (bool)$t['paused'], 'error' => (bool)$t['error'], 'closed' => (bool)$t['closed'],
             'stopAfterDays' => $t['stopAfterDays'], 'addedAt' => $t['addedAt'], 'lastActivityAt' => $t['lastActivityAt'],
             'stopped' => Topics::expired($t, (int)Settings::get('stopAfterDays')),
+            'sonarrTitle' => $t['sonarrTitle'], 'sonarrSeasons' => array_values((array)$t['sonarrSeasons']),
         );
     }
 
@@ -177,6 +178,11 @@ final class Api
                 self::respond(FALSE, 'Нет учётных данных для трекера: '.$parsed['tracker'].'.', NULL, 422);
             if (Topics::find($parsed['tracker'], $parsed['topicId']) !== NULL)
                 self::respond(FALSE, 'Тема уже отслеживается.', NULL, 409);
+            //link to a series in Sonarr: the topic can then be replaced when Sonarr grabs that season
+            $link = Topics::sonarrLink((string)(isset($b['sonarrTitle']) ? $b['sonarrTitle'] : ''), isset($b['sonarrSeasons']) ? $b['sonarrSeasons'] : array());
+            if (is_string($link))
+                self::respond(FALSE, $link, NULL, 422);
+            $common += $link;
             $id = Topics::add($common + array('tracker' => $parsed['tracker'], 'topicId' => $parsed['topicId'], 'name' => $name, 'autoRename' => TRUE));
             self::respond(TRUE, 'Тема добавлена.', array('id' => $id) + $parsed, 201);
         }
@@ -260,6 +266,11 @@ final class Api
         $body = is_array($body) ? $body : array();
         $event = isset($body['eventType']) ? (string)$body['eventType'] : '';
         $seriesId = isset($body['series']['id']) ? (int)$body['series']['id'] : NULL;
+
+        //Sonarr names a series in every event about it: the topics the user linked to the series
+        //by its title are found by its number from now on
+        if ($seriesId !== NULL && isset($body['series']['title']) && trim((string)$body['series']['title']) !== '')
+            Topics::bindSonarr($seriesId, (string)$body['series']['title'], isset($body['series']['titleSlug']) ? (string)$body['series']['titleSlug'] : '');
 
         if ($event == 'SeriesDelete')
         {
@@ -354,6 +365,8 @@ final class Api
             if ($seriesId !== NULL)
             {
                 $fields['sonarrSeries'] = $seriesId;
+                if ($title !== '')
+                    $fields['sonarrTitle'] = $title;
                 //seasons add up only while the topic belongs to the same series
                 $before = $known['sonarrSeries'] !== NULL && $known['sonarrSeries'] == $seriesId ? $known['sonarrSeasons'] : array();
                 $fields['sonarrSeasons'] = array_values(array_unique(array_merge($before, $seasons)));
@@ -367,7 +380,8 @@ final class Api
         //the torrent's directory and category are saved in the topic: the updated torrent will go to the same place
         $id = Topics::add(array(
             'tracker' => $parsed['tracker'], 'topicId' => $parsed['topicId'], 'name' => $title, 'autoRename' => TRUE,
-            'hash' => strtolower($hash), 'path' => $info['path'], 'sonarrSeries' => $seriesId, 'sonarrSeasons' => $seriesId !== NULL ? $seasons : array(),
+            'hash' => strtolower($hash), 'path' => $info['path'], 'sonarrSeries' => $seriesId, 'sonarrTitle' => $seriesId !== NULL ? $title : '',
+            'sonarrSeasons' => $seriesId !== NULL ? $seasons : array(),
             'category' => $category !== NULL && $category !== '' ? $category : $info['category'],
         ));
         Warnings::clear('api');
@@ -377,8 +391,9 @@ final class Api
     }
 
     //Sonarr grabbed a season pack and its topic ($newId, torrent $newHash) is monitored now: the older topics
-    //of the same series and season are deleted, if this is enabled in the settings. Only topics that Sonarr
-    //itself added (they carry its series number and seasons) can be replaced, never the ones added by hand.
+    //of the same series and season are deleted, if this is enabled in the settings. Only topics linked to the
+    //series can be replaced: the ones Sonarr itself added and the ones the user linked by the series title
+    //and season (they got the series number in grab()). Other topics added by hand are never touched.
     private static function replaced(int $newId, string $newHash, ?int $seriesId, array $seasons): void
     {
         if ( ! Settings::on('sonarrReplaceTopic') || $seriesId === NULL || empty($seasons))

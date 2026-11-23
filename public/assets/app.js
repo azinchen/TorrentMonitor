@@ -24,7 +24,7 @@ document.addEventListener('alpine:init', () => {
         toasts: [],
 
         // data from the server
-        topics: [], users: [], trackers: [], settings: {}, warnings: [], news: [], categories: [], clients: [], services: [],
+        topics: [], users: [], trackers: [], settings: {}, warnings: [], news: [], categories: [], sonarrTitles: [], clients: [], services: [],
         status: { version: '', lastRun: '', running: false, client: null, update: null, authRequired: true, wiki: '' },
 
         // forms
@@ -75,7 +75,7 @@ document.addEventListener('alpine:init', () => {
 
         // distributes the server response into fields
         apply(data) {
-            for (const key of ['topics', 'users', 'trackers', 'warnings', 'news', 'categories', 'clients', 'services', 'status']) {
+            for (const key of ['topics', 'users', 'trackers', 'warnings', 'news', 'categories', 'sonarrTitles', 'clients', 'services', 'status']) {
                 if (data[key] !== undefined) this[key] = data[key];
             }
             if (data.settings !== undefined) {
@@ -204,6 +204,7 @@ document.addEventListener('alpine:init', () => {
             this.topicForm = {
                 id: 0, kind, url: '', tracker: this.seriesTrackers.length ? this.seriesTrackers[0].name : '', name: '', quality: 'sd',
                 autoRename: true, path: '', category: '', script: '', stopAfterDays: '', paused: false, reset: false, more: false,
+                sonarrTitle: '', sonarrSeasons: '',
             };
         },
         editTopic(topic) {
@@ -211,7 +212,8 @@ document.addEventListener('alpine:init', () => {
                 id: topic.id, kind: topic.kind === 'series' ? 'series' : 'topic', url: topic.url, tracker: topic.tracker, name: topic.name,
                 quality: topic.quality, autoRename: topic.autoRename, path: topic.path, category: topic.category, script: topic.script,
                 stopAfterDays: topic.stopAfterDays === null ? '' : topic.stopAfterDays, paused: topic.paused, reset: false,
-                more: !!(topic.path || topic.category || topic.script || topic.stopAfterDays !== null),
+                sonarrTitle: topic.sonarrTitle || '', sonarrSeasons: (topic.sonarrSeasons || []).join(', '),
+                more: !!(topic.path || topic.category || topic.script || topic.stopAfterDays !== null || topic.sonarrTitle),
             };
         },
         async saveTopic() {

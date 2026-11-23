@@ -354,4 +354,36 @@ final class CoreTest extends TestCase
         // the dead domain stays first only so that its entry keeps its name; the others take over
         $this->assertSame(array('https://kinozal.tv', 'https://kinozal.me', 'https://kinozal.guru'), $addresses('kinozal.tv'));
     }
+
+    // ---- link of a topic to a Sonarr series
+
+    public function testSeasonsAndSeriesTitles()
+    {
+        $this->assertSame(array(1, 2), Topics::seasons('2, 1 2;1'));
+        $this->assertSame(array(0, 12), Topics::seasons(array(12, '0')));
+        $this->assertSame(array(), Topics::seasons(''));
+        $this->assertNull(Topics::seasons('first'));
+        $this->assertNull(Topics::seasons(array(1.5)));
+        $this->assertNull(Topics::seasons('-1'));
+
+        $this->assertTrue(Topics::sameTitle("Marvel's Agents of S.H.I.E.L.D.", 'marvels agents of s h i e l d'));
+        $this->assertTrue(Topics::sameTitle(' Дом   Дракона ', 'дом дракона'));
+        $this->assertFalse(Topics::sameTitle('House', 'House of the Dragon'));
+        $this->assertFalse(Topics::sameTitle('', ''));
+        $this->assertFalse(Topics::sameTitle('!!!', '???'));
+
+        // Sonarr adds the year to some titles; its page address holds the same name
+        $this->assertTrue(Topics::sameTitle('The Kitchen', 'The Kitchen (2012)'));
+        $this->assertTrue(Topics::sameTitle('the kitchen 2012', 'The Kitchen (2012)'));
+        $this->assertTrue(Topics::sameTitle('the-kitchen-2012', 'The Kitchen (2012)'));
+        $this->assertFalse(Topics::sameTitle('The Kitchen (2020)', 'The Kitchen (2012)'), 'another year is another series');
+        $this->assertTrue(Topics::sameTitle('2012', '2012 (2009)'), 'a title that is only a year stays a title');
+        $this->assertTrue(Topics::sameTitle('1923', '1923'));
+        $this->assertTrue(Topics::sameTitle("The Boy's Word: Blood on the Asphalt", 'the boys word blood on the asphalt'));
+        $this->assertFalse(Topics::sameTitle('Кухня', 'The Kitchen (2012)'), 'the Russian name is not what Sonarr sends');
+
+        $this->assertSame('the-kitchen-2012', Topics::sonarrName(' http://sonarr.local:8989/series/the-kitchen-2012 '));
+        $this->assertSame('the-kitchen-2012', Topics::sonarrName('https://example.org/sonarr/series/the-kitchen-2012/'));
+        $this->assertSame('The Kitchen (2012)', Topics::sonarrName(' The Kitchen (2012) '));
+    }
 }
