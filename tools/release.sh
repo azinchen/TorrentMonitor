@@ -49,7 +49,13 @@ fi
 
 branch=$(git rev-parse --abbrev-ref HEAD)
 [[ "$branch" == "master" ]] || fail "releases are published from master, current branch is $branch"
-timeout 120 git fetch --quiet origin master || fail "cannot fetch origin/master"
+# a connection to GitHub over SSH sometimes stalls: give up after a minute and try again
+fetched=0
+for attempt in 1 2 3; do
+    if timeout 60 git fetch --quiet origin master; then fetched=1; break; fi
+    echo "fetch attempt $attempt failed, retrying"
+done
+[[ $fetched -eq 1 ]] || fail "cannot fetch origin/master"
 head=$(git rev-parse HEAD)
 [[ "$head" == "$(git rev-parse origin/master)" ]] || fail "local master differs from origin/master"
 
