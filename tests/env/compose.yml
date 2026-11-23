@@ -1,0 +1,107 @@
+# Local test stack for TorrentMonitor. Started and stopped by tests/run.sh,
+# always together with one of:
+#   compose.offline.yml  integration tests: trackers are faked, no internet needed
+#   compose.live.yml     live tests: real trackers, real Cloudflare solvers
+name: tm-tests
+
+services:
+  fake:
+    image: tm-tests:php${TM_PHP:-8.5}
+    command: ["/src/tests/env/fake/start.sh"]
+    volumes:
+      - ../..:/src:ro
+      - certs:/certs
+    healthcheck:
+      test: ["CMD-SHELL", "test -f /certs/ready && curl -fs http://127.0.0.1:8080/__control/state > /dev/null"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  app:
+    image: tm-tests:php${TM_PHP:-8.5}
+    command: ["/src/tests/env/app/start.sh"]
+    depends_on:
+      fake:
+        condition: service_healthy
+    volumes:
+      - ../..:/src:ro
+      - certs:/certs:ro
+      - downloads:/downloads
+    environment:
+      - TM_UPDATE_API=${TM_UPDATE_API:-http://fake:8080/github}
+      # data lives outside the application folder, as recommended for real installations
+      - TM_DATA_DIR=/data
+    ports:
+      - "127.0.0.1:${TM_PORT:-8088}:80"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fs http://127.0.0.1/img/favicon.svg > /dev/null"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  qbittorrent:
+    image: lscr.io/linuxserver/qbittorrent:latest
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - WEBUI_PORT=8080
+    volumes:
+      - ./qbittorrent/init.sh:/custom-cont-init.d/10-tm-tests.sh:ro
+      - downloads:/downloads
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fs http://127.0.0.1:8080/ > /dev/null"]
+      interval: 3s
+      timeout: 3s
+      retries: 40
+
+  transmission:
+    image: lscr.io/linuxserver/transmission:latest
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - USER=tm
+      - PASS=tm-test-pass
+    volumes:
+      - downloads:/downloads
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s -o /dev/null http://127.0.0.1:9091/"]
+      interval: 3s
+      timeout: 3s
+      retries: 40
+
+  deluge:
+    image: lscr.io/linuxserver/deluge:latest
+    environment:
+      - PUID=1000
+      - PGID=1000
+    volumes:
+      - downloads:/downloads
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s -o /dev/null http://127.0.0.1:8112/"]
+      interval: 3s
+      timeout: 3s
+      retries: 40
+
+  torrserver:
+    image: ghcr.io/yourok/torrserver:latest
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8090/echo || curl -fs -o /dev/null http://127.0.0.1:8090/echo"]
+      interval: 3s
+      timeout: 3s
+      retries: 40
+
+  # self-hosted notification service: tests create an application in it and read back what arrived
+  gotify:
+    image: gotify/server:latest
+    environment:
+      - GOTIFY_DEFAULTUSER_NAME=admin
+      - GOTIFY_DEFAULTUSER_PASS=tm-test-pass
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:80/health || curl -fs -o /dev/null http://127.0.0.1:80/health"]
+      interval: 3s
+      timeout: 3s
+      retries: 40
+
+volumes:
+  certs:
+  downloads:

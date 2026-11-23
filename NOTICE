@@ -1,0 +1,12 @@
+TorrentMonitor
+Copyright (c) 2011-2026 Eugene Elizarov and TorrentMonitor contributors
+
+This project is a continuation of TorrentMonitor by Eugene Elizarov:
+https://github.com/ElizarovEugene/TorrentMonitor
+
+Bundled third-party code:
+
+- public/assets/vendor/alpine.min.js - Alpine.js, copyright (c) 2019-2025
+  Caleb Porzio and contributors, MIT License.
+- public/img/*.ico - site icons of the supported trackers; they belong to
+  their respective owners.

@@ -1,0 +1,7 @@
+# files that are not part of a release archive (tools/release.sh uses git archive)
+/.github        export-ignore
+/.gitattributes export-ignore
+/.gitignore     export-ignore
+/.claude        export-ignore
+/wiki           export-ignore
+/tests          export-ignore

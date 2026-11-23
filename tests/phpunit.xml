@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<phpunit bootstrap="bootstrap.php" colors="true" cacheResult="false" verbose="true"
+         failOnWarning="true" failOnRisky="true" stopOnError="false"
+         convertErrorsToExceptions="true" convertWarningsToExceptions="true"
+         convertNoticesToExceptions="true" convertDeprecationsToExceptions="false">
+    <testsuites>
+        <testsuite name="unit"><directory>Unit</directory></testsuite>
+        <testsuite name="integration"><directory>Integration</directory></testsuite>
+        <testsuite name="live"><directory>Live</directory></testsuite>
+    </testsuites>
+</phpunit>

@@ -1,0 +1,33 @@
+# Integration tests: tracker host names resolve to the fake server, which answers
+# over TLS with a certificate the application container is told to trust.
+services:
+  fake:
+    networks:
+      default:
+        aliases: [rutracker.org, www.rutracker.org]
+
+  # old-format databases for the tests of tools/convert-db.php
+  mariadb:
+    image: mariadb:11
+    environment:
+      - MARIADB_ROOT_PASSWORD=tm-test-pass
+      - MARIADB_DATABASE=torrentmonitor
+      - MARIADB_USER=tm
+      - MARIADB_PASSWORD=tm-test-pass
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 3s
+      timeout: 5s
+      retries: 40
+
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      - POSTGRES_DB=torrentmonitor
+      - POSTGRES_USER=tm
+      - POSTGRES_PASSWORD=tm-test-pass
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tm -d torrentmonitor"]
+      interval: 3s
+      timeout: 5s
+      retries: 40

@@ -11,118 +11,63 @@
 | Компонент | Варианты |
 |---|---|
 | Веб-сервер | Apache, nginx или lighttpd |
-| PHP | 7.4 или новее |
-| СУБД | MySQL/MariaDB, PostgreSQL или SQLite |
+| PHP | 8.0 или новее |
+| База данных | не нужна: данные хранятся в JSON-файлах |
 
 ### Необходимые модули PHP
 
 ```
-php-ctype php-curl php-iconv php-mbstring php-pdo php-simplexml php-xml php-zip
+php-ctype php-curl php-mbstring php-pdo php-simplexml php-xml php-zip
 ```
 
-Плюс PDO-драйвер для выбранной СУБД:
-
-- MySQL — `php-pdo_mysql`
-- PostgreSQL — `php-pdo_pgsql`
-- SQLite — `php-pdo_sqlite`
-
-Пример установки в Debian/Ubuntu (PHP 8.x + MySQL):
+Пример установки в Debian/Ubuntu:
 
 ```bash
-sudo apt install nginx php-fpm php-curl php-mbstring php-xml php-zip php-mysql mariadb-server
+sudo apt install nginx php-fpm php-curl php-mbstring php-xml php-zip
 ```
 
 ---
 
 ## Шаг 1 — Скачать TorrentMonitor
 
-Скачайте последний релиз с GitHub и распакуйте в каталог веб-сервера:
+Скачайте архив последней версии со страницы [Releases](https://github.com/azinchen/TorrentMonitor/releases)
+и распакуйте на сервере:
 
 ```bash
 cd /var/www
-wget https://github.com/ElizarovEugene/TorrentMonitor/archive/refs/heads/master.zip
-unzip master.zip
-mv TorrentMonitor-master torrentmonitor
+unzip TorrentMonitor-*.zip
+mv TorrentMonitor-*/ torrentmonitor
 ```
 
-## Шаг 2 — Создать базу данных
+## Шаг 2 — Каталог данных
 
-Схемы для всех трёх СУБД лежат в каталоге `db_schema/`.
+Все настройки, учётные данные трекеров и отслеживаемые темы TorrentMonitor хранит
+в трёх JSON-файлах (`config.json`, `torrents.json`, `state.json`) в каталоге данных.
+База данных не нужна, и файл `config.php` для работы не обязателен.
 
-**MySQL:**
+По умолчанию каталог данных — `data/` внутри каталога TorrentMonitor; он создаётся
+при первом запуске. В файлах лежат пароли **в открытом виде**. Корень сайта —
+каталог `public/` (см. шаг 5), поэтому `data/`, `config.php`, `torrents/` и сама
+программа лежат выше него и из браузера недоступны.
 
-```bash
-mysql -u root -p -e "CREATE DATABASE torrentmonitor CHARACTER SET utf8; \
-  CREATE USER 'torrentmonitor'@'localhost' IDENTIFIED BY 'ВАШ_ПАРОЛЬ'; \
-  GRANT ALL ON torrentmonitor.* TO 'torrentmonitor'@'localhost';"
-mysql -u torrentmonitor -p torrentmonitor < /var/www/torrentmonitor/db_schema/mysql.sql
-```
+- Каталог данных можно перенести в другое место: задайте переменную окружения
+  `TM_DATA_DIR` (для веб-сервера **и** для cron) или создайте `config.php`
+  из `config.php.example` со строкой
+  `Config::write('data.dir', '/var/lib/torrentmonitor');`
+- Раздел **Состояние** (блок «Проверка работы») предупреждает, если каталог данных
+  лежит внутри каталога сайта.
 
-**PostgreSQL:**
+Резервная копия установки — это копия каталога данных.
 
-```bash
-sudo -u postgres createuser -P torrentmonitor
-sudo -u postgres createdb -O torrentmonitor torrentmonitor
-psql -U torrentmonitor torrentmonitor < /var/www/torrentmonitor/db_schema/postgresql.sql
-```
+> Переходите с версии 3.x? См. [Обновление](Updating#переход-с-версии-3x).
 
-**SQLite** (самый простой вариант, отдельный сервер БД не нужен):
+## Шаг 3 — Необязательный config.php
 
-```bash
-sqlite3 /var/www/torrentmonitor/torrentmonitor.sqlite < /var/www/torrentmonitor/db_schema/sqlite.sql
-```
-
-## Шаг 3 — Настроить подключение к БД
-
-Скопируйте пример конфигурации и раскомментируйте блок своей СУБД:
-
-```bash
-cd /var/www/torrentmonitor
-cp config.php.example config.php
-```
-
-**MySQL:**
-
-```php
-Config::write('db.host', 'localhost');
-Config::write('db.type', 'mysql');
-Config::write('db.charset', 'utf8');
-Config::write('db.port', '3306');
-Config::write('db.basename', 'torrentmonitor');
-Config::write('db.user', 'torrentmonitor');
-Config::write('db.password', 'ВАШ_ПАРОЛЬ');
-```
-
-**PostgreSQL:**
-
-```php
-Config::write('db.host', 'localhost');
-Config::write('db.type', 'pgsql');
-Config::write('db.port', '5432');
-Config::write('db.basename', 'torrentmonitor');
-Config::write('db.user', 'torrentmonitor');
-Config::write('db.password', 'ВАШ_ПАРОЛЬ');
-```
-
-**SQLite** (указывайте **абсолютный** путь к файлу БД):
-
-```php
-Config::write('db.type', 'sqlite');
-Config::write('db.basename', '/var/www/torrentmonitor/torrentmonitor.sqlite');
-```
-
-### Шифрование учётных данных (по желанию)
-
-Если в `config.php` задать ключ шифрования, пароли трекеров и торрент-клиента будут
-храниться в базе в зашифрованном виде (AES-256-GCM):
-
-```php
-Config::write('encryption.key', 'HEX_СТРОКА_64_СИМВОЛА');
-```
-
-Ключ можно сгенерировать командой `openssl rand -hex 32`. Без ключа приложение работает
-как обычно, храня значения в открытом виде. Ключ не меняйте и не теряйте — без него
-зашифрованные учётные данные прочитать нельзя.
+`config.php` нужен, только если требуется одна из настроек из `config.php.example`:
+другой каталог данных (`data.dir`), путь к CLI-интерпретатору PHP для запуска
+проверки из интерфейса и через `POST /api/run` (`php.cli`), число одновременных запросов к трекерам (`curl.concurrency`),
+другой каталог для скачанных `.torrent`-файлов (`torrents.dir`) или адрес
+проверки подключения к интернету (`connectivity.url`).
 
 ## Шаг 4 — Права на файлы
 
@@ -135,20 +80,23 @@ chown -R www-data:www-data /var/www/torrentmonitor
 
 ## Шаг 5 — Настроить веб-сервер
 
-Никаких особых правил переписывания адресов TorrentMonitor не требует —
-достаточно обычного виртуального хоста с обработкой PHP.
+Корень сайта — каталог `public/` внутри каталога TorrentMonitor. Программа,
+`config.php`, `data/`, `torrents/` и `src/` лежат выше него и из браузера недоступны.
+Все запросы обрабатывает один файл — `public/index.php`.
 
-Пример server-блока nginx (PHP-FPM):
+### nginx
+
+Пример server-блока (PHP-FPM):
 
 ```nginx
 server {
     listen 80;
     server_name tm.example.com;
-    root /var/www/torrentmonitor;
+    root /var/www/torrentmonitor/public;
     index index.php;
 
     location / {
-        try_files $uri $uri/ /index.php?$args;
+        try_files $uri /index.php$is_args$args;
     }
 
     location ~ \.php$ {
@@ -159,21 +107,51 @@ server {
 }
 ```
 
-Для Apache достаточно обычного VirtualHost с `DocumentRoot /var/www/torrentmonitor`.
+Если `root` указывает на каталог программы, а не на `public/`, вместо интерфейса
+откроется страница «Нужно изменить корень сайта» с инструкцией.
+
+### Apache
+
+```apache
+<VirtualHost *:80>
+    ServerName tm.example.com
+    DocumentRoot /var/www/torrentmonitor/public
+
+    <Directory /var/www/torrentmonitor/public>
+        AllowOverride All
+        Require all granted
+    </Directory>
+</VirtualHost>
+```
+
+Файл `public/.htaccess` направляет все запросы в `index.php`. Для этого нужен модуль
+`mod_rewrite` (`sudo a2enmod rewrite`); без него используется `FallbackResource`.
+
+Если `DocumentRoot` указывает на каталог программы, а `mod_rewrite` включён,
+`.htaccess` в каталоге программы сам передаёт запросы в `public/`.
+
+### Встроенный сервер PHP
+
+Чтобы быстро попробовать TorrentMonitor без веб-сервера:
+
+```bash
+cd /var/www/torrentmonitor
+php -S 0.0.0.0:8080 -t public public/index.php
+```
 
 > ⚠️ Не открывайте TorrentMonitor напрямую в интернет без включённого входа по паролю
 > (и желательно HTTPS): интерфейс управляет вашим торрент-клиентом и хранит учётные данные
 > трекеров.
 
-## Шаг 6 — Первый вход
+## Шаг 6 — Первый запуск
 
-Откройте адрес TorrentMonitor в браузере. Пароль по умолчанию:
+Откройте адрес TorrentMonitor в браузере. Новая установка показывает форму
+**«Настройка TorrentMonitor»**: пароль для входа, адрес TorrentMonitor и, по желанию,
+torrent-клиент. Пароля по умолчанию нет — вы задаёте его сами. Подробно —
+[Первоначальная настройка](Getting-Started#шаг-1--первый-запуск).
 
-```
-torrentmonitor
-```
-
-**Сразу смените его** в «Настройки → Смена пароля».
+Выполните настройку сразу: пока она не сделана, форму увидит любой, кто откроет
+адрес TorrentMonitor.
 
 ## Шаг 7 — Настроить cron
 
@@ -187,11 +165,38 @@ torrentmonitor
 Каждые 10 минут — разумный интервал; слишком частые запросы могут привести к бану
 на трекерах. Ошибки будут копиться в `torrent_monitor_error.log`.
 
+`engine.php` лежит в каталоге программы и из браузера не открывается.
+Два запуска одновременно не работают: если предыдущая проверка ещё идёт,
+новый запуск пропускается.
+
 Проверить работу движка можно и вручную — из веб-интерфейса
-(раздел «Запуск») или из консоли:
+(кнопка «Проверить сейчас») или из консоли:
 
 ```bash
 sudo -u www-data php /var/www/torrentmonitor/engine.php
+```
+
+### Параметры engine.php
+
+| Параметр | Что делает |
+|---|---|
+| `--tracker=<трекер>` | проверить только темы этого трекера, например `--tracker=rutracker.org` |
+| `--topic=<id>` | проверить только одну тему; `<id>` — идентификатор темы из [API](API) |
+| `--dry-run` | показать найденные обновления, ничего не скачивая и не меняя |
+| `--help` | показать список параметров |
+
+Код завершения: `0` — проверка выполнена; `1` — запуск отклонён (проверка уже
+выполняется, данные прежней версии не перенесены, файл данных повреждён).
+Если проверка уже идёт, выводится «TorrentMonitor уже выполняется: этот запуск пропущен.»
+
+Перед опросом трекеров проверяется подключение к интернету
+(`https://www.google.com/generate_204` и `https://ya.ru/`; достаточно любого ответа).
+Если его нет, трекеры не опрашиваются, а в «Состояние → Ошибки» записывается одно
+предупреждение «Нет подключения к интернету» вместо ошибки по каждому трекеру.
+Адрес проверки можно изменить или отключить в `config.php`:
+
+```php
+Config::write('connectivity.url', 'https://example.org/'); // пустая строка отключает проверку
 ```
 
 ---

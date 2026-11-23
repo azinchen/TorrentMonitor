@@ -7,8 +7,9 @@ TorrentMonitor следит за страницами раздач (темами
 обнаруживает обновления (новые серии, перезаливки раздач) и автоматически скачивает свежие
 `.torrent`-файлы или передаёт их напрямую в ваш торрент-клиент.
 
-- 🏠 Сайт проекта: [tormon.ru](https://tormon.ru/)
-- 📦 Репозиторий: [ElizarovEugene/TorrentMonitor](https://github.com/ElizarovEugene/TorrentMonitor)
+- 📦 Репозиторий: [azinchen/TorrentMonitor](https://github.com/azinchen/TorrentMonitor) — продолжение проекта
+  [ElizarovEugene/TorrentMonitor](https://github.com/ElizarovEugene/TorrentMonitor) Евгения Елизарова
+- 🆕 Новые версии и список изменений: [Releases](https://github.com/azinchen/TorrentMonitor/releases)
 - 🐳 Docker-образ: [alfonder/torrentmonitor-dockerized](https://github.com/alfonder/torrentmonitor-dockerized) —
   отдельный проект, поддерживаемый [Александром Фомичёвым (alfonder)](https://github.com/alfonder);
   у него есть [собственная вики](https://github.com/alfonder/torrentmonitor-dockerized/wiki)
@@ -18,27 +19,27 @@ TorrentMonitor следит за страницами раздач (темами
 
 ## Возможности
 
-- **Мониторинг раздач** примерно на 16 трекерах: rutracker.org, lostfilm.tv, kinozal (три зеркала),
-  nnmclub.to, anidub.com, baibako.tv, newstudio.tv, rutor.is и других —
+- **Мониторинг раздач** на 12 трекерах: rutracker.org, lostfilm.tv, kinozal (два адреса),
+  nnmclub.to, anidub.com, newstudio.tv, rutor.is и других —
   см. [полный список](Supported-Trackers).
 - **Автоматическое скачивание**: передача новых и обновлённых раздач в торрент-клиент —
   Transmission, qBittorrent, Deluge, TorrServer, Synology Download Station
   ([подробнее](Torrent-Clients)).
-- **Автозамена раздач**: при выходе новой серии старая раздача удаляется из клиента,
-  новая добавляется; опционально удаляются и старые файлы.
+- **Автозамена раздач**: при обновлении темы старая раздача удаляется из клиента,
+  новая добавляется; у сериалов опционально удаляются и старые файлы.
 - **Интеграция с Sonarr**: Sonarr берёт релиз — TorrentMonitor автоматически ставит тему
   на мониторинг и дальше сам скачивает обновления ([инструкция](Sonarr-Integration)).
-- **REST API** для внешних приложений: добавление, список и удаление раздач
-  ([справочник](API)).
+- **REST API** для внешних приложений: добавление, список и удаление раздач,
+  запуск проверки ([справочник](API)).
 - **Уведомления**: E-mail, Telegram (с поддержкой тем/тредов), Pushover, Pushbullet, Prowl,
-  PushAll ([подробнее](Notifications)).
+  Pushall, Gotify ([подробнее](Notifications)).
 - **Отслеживание пользователей**: мониторинг новых раздач выбранного релизёра на трекере.
 - **Обход блокировок**: прокси (HTTP/SOCKS5) глобально и индивидуально для каждого трекера,
   зеркала трекеров, FlareSolverr/Byparr против Cloudflare
   ([подробнее](Proxy-and-Mirrors)).
 - **RSS-лента** обновлений самого TorrentMonitor — можно скармливать другим программам.
 - **Свои скрипты** после обновления раздачи (постобработка).
-- **Категории qBittorrent**, шифрование хранимых учётных данных, темы оформления
+- **Категории qBittorrent**, светлая и тёмная тема
   интерфейса, автообновление.
 
 ---
@@ -48,8 +49,8 @@ TorrentMonitor следит за страницами раздач (темами
 1. **[Установка в Docker](Installation-Docker)** — рекомендуемый способ: готовый контейнер
    со всем окружением.
 2. **[Установка в LAMP](Installation-LAMP)** — классическая установка на свой веб-сервер
-   (Apache/nginx/lighttpd + PHP + MySQL/PostgreSQL/SQLite).
-3. **[Первоначальная настройка](Getting-Started)** — первый вход, смена пароля, учётные данные
+   (Apache/nginx/lighttpd + PHP; база данных не нужна). Корень сайта — каталог `public/`.
+3. **[Первоначальная настройка](Getting-Started)** — первый запуск, пароль, учётные данные
    трекеров, добавление первой раздачи.
 
 ---
@@ -59,7 +60,7 @@ TorrentMonitor следит за страницами раздач (темами
 ### Установка
 - **[Установка в Docker](Installation-Docker)** — быстрый старт в контейнере.
 - **[Установка в LAMP](Installation-LAMP)** — установка на веб-сервер вручную.
-- **[Первоначальная настройка](Getting-Started)** — от первого входа до первой скачанной раздачи.
+- **[Первоначальная настройка](Getting-Started)** — от первого запуска до первой скачанной раздачи.
 
 ### Использование и конфигурация
 - **[Веб-интерфейс](Web-Interface)** — обзор всех разделов приложения.
@@ -74,7 +75,7 @@ TorrentMonitor следит за страницами раздач (темами
 - **[Интеграция с Sonarr](Sonarr-Integration)** — автоматический мониторинг сериалов из Sonarr.
 
 ### Эксплуатация
-- **[Обновление](Updating)** — обновление TorrentMonitor и базы данных.
+- **[Обновление](Updating)** — обновление TorrentMonitor, переход с версии 3.x.
 - **[Решение проблем](Troubleshooting)** — частые ошибки и их устранение.
 
 ---

@@ -1,0 +1,97 @@
+# A staging copy of TorrentMonitor for testing by hand with real trackers, close to a real
+# installation: everything goes out through a VPN container, Cloudflare is handled by Byparr,
+# torrents go to a real qBittorrent that keeps them stopped.
+#
+#   tests/run.sh staging up      start (application on port 8090, qBittorrent on 8091, all interfaces)
+#   tests/run.sh staging down    stop; data is kept in docker volumes
+#   tests/run.sh staging reset   stop and delete the data (the next start is a fresh installation)
+#
+# Needs tests/env/secrets/vpn.env (see vpn.env.example). The code is copied from the working
+# tree when the container starts: restart the app service to pick up changes.
+name: tm-staging
+
+services:
+  vpn:
+    image: azinchen/nordvpn-wg:latest
+    restart: unless-stopped
+    cap_add:
+      - NET_ADMIN
+    devices:
+      - /dev/net/tun
+    sysctls:
+      - net.ipv4.conf.all.src_valid_mark=1
+      - net.ipv6.conf.all.disable_ipv6=1
+      - net.ipv6.conf.default.disable_ipv6=1
+    env_file:
+      - ../secrets/vpn.env
+    environment:
+      - COUNTRY=${TM_VPN_COUNTRY:-Spain}
+      - GROUP=P2P
+      - RANDOM_TOP=10
+      - NETWORK=192.168.0.0/16;172.16.0.0/12
+      - HEALTHCHECK_ENABLED=true
+      - DNS=9.9.9.9;149.112.112.112
+    ports:
+      - "${TM_STAGING_PORT:-8090}:80"     # TorrentMonitor
+      - "${TM_STAGING_QBT_PORT:-8091}:8080" # qBittorrent
+
+  # Keeps the tunnel MTU low. Needed when the host itself is behind another tunnel: with the
+  # default 1420 large packets are dropped, so pings work but web requests hang.
+  mtu:
+    image: tm-tests:php${TM_PHP:-8.5}
+    restart: unless-stopped
+    network_mode: service:vpn
+    cap_add:
+      - NET_ADMIN
+    depends_on:
+      vpn:
+        condition: service_started
+    command: ["sh", "-c", "while true; do ip link set dev wg0 mtu ${TM_VPN_MTU:-1280} 2>/dev/null; sleep 15; done"]
+
+  app:
+    image: tm-tests:php${TM_PHP:-8.5}
+    restart: unless-stopped
+    network_mode: service:vpn
+    depends_on:
+      vpn:
+        condition: service_healthy
+    environment:
+      - TM_DATA_DIR=/data
+      - TZ=${TZ:-Europe/Moscow}
+    volumes:
+      - ../../..:/src:ro
+      - ./start.sh:/start.sh:ro
+      - data:/data
+      - torrents:/app/torrents
+    command: ["/start.sh"]
+
+  byparr:
+    image: ghcr.io/thephaseless/byparr:latest
+    restart: unless-stopped
+    shm_size: 2gb
+    network_mode: service:vpn
+    depends_on:
+      vpn:
+        condition: service_healthy
+
+  qbittorrent:
+    image: lscr.io/linuxserver/qbittorrent:latest
+    restart: unless-stopped
+    network_mode: service:vpn
+    depends_on:
+      vpn:
+        condition: service_healthy
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - WEBUI_PORT=8080
+    volumes:
+      - ./qbittorrent-init.sh:/custom-cont-init.d/10-tm-staging.sh:ro
+      - qbt:/config
+      - downloads:/downloads
+
+volumes:
+  data:
+  torrents:
+  qbt:
+  downloads:

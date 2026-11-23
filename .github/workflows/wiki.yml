@@ -1,11 +1,10 @@
 name: Publish wiki
 
+# The wiki describes the released version: it is published when a release is created,
+# not on every push. In the repository the wiki/ folder follows HEAD.
 on:
-  push:
-    branches:
-      - master
-    paths:
-      - "wiki/**"
+  release:
+    types: [published]
   workflow_dispatch:
 
 permissions:
@@ -42,5 +41,5 @@ jobs:
             exit 0
           fi
           VERSION=$(jq -r '.system // "unknown"' ../version.txt 2>/dev/null || echo unknown)
-          git commit -m "Sync wiki from master@${GITHUB_SHA::7} (v${VERSION})"
+          git commit -m "Sync wiki from ${GITHUB_REF_NAME}@${GITHUB_SHA::7} (v${VERSION})"
           git push --force
