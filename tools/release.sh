@@ -2,7 +2,7 @@
 # Builds a release archive and, with --publish, creates the GitHub release.
 #
 #   tools/release.sh                      build dist/TorrentMonitor-<version>.zip only
-#   tools/release.sh --publish            build, tag v<version>, push the tag, create the release
+#   tools/release.sh --publish            build and create the release (GitHub creates the tag v<version>)
 #   tools/release.sh --publish notes.md   same, with release notes taken from a file
 #
 # The version is read from version.txt: change it there (and merge it) first.
@@ -49,23 +49,37 @@ fi
 
 branch=$(git rev-parse --abbrev-ref HEAD)
 [[ "$branch" == "master" ]] || fail "releases are published from master, current branch is $branch"
-git fetch --quiet origin master
-[[ "$(git rev-parse HEAD)" == "$(git rev-parse origin/master)" ]] || fail "local master differs from origin/master"
-git rev-parse -q --verify "refs/tags/$tag" > /dev/null && fail "tag $tag already exists"
+timeout 120 git fetch --quiet origin master || fail "cannot fetch origin/master"
+head=$(git rev-parse HEAD)
+[[ "$head" == "$(git rev-parse origin/master)" ]] || fail "local master differs from origin/master"
 
 # always release into the repository behind "origin", never into the upstream of a fork
 repo=$(git remote get-url origin | sed -E 's#^(git@github\.com:|https://github\.com/)##; s#\.git$##')
 [[ "$repo" =~ ^[^/]+/[^/]+$ ]] || fail "cannot determine GitHub repository from origin: $repo"
 
-git tag -a "$tag" -m "version $version"
-git push origin "$tag"
+# The tag is created by GitHub together with the release, on the commit that was checked above:
+# nothing is pushed from here. A run that stopped half-way can simply be repeated.
+gh release view "$tag" --repo "$repo" > /dev/null 2>&1 && fail "release $tag already exists"
+if git rev-parse -q --verify "refs/tags/$tag^{commit}" > /dev/null; then
+    [[ "$(git rev-parse "refs/tags/$tag^{commit}")" == "$head" ]] || fail "local tag $tag points to another commit"
+fi
+target=(--target "$head")
+if remote=$(gh api "repos/$repo/commits/$tag" --jq .sha 2> /dev/null); then
+    [[ "$remote" == "$head" ]] || fail "tag $tag already exists on GitHub and points to another commit"
+    target=()
+fi
+
 # a version with a suffix (4.0.0-beta1) is a pre-release: GitHub does not report it as the latest
 # release, so installed copies are not offered it as an update
 flags=()
 [[ "$version" == *-* ]] && flags+=(--prerelease)
 if [[ -n "$notes" ]]; then
-    gh release create "$tag" "$archive" --repo "$repo" --title "$version" --notes-file "$notes" ${flags[@]+"${flags[@]}"}
+    flags+=(--notes-file "$notes")
 else
-    gh release create "$tag" "$archive" --repo "$repo" --title "$version" --generate-notes ${flags[@]+"${flags[@]}"}
+    flags+=(--generate-notes)
 fi
+gh release create "$tag" "$archive" --repo "$repo" --title "$version" "${flags[@]}" ${target[@]+"${target[@]}"}
+
+# bring the tag here; not essential, so a network hiccup does not fail a release that is already out
+timeout 60 git fetch --quiet origin "refs/tags/$tag:refs/tags/$tag" 2> /dev/null || echo "note: fetch the tag later with: git fetch origin tag $tag"
 echo "published https://github.com/$repo/releases/tag/$tag"
