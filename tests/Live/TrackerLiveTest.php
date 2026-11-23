@@ -74,7 +74,7 @@ final class TrackerLiveTest extends TestCase
         if ($series)
         {
             $choice = Live::series($account);
-            $this->assertNotNull($choice, 'no suitable series in the feed of '.$tracker);
+            $this->assertNotNull($choice, 'no suitable series in the feed of '.$tracker.' ('.Live::$listing.')');
             $created = Env::api('POST', 'torrents', array('json' => array('tracker' => $tracker, 'name' => $choice[0], 'quality' => $choice[1])));
             $this->assertSame(201, $created['status'], Scrubber::scrub($created['body'], $hide));
             // only the newest episode is new: the episode before it counts as downloaded
@@ -147,6 +147,65 @@ final class TrackerLiveTest extends TestCase
         $this->assertNotSame('', $again['hash']);
         $this->assertTrue(Qbt::has($again['hash']), 'qBittorrent has the torrent after the repeated download');
         $this->assertCount(1, Qbt::torrents(), 'the old torrent is replaced, not kept next to the new one');
+    }
+
+    // For trackers that have no account in the secrets: what a visitor without an account can
+    // see is still read by the tracker's own code - the release date and the name on a topic page,
+    // the link to the torrent file, the series feed. Nothing is downloaded.
+    // TM_LIVE_GUEST=1 runs it for the trackers that have an account too.
+    /** @dataProvider trackers */
+    public function testPublicPagesAreReadWithoutAnAccount($name)
+    {
+        $account = Live::account($name);
+        if ($account['skip'])
+            $this->markTestSkipped('skipped in tests/env/secrets/trackers.env');
+        $tracker = $account['tracker'];
+        require_once TM_ROOT.'/src/bootstrap.php';
+        if ( ! \TorrentMonitor\Tracker\Registry::needsAccount($tracker))
+            $this->markTestSkipped($tracker.' needs no account: the full test covers it');
+        if (Live::missing($account) === NULL && getenv('TM_LIVE_GUEST') !== '1')
+            $this->markTestSkipped($tracker.' has an account: the full test covers it (TM_LIVE_GUEST=1 runs this one too)');
+        $guest = Live::guest($tracker);
+        if ($guest['no'] !== NULL)
+            $this->markTestSkipped($tracker.': '.$guest['no']);
+
+        // no account at all, whatever the secrets hold
+        $account = array('login' => '', 'password' => '', 'passkey' => '', 'cookie' => '', 'topic' => '') + $account;
+        Live::configure($account);
+
+        if (\TorrentMonitor\Tracker\Registry::kind($tracker) == 'series')
+        {
+            $choice = Live::series($account, TRUE);
+            $this->assertNotNull($choice, 'no suitable series in the public feed of '.$tracker.' ('.Live::$listing.')');
+            $this->assertNotSame('', $choice[0]);
+            $this->assertContains($choice[1], array('sd', '720', '1080'));
+            return;
+        }
+
+        $urls = Live::topicUrls($account, 6, TRUE);
+        $this->assertNotEmpty($urls, 'no topics found on the public listing pages of '.$tracker.' ('.Live::$listing.')');
+        $seen = array();
+        $good = NULL;
+        foreach ($urls as $url)
+        {
+            $read = Live::guestTopic($tracker, $url);
+            $seen[] = $url.': HTTP '.$read['status'].($read['challenged'] ? ', Cloudflare challenge' : '').', date '.($read['date'] ? 'found' : 'not found')
+                .', name '.($read['title'] ? 'found' : 'not found').', torrent link '.($read['download'] ? 'found' : 'not found');
+            // not every topic of a listing has a torrent: the first one that reads completely decides
+            if (( ! $guest['date'] || $read['date'] !== NULL) && ! empty($read['title']) && ( ! $guest['download'] || $read['download']))
+            {
+                $good = $read;
+                break;
+            }
+        }
+        $this->assertNotNull($good, 'no topic of '.$tracker." could be read without an account:\n".implode("\n", $seen));
+        $this->assertNotSame('', trim($good['title']));
+        if ($guest['date'])
+        {
+            $this->assertMatchesRegularExpression('/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/', $good['date'][0]);
+            $this->assertGreaterThan('2005-01-01 00:00:00', $good['date'][0]);
+            $this->assertLessThan(date('Y-m-d H:i:s', time() + 2 * 86400), $good['date'][0]);
+        }
     }
 
     /** @dataProvider trackers */

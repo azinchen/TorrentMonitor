@@ -140,6 +140,17 @@ series from the episode before it, so exactly one episode is new. `<NAME>_TOPIC`
 in `trackers.env` fixes the topic or series instead; `TM_LIVE_AUTO=1` ignores
 those fixed values.
 
+**Trackers without an account** (`testPublicPagesAreReadWithoutAnAccount`). A tracker
+that has no account in `trackers.env` is still tested as far as a visitor can see: a topic
+is picked from the public listing (for rutracker.org, pornolab.net and booktracker.org from
+the pages of a few forum sections, because their search shows nothing to guests), its page
+is fetched without logging in, and the tracker's own code must read the release date, the
+name and the link to the torrent file from it. For a series tracker the public feed must
+yield a series. Nothing is downloaded. What guests cannot see is not expected:
+rutracker.org, pornolab.net and booktracker.org hide the date, nnmclub.to, booktracker.org
+and riperam.org hide the torrent link, rustorka.com shows only its captcha (skipped).
+`TM_LIVE_GUEST=1` runs this test for the trackers that have an account too.
+
 Two more checks per tracker: `<NAME>_WATCH_USER` makes the test look up the topics
 of that user (watching users), and `TM_LIVE_WRONG_PASSWORD=1` checks that a wrong
 password is reported as such. The second is off by default, because repeated
@@ -177,7 +188,11 @@ Results so far (23.11.2026):
 - rutor.is answers from most networks tried, not from all. newstudio.tv answers from
   some networks only. baibako.tv answered from none and was removed from the program.
 - tfile.cc answered with a parking page on every address and was removed from the program.
-- The other trackers, the notification services and SynologyDS wait for accounts.
+- Without an account, the public pages of rutracker.org, nnmclub.to, kinozal.me,
+  pornolab.net, booktracker.org, anidub.com, animelayer.ru, riperam.org, lostfilm.tv and
+  newstudio.tv are read correctly (newstudio.tv only through a network that reaches it).
+- Login, the download of the torrent file and the delivery to the client of those trackers,
+  the notification services and SynologyDS wait for accounts.
 
 ## Reachability
 

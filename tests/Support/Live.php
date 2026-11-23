@@ -25,6 +25,32 @@ class Live
         'newstudio.tv'     => array('NEWSTUDIO',       array()),
     );
 
+    // What a link to a topic looks like where the topic id is a path, not a number:
+    // tracker => array(pattern of the address with the topic number in brackets, pattern of addresses to leave out)
+    const LINKS = array(
+        'anidub.com'  => array('~/(\d+)-[^/]+\.html$~', NULL),
+        'riperam.org' => array('~(?:-t|/topic)(\d+)\.html$~', '~/(pravila|novosti)[^/]*/~'),
+    );
+
+    // What a visitor without an account can see (for the test of trackers that have no account
+    // in the secrets): forums - the page listing the sections whose pages list the topics (when the
+    // usual listing shows nothing to guests); date, download - whether the release date and the link
+    // to the torrent file are shown to guests (default: yes); no - why nothing can be tested.
+    const GUEST = array(
+        'rutracker.org'   => array('forums' => '/forum/index.php', 'date' => FALSE),
+        'pornolab.net'    => array('forums' => '/forum/index.php', 'date' => FALSE),
+        'riperam.org'     => array('download' => FALSE),
+        'booktracker.org' => array('forums' => '/index.php', 'date' => FALSE, 'download' => FALSE),
+        'nnmclub.to'      => array('download' => FALSE),
+        'rustorka.com'    => array('no' => 'the site shows its captcha to every visitor'),
+    );
+
+    public static function guest($name)
+    {
+        $key = isset(self::TRACKERS[$name]) ? $name : 'kinozal';
+        return (isset(self::GUEST[$key]) ? self::GUEST[$key] : array()) + array('forums' => NULL, 'date' => TRUE, 'download' => TRUE, 'no' => NULL);
+    }
+
     private static function app()
     {
         require_once TM_ROOT.'/src/bootstrap.php';
@@ -100,12 +126,35 @@ class Live
         return $reflection->invoke($object, ...$arguments);
     }
 
-    // a page of the tracker fetched the way the application does it (session, encoding, solver)
-    public static function page($tracker, $path)
+    // a page of the tracker fetched the way the application does it (session, encoding, solver);
+    // $guest - without logging in
+    public static function page($tracker, $path, $guest = FALSE)
     {
         $object = Registry::get($tracker);
+        if ($guest)
+            return self::call($object, 'send', self::call($object, 'get', $path, '')->follow());
         $object->login();
         return self::call($object, 'send', self::call($object, 'get', $path)->follow());
+    }
+
+    // what the tracker's own code reads from a topic page fetched without logging in:
+    // array(status, date or NULL, title or NULL, whether a link to the torrent file was found)
+    public static function guestTopic($tracker, $url)
+    {
+        $object = Registry::get($tracker);
+        $topicId = (string)$object->topicIdFromUrl($url);
+        $response = self::call($object, 'send', self::call($object, 'topicRequest', $topicId)->cookie('')->follow());
+        $page = $response->body;
+        $title = NULL;
+        try
+        {
+            $title = self::call($object, 'parseTitle', $page);
+        }
+        catch (\Throwable $e)
+        {
+        }
+        return array('status' => $response->status, 'challenged' => $response->challenged, 'date' => self::call($object, 'parseDate', $page),
+            'title' => $title, 'download' => self::call($object, 'downloadRequest', $topicId, $page) !== NULL);
     }
 
     // what the listing pages answered during the last topicUrls() call (for failure messages)
@@ -113,7 +162,7 @@ class Live
 
     // Addresses of fresh topics of a forum tracker, newest first. A fixed topic from the
     // secrets (an address or an id) replaces the search.
-    public static function topicUrls(array $account, $limit = 3)
+    public static function topicUrls(array $account, $limit = 3, $guest = FALSE)
     {
         $tracker = $account['tracker'];
         $object = Registry::get($tracker);
@@ -123,9 +172,23 @@ class Live
         $key = isset(self::TRACKERS[$tracker]) ? $tracker : 'kinozal';
         self::$listing = '';
         $urls = array();
-        foreach (self::TRACKERS[$key][1] as $path)
+        $pages = self::TRACKERS[$key][1];
+        $rule = isset(self::LINKS[$key]) ? self::LINKS[$key] : array(NULL, NULL);
+        // guests may see nothing in the usual listing: take the pages of a few sections instead
+        if ($guest && self::guest($tracker)['forums'] !== NULL)
         {
-            $response = self::page($tracker, $path);
+            $index = self::page($tracker, self::guest($tracker)['forums'], TRUE);
+            preg_match_all('~viewforum\.php\?f=\d+~', $index->body, $found);
+            $forums = array_values(array_unique($found[0]));
+            $folder = preg_replace('~[^/]*$~', '', self::guest($tracker)['forums']);
+            $pages = array();
+            for ($i = 0; $i < 6 && $i < count($forums); $i++)
+                $pages[] = $folder.$forums[(int)floor($i * count($forums) / 6)];
+            self::$listing .= self::guest($tracker)['forums'].': HTTP '.$index->status.', sections '.count($forums).'; ';
+        }
+        foreach ($pages as $path)
+        {
+            $response = self::page($tracker, $path, $guest);
             self::$listing .= $path.': '.($response->status == 0 ? 'no answer ('.$response->error.')' : 'HTTP '.$response->status.', '.strlen($response->body).' bytes')
                 .($response->challenged ? ', Cloudflare challenge' : '').'; ';
             foreach (self::links($response->body, $object->base().$path) as $link)
@@ -137,9 +200,18 @@ class Live
                 // only links that really lead to a topic page, not any link with a number in it
                 if (parse_url($url, PHP_URL_PATH) != parse_url($link, PHP_URL_PATH) && ! self::samePath($url, $link))
                     continue;
-                $urls[$url] = (string)$parsed['topicId'];
+                // where the id is a path, any address of the site would pass: only the ones shaped like a topic
+                $number = (string)$parsed['topicId'];
+                if ($rule[0] !== NULL)
+                {
+                    if ( ! preg_match($rule[0], $link, $m) || ($rule[1] !== NULL && preg_match($rule[1], $link)))
+                        continue;
+                    $number = $m[1];
+                }
+                $urls[$url] = $number;
             }
-            if (count($urls) >= $limit)
+            // a guest reads several sections: one of them may hold only announcements
+            if ( ! $guest && count($urls) >= $limit)
                 break;
         }
         // numbered topics: the newest first. Menus link to old topics (rules, announcements),
@@ -182,12 +254,15 @@ class Live
     // A series to watch on a series tracker, taken from the newest suitable item of its feed:
     // array(name, quality, episode before the newest one) or NULL. With "name" set in the
     // secrets only the quality and the episode are looked up.
-    public static function series(array $account)
+    // $guest - without logging in (the feeds are public).
+    public static function series(array $account, $guest = FALSE)
     {
         $tracker = $account['tracker'];
         $object = Registry::get($tracker);
-        $object->login();
+        if ( ! $guest)
+            $object->login();
         $response = self::call($object, 'send', $object->request(array('name' => '', 'quality' => 'sd', 'episode' => '')));
+        self::$listing = 'feed: '.($response->status == 0 ? 'no answer ('.$response->error.')' : 'HTTP '.$response->status.', '.strlen($response->body).' bytes');
         $body = $response->body;
         if ($tracker == 'lostfilm.tv')
             $body = str_replace(array('<![CDATA[', ']]>'), '', str_replace('&', '&amp;', str_replace('&amp;', '&', $body)));
@@ -236,7 +311,7 @@ class Live
             $name = trim(str_replace('.', ' ', $n[1]));
             foreach (array('1080' => 'mkv|MKV', '720' => 'mp4|MP4', 'sd' => 'avi|AVI') as $q => $pattern)
                 if ($quality === NULL && preg_match('/'.$pattern.'/', $link) && ($wanted === '' || $wanted == $q))
-                    $quality = $q;
+                    $quality = (string)$q;
         }
         elseif ($tracker == 'newstudio.tv')
         {
@@ -246,7 +321,7 @@ class Live
             $name = trim($n[1]);
             foreach (array('1080' => '1080p', '720' => '720p', 'sd' => 'WEBDLRip') as $q => $pattern)
                 if ($quality === NULL && preg_match('/'.$pattern.'/', $title) && ($wanted === '' || $wanted == $q))
-                    $quality = $q;
+                    $quality = (string)$q;
         }
         if ($name === NULL || $name === '' || $quality === NULL)
             return NULL;

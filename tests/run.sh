@@ -62,7 +62,7 @@ live_up() {
 
 remove_stack() { offline down -v --remove-orphans > /dev/null 2>&1 || true; }
 
-phpunit_in_app() { "$1" exec -T -e TM_ROOT=/app -e TM_LIVE_WRONG_PASSWORD="${TM_LIVE_WRONG_PASSWORD:-0}" -e TM_LIVE_AUTO="${TM_LIVE_AUTO:-0}" app phpunit -c /src/tests/phpunit.xml --testsuite "$2" "${@:3}"; }
+phpunit_in_app() { "$1" exec -T -e TM_ROOT=/app -e TM_LIVE_WRONG_PASSWORD="${TM_LIVE_WRONG_PASSWORD:-0}" -e TM_LIVE_AUTO="${TM_LIVE_AUTO:-0}" -e TM_LIVE_GUEST="${TM_LIVE_GUEST:-0}" app phpunit -c /src/tests/phpunit.xml --testsuite "$2" "${@:3}"; }
 
 cmd_lint() {
     build_images

@@ -30,6 +30,7 @@
   booktracker.org берёт cookie сессии `bb_data`.
 - kinozal: если адрес записи не отвечает, пробуются другие адреса трекера. Домен kinozal.tv больше
   не работает, темы под этой записью проверяются через kinozal.me и kinozal.guru.
+- riperam.org открывается по https.
 - rustorka.com открывается по https; его собственная капча при входе распознаётся и объясняется в ошибке.
 - Убраны casstudio.tk, hamsterstudio.org, tfile.cc и baibako.tv: эти сайты больше не отвечают.
 

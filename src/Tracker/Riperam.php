@@ -7,7 +7,7 @@ use TorrentMonitor\Http\Response;
 // riperam.org. The topic id is the path of the topic page (starts with /).
 final class Riperam extends ForumTracker
 {
-    const ADDRESSES = array('http://riperam.org');
+    const ADDRESSES = array('https://riperam.org');
 
     // torrent file id found on the topic page: it also goes into the saved file name
     private string $downloadId = '';
