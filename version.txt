@@ -1,1 +1,1 @@
-{"system":"4.0.0-beta1","database":"4.0.0-beta1"}
+{"system":"4.0.0-beta2","database":"4.0.0-beta2"}

@@ -7,6 +7,8 @@ namespace TorrentMonitor\Storage;
 //   state.json    - working state: cookies, errors, news, queues (changes on every run)
 final class Files
 {
+    // Format of each file. Do not raise these for a new section or field: add it with a default
+    // instead (see JsonStore), so that older versions of the program keep working with the files.
     const CONFIG_VERSION   = 1;
     const TORRENTS_VERSION = 2;
     const STATE_VERSION    = 2;

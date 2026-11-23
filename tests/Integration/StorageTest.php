@@ -196,6 +196,90 @@ final class StorageTest extends IntegrationTestCase
         }
     }
 
+    // Data files written by a newer version of the program: this version works with them
+    // and keeps everything it does not know.
+    public function testFilesFromANewerVersionKeepWorkingAndKeepTheirUnknownData()
+    {
+        $this->loginToTracker();
+        Env::setTopic(730, 'Сериал', '21-Ноя-26 10:00', 1);
+        $id = $this->trackTopic(730);
+        Env::runEngine();
+        $this->assertNoWarnings();
+
+        // what a later version could add: a section, a setting, fields of a topic, of an account and of a watched user
+        $future = function ($name, $change) {
+            $data = json_decode(file_get_contents($this->dataFile($name)), true);
+            $data['version'] = 99;
+            $data['futureSection'] = array('answer' => 42);
+            $change($data);
+            file_put_contents($this->dataFile($name), json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
+        };
+        $future('config.json', function (&$data) {
+            $data['settings']['futureSetting'] = 'kept';
+            $data['trackers']['rutracker.org']['futureField'] = 'kept';
+        });
+        $future('torrents.json', function (&$data) {
+            $data['topics'][0]['futureField'] = array('kept' => true);
+        });
+        $future('state.json', function (&$data) {
+            $data['cookies']['future.example'] = 'a=b';
+        });
+
+        // ordinary work: the interface, the engine, edits of everything that was extended
+        $boot = Env::uiOpen();
+        $this->assertSame(200, $boot['status'], $boot['body']);
+        $this->assertCount(1, $boot['json']['topics']);
+        $this->assertTrue(Env::ui('topic.save', array('id' => $id, 'kind' => 'topic', 'url' => self::TOPIC.'730', 'name' => 'Новое имя', 'category' => 'tv'))['json']['ok']);
+        $this->assertTrue(Env::ui('tracker.save', array('name' => 'rutracker.org', 'login' => Env::TRACKER_USER, 'password' => Env::TRACKER_PASS))['json']['ok']);
+        $this->assertTrue(Env::ui('settings.save', array('stopAfterDays' => '30'))['json']['ok']);
+        Env::setTopic(730, 'Сериал', '22-Ноя-26 10:00', 2);
+        $second = $this->trackTopicAfterSetting(731);
+        Env::runEngine();
+        $this->assertNoWarnings();
+        $this->assertSame('2026-11-22 10:00:00', AppState::topic($id)['timestamp'], 'the engine works with the newer files');
+
+        foreach (array('config.json', 'torrents.json', 'state.json') as $name)
+        {
+            $data = json_decode(file_get_contents($this->dataFile($name)), true);
+            $this->assertSame(99, $data['version'], $name.': the format number is not lowered');
+            $this->assertSame(array('answer' => 42), $data['futureSection'], $name);
+        }
+        $config = json_decode(file_get_contents($this->dataFile('config.json')), true);
+        $this->assertSame('kept', $config['settings']['futureSetting']);
+        $this->assertSame('kept', $config['trackers']['rutracker.org']['futureField']);
+        $this->assertSame('30', $config['settings']['stopAfterDays']);
+        $topics = json_decode(file_get_contents($this->dataFile('torrents.json')), true)['topics'];
+        $this->assertCount(2, $topics);
+        $this->assertSame(array('kept' => true), $topics[0]['futureField']);
+        $this->assertSame('tv', $topics[0]['category']);
+        $this->assertSame('a=b', json_decode(file_get_contents($this->dataFile('state.json')), true)['cookies']['future.example']);
+        $this->assertNotNull($second);
+    }
+
+    private function trackTopicAfterSetting($topicId)
+    {
+        Env::setTopic($topicId, 'Ещё одна', '20-Ноя-26 10:00', 1);
+        return $this->trackTopic($topicId);
+    }
+
+    public function testFilesThatNeedANewerProgramAreRefusedUntouched()
+    {
+        $this->loginToTracker();
+        $this->trackTopic(732);
+        $file = $this->dataFile('torrents.json');
+        $data = json_decode(file_get_contents($file), true);
+        $data['version'] = 99;
+        $data['compatible'] = 98;
+        file_put_contents($file, json_encode($data));
+        $before = file_get_contents($file);
+
+        $boot = Env::uiOpen();
+        $this->assertSame(503, $boot['status']);
+        $this->assertStringContainsString('более новой версией', $boot['body']);
+        Env::runEngineExpectingFailure();
+        $this->assertSame($before, file_get_contents($file));
+    }
+
     public function testHealthPageChecksTheDataDirectory()
     {
         $page = Env::ui('health');
