@@ -30,8 +30,15 @@ final class TorrServer extends HttpClientBase
         $this->send($this->authorized(Request::json($this->address.'/torrents/', array('action' => 'rem', 'hash' => $id))));
     }
 
+    // nothing is known about a torrent beyond its hash; the request at least tells a wrong
+    // address or password apart from a working connection
     public function info(string $id): ?array
     {
+        $response = $this->send($this->authorized(Request::get($this->address.'/echo')));
+        if ($response->status == 401 || $response->status == 403)
+            throw new ClientException('log_passwd');
+        if ($response->status != 200)
+            throw new ClientException('connect_fail');
         return NULL;
     }
 }

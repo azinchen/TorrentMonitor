@@ -1,5 +1,5 @@
 # Live tests through a VPN. Used automatically when tests/env/secrets/vpn.env exists.
-# The application and both solvers share the network of the "vpn" container, so
+# The application, qBittorrent and both solvers share the network of the "vpn" container, so
 # every request to a tracker leaves through the tunnel.
 services:
   vpn:
@@ -24,11 +24,24 @@ services:
     ports:
       - "127.0.0.1:${TM_PORT:-8088}:80"
 
+  # Keeps the tunnel MTU low. Needed when the host itself is behind another tunnel: with the
+  # default 1420 large packets are dropped, so pings work but web requests hang.
+  mtu:
+    image: tm-tests:php${TM_PHP:-8.5}
+    network_mode: service:vpn
+    cap_add:
+      - NET_ADMIN
+    depends_on:
+      vpn:
+        condition: service_started
+    command: ["sh", "-c", "while true; do ip link set dev wg0 mtu ${TM_VPN_MTU:-1280} 2>/dev/null; sleep 15; done"]
+
   app:
     network_mode: service:vpn
     environment:
-      # the solvers share the VPN container's network, so they are on localhost
+      # the solvers and qBittorrent share the VPN container's network, so they are on localhost
       - TM_SOLVER=${TM_SOLVER:-http://127.0.0.1:8191}
+      - TM_QBT=http://127.0.0.1:8080
     ports: !reset []
     depends_on:
       vpn:
@@ -41,6 +54,12 @@ services:
         condition: service_healthy
 
   flaresolverr:
+    network_mode: service:vpn
+    depends_on:
+      vpn:
+        condition: service_healthy
+
+  qbittorrent:
     network_mode: service:vpn
     depends_on:
       vpn:

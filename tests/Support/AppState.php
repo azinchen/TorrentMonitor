@@ -60,7 +60,7 @@ class AppState
         self::setSettings($extra + array(
             'useTorrent'      => '1',
             'torrentClient'   => 'qBittorrent',
-            'torrentAddress'  => Env::QBT,
+            'torrentAddress'  => Env::qbt(),
             'torrentLogin'    => Env::CLIENT_USER,
             'torrentPassword' => Env::CLIENT_PASS,
             'pathToDownload'  => Env::DOWNLOADS.'/qbt/',

@@ -65,8 +65,11 @@ final class SynologyDS extends HttpClientBase
         $this->send(Request::get($this->address.'/webapi/DownloadStation/task.cgi?api=SYNO.DownloadStation.Task&version=3&method=delete&id='.rawurlencode($id).'&_sid='.rawurlencode($this->sid)));
     }
 
+    // Download Station cannot be asked about a torrent by its hash; signing in at least
+    // tells a wrong address or password apart from a working connection
     public function info(string $id): ?array
     {
+        $this->signIn();
         return NULL;
     }
 }

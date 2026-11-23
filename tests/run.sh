@@ -16,6 +16,7 @@
 #
 # Environment: TM_PHP=8.0|8.5 (PHP for the stack, default 8.5), TM_PORT (default 8088),
 #              TM_SOLVER (live: solver address, default Byparr), TM_VPN_COUNTRY (default Portugal),
+#              TM_VPN=0 (live, reach: do not use the VPN even if its secrets exist),
 #              TM_KEEP=1 (live: leave the stack running afterwards, e.g. for "record").
 set -euo pipefail
 
@@ -37,15 +38,31 @@ build_images() {
 
 offline() { docker compose --project-directory "$env_dir" -f "$env_dir/compose.yml" -f "$env_dir/compose.offline.yml" "$@"; }
 
+# the VPN is used when its secrets exist, unless TM_VPN=0
+use_vpn() { [[ "${TM_VPN:-1}" == 1 && -f "$env_dir/secrets/vpn.env" ]]; }
+
 live() {
     local files=(-f "$env_dir/compose.yml" -f "$env_dir/compose.live.yml")
-    [[ -f "$env_dir/secrets/vpn.env" ]] && files+=(-f "$env_dir/compose.vpn.yml")
+    use_vpn && files+=(-f "$env_dir/compose.vpn.yml")
     docker compose --project-directory "$env_dir" "${files[@]}" "$@"
+}
+
+# starts services of the live stack; shows what went wrong if they do not come up
+live_up() {
+    # the VPN only becomes healthy after the MTU keeper has lowered the tunnel MTU
+    use_vpn && live up -d --quiet-pull vpn mtu > /dev/null 2>&1
+    local log
+    if ! log=$(live up -d --wait --quiet-pull "$@" 2>&1); then
+        echo "$log" | tail -15
+        echo "the live stack did not start$(use_vpn && echo ' (TM_VPN=0 runs it without the VPN)')"
+        live down -v --remove-orphans > /dev/null 2>&1 || true
+        exit 1
+    fi
 }
 
 remove_stack() { offline down -v --remove-orphans > /dev/null 2>&1 || true; }
 
-phpunit_in_app() { "$1" exec -T -e TM_ROOT=/app app phpunit -c /src/tests/phpunit.xml --testsuite "$2" "${@:3}"; }
+phpunit_in_app() { "$1" exec -T -e TM_ROOT=/app -e TM_LIVE_WRONG_PASSWORD="${TM_LIVE_WRONG_PASSWORD:-0}" -e TM_LIVE_AUTO="${TM_LIVE_AUTO:-0}" app phpunit -c /src/tests/phpunit.xml --testsuite "$2" "${@:3}"; }
 
 cmd_lint() {
     build_images
@@ -87,9 +104,9 @@ cmd_integration() {
 cmd_live() {
     build_images
     [[ -f "$env_dir/secrets/trackers.env" ]] || { echo "tests/env/secrets/trackers.env is missing: copy trackers.env.example and fill it in"; exit 1; }
-    say "live tests, PHP $TM_PHP$([[ -f "$env_dir/secrets/vpn.env" ]] && echo ', through the VPN' || echo ', without VPN')"
+    say "live tests, PHP $TM_PHP$(use_vpn && echo ', through the VPN' || echo ', without VPN')"
     remove_stack
-    live up -d --wait --quiet-pull fake app byparr flaresolverr > /dev/null 2>&1
+    live_up fake app byparr flaresolverr qbittorrent
     local status=0
     phpunit_in_app live live "$@" || status=$?
     if [[ "${TM_KEEP:-0}" == 1 ]]; then
@@ -102,11 +119,11 @@ cmd_live() {
 
 cmd_reach() {
     build_images
-    say "tracker reachability$([[ -f "$env_dir/secrets/vpn.env" ]] && echo ', through the VPN' || echo ', without VPN')"
+    say "tracker reachability$(use_vpn && echo ', through the VPN' || echo ', without VPN')"
     remove_stack
     local services=(fake app)
     [[ "${TM_REACH_SOLVER:-1}" == 1 ]] && services+=(byparr)
-    live up -d --wait --quiet-pull "${services[@]}" > /dev/null 2>&1
+    live_up "${services[@]}"
     local status=0
     live exec -T app php /src/tests/tools/reach.php || status=$?
     live down -v --remove-orphans > /dev/null 2>&1 || true

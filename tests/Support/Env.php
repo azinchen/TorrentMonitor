@@ -8,12 +8,23 @@ class Env
     const SOLVER       = 'http://fake:8080/solver';
     const QBT          = 'http://qbittorrent:8080';
     const TRANSMISSION = 'http://transmission:9091';
+    const DELUGE       = 'http://deluge:8112';
+    const DELUGE_PASS  = 'deluge';               // default password of deluge-web
+    const TORRSERVER   = 'http://torrserver:8090';
+    const GOTIFY       = 'http://gotify';
+    const MAIL_DIR     = '/tmp/tm-mail';          // where tests/env/app/sendmail.sh saves messages
     const CLIENT_USER  = 'tm';
     const CLIENT_PASS  = 'tm-test-pass';
     const TRACKER_USER = 'tm-user';
     const TRACKER_PASS = 'tm-pass';
     const API_TOKEN    = 'test-api-token';
     const DOWNLOADS    = '/downloads';
+
+    // address of qBittorrent (in the VPN stack it shares the network of the VPN container)
+    public static function qbt()
+    {
+        return getenv('TM_QBT') ?: self::QBT;
+    }
 
     // live mode: real trackers, no fake server
     public static function isLive()

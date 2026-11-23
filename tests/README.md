@@ -15,7 +15,7 @@ Docker with Compose v2. PHP is not needed on the host.
 | `tests/run.sh unit` | unit tests on PHP 8.0 and 8.5 | – |
 | `tests/run.sh integration` | the application against a fake tracker and real torrent clients | – |
 | `tests/run.sh all` | the three above; **must pass before a merge** | – |
-| `tests/run.sh live` | real trackers with real accounts | `secrets/trackers.env` |
+| `tests/run.sh live` | real trackers, notification services and a Synology NAS with real accounts | `secrets/trackers.env`, `secrets/services.env` |
 | `tests/run.sh reach` | which trackers answer from here, which show Cloudflare, and whether the solver passes it | – |
 | `tests/run.sh record <tracker> <path> <name>` | save a scrubbed tracker page as a fixture | a running live stack |
 | `tests/run.sh up` / `down` | start the stack for manual work at http://127.0.0.1:8088 / remove it | – |
@@ -38,8 +38,12 @@ Extra arguments go to PHPUnit: `tests/run.sh integration --filter Cloudflare`.
   the clearance cookie useless for direct requests, so only the solver's browser
   passes the challenge. The tracker name resolves to this
   container and is served over TLS with a certificate created at start.
-- **qbittorrent**, **transmission** – real clients, to check what TorrentMonitor
-  adds to them and removes from them.
+- **qbittorrent**, **transmission**, **deluge**, **torrserver** – real clients, to
+  check what TorrentMonitor adds to them and removes from them.
+- **gotify** – a real notification server; tests create an application in it and
+  read back the message that arrived.
+- e-mail – `mail()` in the app container hands messages to
+  `tests/env/app/sendmail.sh`, which saves them to `/tmp/tm-mail` instead of sending.
 - **mariadb**, **postgres** – hold old-format databases for the tests of
   `tools/convert-db.php` (the SQLite one is a file). The schemas of version 3.3.6
   are in `tests/Fixtures/legacy/`.
@@ -57,7 +61,7 @@ with a JSON body. Tests send the same requests through three helpers:
   opens a session first if there is none;
 - `Env::uiClose()` – forgets the session.
 
-The integration suite has 93 tests.
+The integration suite has 100 tests.
 
 What the suites cover on top of the older tests:
 
@@ -81,8 +85,13 @@ What the suites cover on top of the older tests:
   service and address, the client connection check, the API key shown on request
   and replaced.
 
-Not covered yet: Deluge, SynologyDS, TorrServer, notifications, every tracker
-except rutracker.org (offline) and kinozal (live only).
+  `Integration/ServicesTest.php`: Deluge and TorrServer (a topic is sent and
+  replaced on update, a wrong password or address is reported), Gotify (the test
+  message arrives, a wrong token is refused), e-mail (the message handed to the
+  mail system).
+
+Covered only by live tests, because they need real accounts: every tracker except
+rutracker.org, the notification services other than Gotify and e-mail, SynologyDS.
 
 ## Screenshots of the interface
 
@@ -97,19 +106,52 @@ Real logins live only in `tests/env/secrets/`, which git ignores (except the
 `*.example` templates):
 
 - `trackers.env` – tracker accounts for live tests. Copy `trackers.env.example`.
+- `services.env` – keys of notification services and the account of a Synology
+  NAS for live tests. Copy `services.env.example`.
 - `vpn.env` – settings of the `azinchen/nordvpn-wg` container. When the file
   exists, live tests and `reach` go through the VPN (`TM_VPN_COUNTRY`, default
-  Portugal). Copy `vpn.env.example`.
+  Portugal); `TM_VPN=0` runs them without it. Copy `vpn.env.example`.
 
 Run `tests/run.sh hooks` once: the pre-push hook refuses a push that contains a
 secrets file or any value from one.
 
 ## Live tests
 
-For each tracker with a login in `trackers.env`: log in, read one topic, download
-its `.torrent`, run again and check nothing is downloaded twice. Nothing is sent
-to a torrent client. A tracker without a login, password or topic in `trackers.env`
-is skipped.
+Live tests are run by hand only. They use real accounts and really download
+`.torrent` files, which counts against the download limits of an account: two
+files per tracker and run (more if the first topics picked turn out unusable).
+
+**Trackers** (`Live/TrackerLiveTest.php`). For every tracker that has an account
+in `trackers.env`, and for the trackers that need none:
+
+1. log in and choose what to watch – see below;
+2. run the engine: the release date and the name are read, one `.torrent` is saved
+   and handed to qBittorrent, which keeps it stopped (nothing is downloaded from peers);
+3. run again: nothing is downloaded, the saved session is used again;
+4. turn the stored mark back (the update time of a topic, the last episode of a
+   series) and run again: the `.torrent` is downloaded and delivered again, and
+   qBittorrent still holds one torrent.
+
+What to watch is chosen automatically. For a forum tracker the test opens the
+tracker's own listing of fresh torrents, collects the links that lead to topics
+and tries the newest ones (up to three: not every topic has a torrent). For a
+series tracker it takes the newest suitable item of the RSS feed and watches that
+series from the episode before it, so exactly one episode is new. `<NAME>_TOPIC`
+in `trackers.env` fixes the topic or series instead; `TM_LIVE_AUTO=1` ignores
+those fixed values.
+
+Two more checks per tracker: `<NAME>_WATCH_USER` makes the test look up the topics
+of that user (watching users), and `TM_LIVE_WRONG_PASSWORD=1` checks that a wrong
+password is reported as such. The second is off by default, because repeated
+failed logins make some trackers ask for a captcha.
+
+**Services** (`Live/ServicesLiveTest.php`). Every notification service filled in
+`services.env` gets one test message and must refuse a spoiled key. A Synology NAS
+gets one torrent by link (the Debian netinst image unless `SYNOLOGY_TORRENT_URL`
+is set), must refuse the same link twice, and the task is removed at once.
+
+One tracker or service at a time: `tests/run.sh live --filter nnmclub`,
+`tests/run.sh live --filter Telegram`.
 
 `TM_SOLVER` chooses the Cloudflare solver and must be a full address:
 
@@ -119,17 +161,20 @@ is skipped.
 | FlareSolverr | `http://flaresolverr:8192` | `http://127.0.0.1:8192` |
 
 FlareSolverr listens on port 8192 in the live stack, not on its usual 8191:
-`TM_SOLVER=http://flaresolverr:8193 tests/run.sh live`.
+`TM_SOLVER=http://flaresolverr:8192 tests/run.sh live`.
 
 `TM_KEEP=1 tests/run.sh live` leaves the live stack running afterwards
 (needed for `record`); `tests/run.sh down` removes it.
 
-Results so far:
+Results so far (23.11.2026):
 
-- kinozal.me passes with both Byparr and FlareSolverr: login, topic page and
-  `.torrent` download behind Cloudflare.
-- rutracker.org is skipped until a topic number and a login without a captcha
-  are available.
+- rutracker.org, kinozal.me and lostfilm-mirror pass the whole tracker test with an
+  automatically chosen topic or series. kinozal.me also passes with FlareSolverr.
+- tfile.cc answers with a parking page on every address: there is no tracker
+  behind it any more.
+- rutor.is, baibako.tv, newstudio.tv and kinozal.tv do not answer, neither
+  directly nor through the VPN (exit in Portugal).
+- The other trackers, the notification services and SynologyDS wait for accounts.
 
 ## Reachability
 
