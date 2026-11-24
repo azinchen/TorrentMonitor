@@ -92,23 +92,18 @@ final class SettingsTest extends IntegrationTestCase
         $this->assertStringContainsString('Подключение к интернету есть.', $checked['json']['message']);
         $this->assertStringContainsString('Решатель Cloudflare не задан.', $checked['json']['message']);
 
-        // a working solver: a page of a tracker in use is opened through it
-        AppState::setCredentials('rutracker.org', Env::TRACKER_USER, Env::TRACKER_PASS);
+        // a solver that answers; no page is opened through it
         $this->assertTrue(Env::ui('settings.save', array('flaresolverrUrl' => Env::SOLVER))['json']['ok']);
         $checked = Env::ui('network.test');
         $this->assertTrue($checked['json']['ok'], $checked['body']);
-        $this->assertStringContainsString('Решатель Cloudflare '.Env::SOLVER.' работает: открыл https://rutracker.org/', $checked['json']['message']);
-        $this->assertNotEmpty(Env::fakeRequests('/solver/v1'), 'the solver was really asked to open a page');
+        $this->assertStringContainsString('Решатель Cloudflare '.Env::SOLVER.' отвечает', $checked['json']['message']);
+        $this->assertSame(array(), Env::fakeRequests('/solver/v1'), 'the solver is not asked to open anything');
 
-        // a solver that is there but cannot open the page, and one that is not there
-        Env::ui('settings.save', array('flaresolverrUrl' => Env::FAKE.'/github'));
-        $checked = Env::ui('network.test');
-        $this->assertFalse($checked['json']['ok']);
-        $this->assertStringContainsString('отвечает, но не смог открыть https://rutracker.org/', $checked['json']['message']);
+        // one that is not there
         Env::ui('settings.save', array('flaresolverrUrl' => 'http://127.0.0.1:9'));
         $checked = Env::ui('network.test');
         $this->assertFalse($checked['json']['ok']);
-        $this->assertStringContainsString('Решатель Cloudflare http://127.0.0.1:9 не отвечает.', $checked['json']['message']);
+        $this->assertStringContainsString('Решатель Cloudflare http://127.0.0.1:9 не отвечает', $checked['json']['message']);
         $this->assertStringContainsString('Подключение к интернету есть.', $checked['json']['message'], 'what works is reported too');
 
         // a proxy that does not answer
