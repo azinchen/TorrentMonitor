@@ -3,7 +3,10 @@
 #
 #   tools/release.sh                      build dist/TorrentMonitor-<version>.zip only
 #   tools/release.sh --publish            build and create the release (GitHub creates the tag v<version>)
-#   tools/release.sh --publish notes.md   same, with release notes taken from a file
+#   tools/release.sh --notes [version]    print the description of a version (default: the one in version.txt)
+#
+# The description is the section "## <version>" of CHANGELOG.md; its format is in
+# .github/RELEASE_TEMPLATE.md. A release is not published without it.
 #
 # The version is read from version.txt: change it there (and merge it) first.
 # TorrentMonitor installations find new versions through GitHub Releases,
@@ -13,24 +16,50 @@ set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"
 
 publish=0
-notes=""
+show=0
+wanted=""
 for arg in "$@"; do
     case "$arg" in
         --publish) publish=1 ;;
-        -h|--help) sed -n '2,10p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
-        *) notes="$arg" ;;
+        --notes)   show=1 ;;
+        -h|--help) sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+        *) wanted="$arg" ;;
     esac
 done
 
 fail() { echo "error: $*" >&2; exit 1; }
+
+# the address of the repository behind "origin": releases never go into the upstream of a fork
+repository() { git remote get-url origin | sed -E 's#^(git@github\.com:|https://github\.com/)##; s#\.git$##'; }
+
+# The description of a version: its section of CHANGELOG.md, followed by a link to everything
+# that changed since the version described right below it.
+description() {
+    local version="$1" body previous
+    body=$(awk -v v="$version" '
+        /^## / { if (found) exit; if ($2 == v) { found = 1; next } }
+        found { print }' CHANGELOG.md | sed -e '/./,$!d' | tac | sed -e '/./,$!d' | tac)
+    [[ -n "$body" ]] || return 1
+    previous=$(awk -v v="$version" '/^## / { if (found) { print $2; exit } if ($2 == v) found = 1 }' CHANGELOG.md)
+    printf '%s\n' "$body"
+    [[ -n "$previous" ]] && printf '\n[Все изменения](https://github.com/%s/compare/v%s...v%s)\n' "$(repository)" "$previous" "$version"
+    return 0
+}
 
 version=$(php -r '$v = json_decode(file_get_contents("version.txt")); echo $v->system ?? "";')
 [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]] || fail "version.txt has no valid version: '$version'"
 tag="v$version"
 archive="dist/TorrentMonitor-$version.zip"
 
+if [[ $show -eq 1 ]]; then
+    description "${wanted:-$version}" || fail "CHANGELOG.md has no section '## ${wanted:-$version}'"
+    exit 0
+fi
+
 [[ -z "$(git status --porcelain)" ]] || fail "working tree is not clean"
-[[ -z "$notes" || -f "$notes" ]] || fail "notes file not found: $notes"
+notes=$(mktemp)
+trap 'rm -f "$notes"' EXIT
+description "$version" > "$notes" || fail "CHANGELOG.md has no section '## $version': describe the release there first (see .github/RELEASE_TEMPLATE.md)"
 
 # every PHP file must at least parse
 while IFS= read -r file; do
@@ -60,7 +89,7 @@ head=$(git rev-parse HEAD)
 [[ "$head" == "$(git rev-parse origin/master)" ]] || fail "local master differs from origin/master"
 
 # always release into the repository behind "origin", never into the upstream of a fork
-repo=$(git remote get-url origin | sed -E 's#^(git@github\.com:|https://github\.com/)##; s#\.git$##')
+repo=$(repository)
 [[ "$repo" =~ ^[^/]+/[^/]+$ ]] || fail "cannot determine GitHub repository from origin: $repo"
 
 # The tag is created by GitHub together with the release, on the commit that was checked above:
@@ -79,11 +108,7 @@ fi
 # release, so installed copies are not offered it as an update
 flags=()
 [[ "$version" == *-* ]] && flags+=(--prerelease)
-if [[ -n "$notes" ]]; then
-    flags+=(--notes-file "$notes")
-else
-    flags+=(--generate-notes)
-fi
+flags+=(--notes-file "$notes")
 gh release create "$tag" "$archive" --repo "$repo" --title "$version" "${flags[@]}" ${target[@]+"${target[@]}"}
 
 # bring the tag here; not essential, so a network hiccup does not fail a release that is already out

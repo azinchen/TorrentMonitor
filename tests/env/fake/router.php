@@ -21,6 +21,7 @@ function default_state()
             'version' => '9.9.9',
             'notes'   => "Что нового:\n- пункт <b>один</b>\n- пункт два",
             'beta'    => '',             // version of a pre-release ('' = there is none)
+            'older'   => array(),        // more releases: version => notes; a version with a suffix is a pre-release
             'commit'  => '',             // newest commit of the main branch ('' = the branch cannot be read)
             'base'    => '',             // version number inside the archive of that commit ('' = same as 'version')
         ),
@@ -304,6 +305,8 @@ if (preg_match('#^/github/repos/[^/]+/[^/]+/releases(/latest)?$#', $path, $m))
         $list[] = gh_release($gh['beta'], 'Бета-версия.', true);
     if ($regular !== null)
         $list[] = $regular;
+    foreach ($gh['older'] as $version => $notes)
+        $list[] = gh_release((string)$version, (string)$notes, strpos((string)$version, '-') !== false);
     return send_json($list);
 }
 

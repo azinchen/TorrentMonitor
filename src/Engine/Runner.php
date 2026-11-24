@@ -340,9 +340,16 @@ final class Runner
         if (State::updateNotified())
             return;
         $message = 'Выпущена новая версия ТМ '.$release['version'].', автоматическое обновление отключено, обновите систему самостоятельно.';
-        if ( ! empty($release['notes']))
-            $message .= "\n\n".$release['notes'];
+        //a notification cannot show the formatting of the description: its first sentence and the address
+        $message .= self::about($release);
         Notifications::version($message);
         State::setUpdateNotified(TRUE);
+    }
+
+    //what a notification says about a version: the first sentence of its description and where to read the rest
+    public static function about(array $release): string
+    {
+        $summary = Release::summary(isset($release['notes']) ? $release['notes'] : '');
+        return ($summary !== '' ? "\n\n".$summary : '').( ! empty($release['url']) ? "\n\n".$release['url'] : '');
     }
 }

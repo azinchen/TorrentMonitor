@@ -220,7 +220,7 @@ final class Updater
         State::setChannelChanged(FALSE);
 
         if (self::$isCLI)
-            Notifications::version($msg.( ! empty($release['notes']) ? "\n\n".$release['notes'] : ''));
+            Notifications::version($msg.\TorrentMonitor\Engine\Runner::about($release));
         else
             echo 'Перейти на <a href="'.htmlspecialchars((string)Settings::get('serverAddress')).'">главную страницу</a>.<br />';
 
