@@ -4,9 +4,11 @@
 #   tools/release.sh                      build dist/TorrentMonitor-<version>.zip only
 #   tools/release.sh --publish            build and create the release (GitHub creates the tag v<version>)
 #   tools/release.sh --notes [version]    print the description of a version (default: the one in version.txt)
+#   tools/release.sh --check              check the format of every description in CHANGELOG.md
 #
 # The description is the section "## <version>" of CHANGELOG.md; its format is in
-# .github/RELEASE_TEMPLATE.md. A release is not published without it.
+# .github/RELEASE_TEMPLATE.md. A release is not published without it, or with a description
+# that breaks the rules of that format.
 #
 # The version is read from version.txt: change it there (and merge it) first.
 # TorrentMonitor installations find new versions through GitHub Releases,
@@ -17,12 +19,14 @@ cd "$(git rev-parse --show-toplevel)"
 
 publish=0
 show=0
+check=0
 wanted=""
 for arg in "$@"; do
     case "$arg" in
         --publish) publish=1 ;;
         --notes)   show=1 ;;
-        -h|--help) sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+        --check)   check=1 ;;
+        -h|--help) sed -n '2,14p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
         *) wanted="$arg" ;;
     esac
 done
@@ -46,6 +50,54 @@ description() {
     return 0
 }
 
+# The rules of .github/RELEASE_TEMPLATE.md that can be checked mechanically. Prints what is wrong
+# with the description of a version, one problem per line; prints nothing when it is in order.
+problems() {
+    local version="$1"
+    awk -v v="$version" '
+        /^## / { if (found) exit; if ($2 == v) { found = 1; next } }
+        found { print }' CHANGELOG.md | awk -v v="$version" '
+        function say(text) { print v ": " text }
+        function close_item() {
+            # every change names the pull request or the commit it was made in; steps for the user do not
+            if (item != "" && !todo && item !~ /\((#[0-9]+|[0-9a-f]{7,40})(, (#[0-9]+|[0-9a-f]{7,40}))*\)$/)
+                say("no pull request or commit at the end of the item: " substr(item, 1, 60))
+            item = ""
+        }
+        /^[ \t]*$/ { close_item(); next }
+        !started {
+            started = 1
+            if ($0 ~ /^(#|[-*] )/) say("does not start with a summary sentence")
+        }
+        /^#/ {
+            close_item()
+            if ($0 !~ /^### /) say("only ### headings are allowed inside a description: " $0)
+            todo = ($0 ~ /Что нужно сделать/)
+            if (todo) has_todo = 1
+            next
+        }
+        /^- / { close_item(); item = $0; next }
+        /^ +[-*] / { say("nested lists are not shown by the program: " $0); next }
+        /^  [^ ]/ && item != "" { item = item " " substr($0, 3); next }
+        /^\|/ { say("tables are not shown by the program: " $0) }
+        /!\[/ { say("images are not shown by the program: " $0) }
+        /^```/ { say("code blocks are not shown by the program") }
+        /<\/?[a-zA-Z][^>]*>/ { say("HTML is not shown by the program: " $0) }
+        { close_item() }
+        END {
+            close_item()
+            if (!started) say("the description is empty")
+            else if (!has_todo) say("no section \"Что нужно сделать\"")
+        }'
+}
+
+if [[ $check -eq 1 ]]; then
+    found=$(for v in $(awk '/^## / { print $2 }' CHANGELOG.md); do problems "$v"; done)
+    [[ -z "$found" ]] || { echo "$found" >&2; fail "CHANGELOG.md does not follow .github/RELEASE_TEMPLATE.md"; }
+    echo "release descriptions are in order: $(awk '/^## / { n++ } END { print n }' CHANGELOG.md) versions"
+    exit 0
+fi
+
 version=$(php -r '$v = json_decode(file_get_contents("version.txt")); echo $v->system ?? "";')
 [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]] || fail "version.txt has no valid version: '$version'"
 tag="v$version"
@@ -60,6 +112,8 @@ fi
 notes=$(mktemp)
 trap 'rm -f "$notes"' EXIT
 description "$version" > "$notes" || fail "CHANGELOG.md has no section '## $version': describe the release there first (see .github/RELEASE_TEMPLATE.md)"
+wrong=$(problems "$version")
+[[ -z "$wrong" ]] || { echo "$wrong" >&2; fail "the description of $version does not follow .github/RELEASE_TEMPLATE.md"; }
 
 # every PHP file must at least parse
 while IFS= read -r file; do

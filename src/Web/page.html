@@ -482,7 +482,7 @@
     <div class="card card--accent" x-show="status.update">
         <h2><span x-text="status.update && status.update.downgrade ? 'Будет установлена версия' : 'Доступна версия'"></span> <span x-text="status.update && status.update.version"></span></h2>
         <p class="muted" x-show="status.update && status.update.downgrade">Выбран другой канал обновлений. Эта версия не выше установленной; данные остаются как есть.</p>
-        <div class="notes" x-show="status.update && status.update.notes" x-html="markdown(status.update && status.update.notes)"></div>
+        <div class="notes" x-show="status.update && status.update.notes" x-html="markdown(status.update && status.update.notes, repository())"></div>
         <div class="actions">
             <button class="btn btn--primary" @click="installUpdate()" :disabled="!!busy" x-text="busy == 'update.install' ? 'Устанавливаю…' : 'Установить'"></button>
             <a class="btn" :href="status.update && status.update.url" target="_blank" rel="noopener">Страница выпуска</a>

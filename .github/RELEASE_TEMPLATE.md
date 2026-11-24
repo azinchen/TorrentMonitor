@@ -6,10 +6,20 @@ version as in version.txt, no "v"), newest first. tools/release.sh takes that
 section as the description of the GitHub release and refuses to publish
 without it. "tools/release.sh --notes [version]" prints what would be published.
 
+The script also checks what can be checked of the rules below and does not
+publish a description that breaks them: it starts with a summary sentence, has
+the section "Что нужно сделать", every change ends with its pull request or
+commit, and nothing the program cannot show is used. "tools/release.sh --check"
+checks every section; "tests/run.sh lint" (and so "tests/run.sh all") runs it.
+
 Who reads it: mostly a TorrentMonitor user, inside the program - the block
 "Доступна версия" on the Состояние page shows the description. So:
   - Russian, user-facing wording: what changed for the user, not how the code
-    changed. No PR numbers, no refactoring, tests or CI.
+    changed. No refactoring, tests or CI.
+  - Every item ends with where the change was made, in parentheses: the pull
+    request, "(#15)", several as "(#15, #16)", or the short commit id when
+    there was no pull request, "(1a2b3c4)". GitHub links both by itself and so
+    does the program.
   - One or two sentences per item. Name a setting in bold, as the interface
     spells it. Link the wiki page for anything new.
   - The program renders only this part of Markdown: "##"/"###" headings,
@@ -37,17 +47,17 @@ a removed setting, a step to run by hand. Otherwise one line:
 
 ### ✨ Новое
 
-- ...
+- ... (#PR)
 
 ### 🐛 Исправлено
 
 <!-- Say what went wrong for the user, then that it is fixed, e.g.:
-- kinozal.me: раздача могла скачаться повторно на сервере не в московском поясе. -->
+- kinozal.me: раздача могла скачаться повторно на сервере не в московском поясе. (#15) -->
 
-- ...
+- ... (#PR)
 
 ### ♻️ Изменено
 
 <!-- Behaviour that is different now, and things that were removed. -->
 
-- ...
+- ... (#PR)
