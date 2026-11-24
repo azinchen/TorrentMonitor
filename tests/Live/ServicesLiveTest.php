@@ -1,9 +1,12 @@
 <?php
 use PHPUnit\Framework\TestCase;
 
-// Real notification services and a real Synology NAS, with the keys from
-// tests/env/secrets/services.env. A service that is not filled in is skipped.
-// Every notification test sends one message; whether it reached the phone is for a person to see.
+// Real notification services and a real Synology NAS.
+//   - made-up keys: need no secrets; every real service is asked and must refuse them, and the
+//     interface must show the service's own answer;
+//   - real keys from tests/env/secrets/services.env: one message is sent through the saved
+//     settings (whether it reached the phone is for a person to see), then a spoiled key is refused.
+//     A service that is not filled in is skipped.
 final class ServicesLiveTest extends TestCase
 {
     private $secrets;
@@ -21,34 +24,74 @@ final class ServicesLiveTest extends TestCase
         return isset($this->secrets[$key]) ? $this->secrets[$key] : '';
     }
 
-    // service => keys that make its address, joined with ";"
+    // service => keys of the secrets that make its address (joined with ";"), a made-up address,
+    // and what the real service answers to it
     public function services()
     {
         return array(
-            'Telegram'   => array('Telegram', array('TELEGRAM_BOT_TOKEN', 'TELEGRAM_CHAT')),
-            'Pushover'   => array('Pushover', array('PUSHOVER_USER', 'PUSHOVER_TOKEN')),
-            'Pushbullet' => array('Pushbullet', array('PUSHBULLET_TOKEN')),
-            'Prowl'      => array('Prowl', array('PROWL_KEY')),
-            'Pushall'    => array('Pushall', array('PUSHALL_ID', 'PUSHALL_KEY')),
-            'Gotify'     => array('Gotify', array('GOTIFY_ADDRESS', 'GOTIFY_TOKEN')),
+            'Telegram'   => array('Telegram', array('TELEGRAM_BOT_TOKEN', 'TELEGRAM_CHAT'), '123456:made-up-token;1', '/HTTP 40[14]: (Unauthorized|Not Found)/'),
+            'Pushover'   => array('Pushover', array('PUSHOVER_USER', 'PUSHOVER_TOKEN'), 'madeupuser;madeuptoken', '/HTTP 400: .*token is invalid/'),
+            'Pushbullet' => array('Pushbullet', array('PUSHBULLET_TOKEN'), 'made-up-token', '/HTTP 401: Access token is missing or invalid/'),
+            'Prowl'      => array('Prowl', array('PROWL_KEY'), str_repeat('0', 40), '/HTTP 401: Invalid API key/'),
+            'Pushall'    => array('Pushall', array('PUSHALL_ID', 'PUSHALL_KEY'), '1;made-up-key', '/HTTP 200: wrong key/'),
+            'Gotify'     => array('Gotify', array('GOTIFY_ADDRESS', 'GOTIFY_TOKEN'), null, '/HTTP 401/'),
         );
     }
 
+    // saves the address for error notifications and presses «Сохранить и проверить»
+    private function check($service, $address)
+    {
+        $saved = Env::ui('settings.save', array('send' => true, 'sendUpdate' => false, 'sendWarning' => true,
+            'notifyWarningService' => $service, 'notifyWarningAddress' => $address))['json'];
+        $this->assertTrue($saved['ok'], 'the settings were saved');
+        return Env::ui('notify.check')['json'];
+    }
+
+    // Made-up keys: needs no secrets. The real service must refuse them, and its own answer must
+    // be what the interface shows. Nothing is delivered to anyone.
     /** @dataProvider services */
-    public function testServiceAcceptsAMessageAndRefusesAWrongKey($service, $keys)
+    public function testMadeUpKeysAreRefusedWithTheAnswerOfTheService($service, $keys, $fake, $answer)
+    {
+        if ($fake === null)
+            $this->markTestSkipped($service.' has no public server to refuse a made-up key: the integration tests cover it');
+        $refused = $this->check($service, $fake);
+        $this->assertFalse($refused['ok'], $service.' reported success with a made-up key');
+        $this->assertStringStartsWith('Об ошибках ('.$service.'): сервис не принял сообщение — ', $refused['message']);
+        $this->assertMatchesRegularExpression($answer, $refused['message']);
+
+        // an address that lacks a part is not sent anywhere
+        if (strpos($fake, ';') !== false)
+        {
+            $incomplete = $this->check($service, explode(';', $fake)[0]);
+            $this->assertFalse($incomplete['ok']);
+            $this->assertStringContainsString('адрес указан не полностью', $incomplete['message']);
+        }
+    }
+
+    // Real keys from tests/env/secrets/services.env: one message is really sent through the saved
+    // settings, then the key is spoiled and the service must refuse it.
+    /** @dataProvider services */
+    public function testRealKeysDeliverAMessageAndASpoiledKeyIsRefused($service, $keys, $fake, $answer)
     {
         $values = array_map(array($this, 'secret'), $keys);
         if (in_array('', $values, true))
             $this->markTestSkipped('no '.implode(', ', $keys).' in tests/env/secrets/services.env');
         $hide = array_combine($keys, $values);
 
-        $sent = Env::ui('notify.test', array('service' => $service, 'address' => implode(';', $values)))['json'];
+        $sent = $this->check($service, implode(';', $values));
         $this->assertTrue($sent['ok'], Scrubber::scrub(json_encode($sent, JSON_UNESCAPED_UNICODE), $hide));
+        $this->assertSame('Об ошибках ('.$service.'): сообщение отправлено.', $sent['message']);
 
-        // the last value is the key or the chat: spoiled, it must be reported as a failure
+        // the last value is the key or the chat: spoiled, it must be reported as a failure with a reason
         $values[count($values) - 1] = 'wrong'.substr(md5($values[count($values) - 1]), 0, 12);
-        $refused = Env::ui('notify.test', array('service' => $service, 'address' => implode(';', $values)))['json'];
+        $refused = $this->check($service, implode(';', $values));
         $this->assertFalse($refused['ok'], $service.' reported success with a wrong key');
+        $this->assertMatchesRegularExpression('/сервис не принял сообщение — HTTP \d+/u', Scrubber::scrub($refused['message'], $hide));
+
+        // nothing of the keys is in the journal of events
+        $journal = (string)@file_get_contents(getenv('TM_DATA_DIR').'/journal.log');
+        foreach ($hide as $value)
+            $this->assertStringNotContainsString($value, $journal);
     }
 
     // a link to a small legal torrent the NAS can fetch from the internet
