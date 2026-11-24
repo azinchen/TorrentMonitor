@@ -17,6 +17,23 @@ final class State implements ClearanceStore
         Files::state()->update(function (&$data) use ($time) { $data['lastRun'] = $time; });
     }
 
+    // The update channel was changed and its version is not installed yet: until then a lower
+    // version of the new channel is installed too
+    public static function channelChanged(): bool
+    {
+        return ! empty(Files::state()->read()['channelChanged']);
+    }
+
+    public static function setChannelChanged(bool $value): void
+    {
+        Files::state()->update(function (&$data) use ($value) {
+            if ( ! empty($data['channelChanged']) === $value)
+                return FALSE;
+            $data['channelChanged'] = $value;
+            return TRUE;
+        });
+    }
+
     public static function updateNotified(): bool
     {
         return ! empty(Files::state()->read()['updateNotified']);

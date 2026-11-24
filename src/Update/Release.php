@@ -2,10 +2,12 @@
 namespace TorrentMonitor\Update;
 
 use TorrentMonitor\App;
+use TorrentMonitor\Data\Settings;
+use TorrentMonitor\Data\State;
 use TorrentMonitor\Http\Request;
 use TorrentMonitor\Storage\Files;
 
-// Information about the latest TorrentMonitor release from GitHub Releases.
+// Information about the newest TorrentMonitor version of the chosen channel, from GitHub.
 // The response is cached in the release.cache.json file to avoid contacting GitHub
 // every time a page is opened.
 class Release
@@ -56,12 +58,43 @@ class Release
         return ltrim(trim(strval($tag)), 'vV');
     }
 
-    // Latest release: array('version', 'notes', 'zip', 'url') or NULL if there are no releases
-    // or GitHub is unavailable. $force = TRUE - do not use the cache: return only what
-    // GitHub answered just now.
+    // The oldest version a change of the channel may go back to: the first one whose data files
+    // work with any version of the program
+    const FLOOR = '4.0.0-beta2';
+
+    // What is installed: stable - regular releases, beta - releases and pre-releases, whichever is
+    // newer, dev - the current state of the repository's main branch.
+    // The choice is part of automatic updates: without them the regular releases are offered.
+    public static function channel()
+    {
+        $channel = strval(Settings::get('updateChannel'));
+        return Settings::on('autoUpdate') && in_array($channel, array('beta', 'dev'), TRUE) ? $channel : 'stable';
+    }
+
+    // Branch the dev channel follows; can be overridden in config.php: Config::write('update.branch', 'main');
+    private static function branch()
+    {
+        $branch = \Config::read('update.branch');
+        return ! empty($branch) ? $branch : 'master';
+    }
+
+    // Commit of the installed copy, if it was installed from the dev channel ('' for a release)
+    public static function currentCommit()
+    {
+        $version = json_decode(strval(@file_get_contents(App::root().'/version.txt')), TRUE);
+        return isset($version['commit']) ? strval($version['commit']) : '';
+    }
+
+    // The newest version of the chosen channel: array('version', 'notes', 'zip', 'url', 'commit')
+    // ('commit' is set for the dev channel only) or NULL if there is none or GitHub is unavailable.
+    // $force = TRUE - do not use the cache: return only what GitHub answered just now.
     public static function latest($force = FALSE)
     {
+        $channel = self::channel();
         $cache = json_decode(strval(@file_get_contents(self::cacheFile())), TRUE);
+        // an answer about another channel is of no use
+        if (is_array($cache) && (isset($cache['channel']) ? $cache['channel'] : 'stable') != $channel)
+            $cache = NULL;
         if ( ! $force && is_array($cache) && isset($cache['checked'], $cache['ttl']))
         {
             $age = time() - intval($cache['checked']);
@@ -69,25 +102,93 @@ class Release
                 return isset($cache['release']) && is_array($cache['release']) ? $cache['release'] : NULL;
         }
 
-        $response = self::request(self::apiUrl().'/repos/'.self::repo().'/releases/latest');
+        if ($channel == 'dev')
+            $found = self::head();
+        elseif ($channel == 'beta')
+            $found = self::newest();
+        else
+            $found = self::regular();
 
-        // 404 - the repository has no releases yet
-        if ($response['code'] == 404)
+        // FALSE - GitHub is unavailable: keep the previous information and retry later
+        if ($found === FALSE)
         {
-            self::saveCache(NULL, self::CACHE_TTL);
-            return NULL;
-        }
-
-        $data = $response['code'] == 200 ? json_decode($response['body'], TRUE) : NULL;
-        if ( ! is_array($data) || empty($data['tag_name']))
-        {
-            // GitHub is unavailable: keep the previous information and retry later
             $release = is_array($cache) && isset($cache['release']) && is_array($cache['release']) ? $cache['release'] : NULL;
-            self::saveCache($release, self::CACHE_TTL_FAIL);
+            self::saveCache($release, self::CACHE_TTL_FAIL, $channel);
             // On a forced check (installing an update) the cache is not trusted
             return $force ? NULL : $release;
         }
+        self::saveCache($found, self::CACHE_TTL, $channel);
+        return $found;
+    }
 
+    // The latest regular release; NULL - there are none, FALSE - GitHub is unavailable
+    private static function regular()
+    {
+        $response = self::request(self::apiUrl().'/repos/'.self::repo().'/releases/latest');
+        // 404 - the repository has no regular releases yet
+        if ($response['code'] == 404)
+            return NULL;
+        $data = $response['code'] == 200 ? json_decode($response['body'], TRUE) : NULL;
+        if ( ! is_array($data) || empty($data['tag_name']))
+            return FALSE;
+        return self::describe($data);
+    }
+
+    // The release with the highest version number, pre-releases included
+    private static function newest()
+    {
+        $response = self::request(self::apiUrl().'/repos/'.self::repo().'/releases?per_page=30');
+        $list = $response['code'] == 200 ? json_decode($response['body'], TRUE) : NULL;
+        if ( ! is_array($list))
+            return FALSE;
+        $best = NULL;
+        foreach ($list as $data)
+        {
+            if ( ! is_array($data) || empty($data['tag_name']) || ! empty($data['draft']))
+                continue;
+            if ($best === NULL || version_compare(self::normalizeVersion($data['tag_name']), self::normalizeVersion($best['tag_name']), '>'))
+                $best = $data;
+        }
+        return $best === NULL ? NULL : self::describe($best);
+    }
+
+    // The newest commit of the main branch
+    private static function head()
+    {
+        $repo = self::apiUrl().'/repos/'.self::repo();
+        $response = self::request($repo.'/commits/'.rawurlencode(self::branch()));
+        $data = $response['code'] == 200 ? json_decode($response['body'], TRUE) : NULL;
+        if ( ! is_array($data) || empty($data['sha']) || ! preg_match('/^[0-9a-f]{7,64}$/', strval($data['sha'])))
+            return FALSE;
+        $sha = strval($data['sha']);
+
+        // what changed since the installed commit: the first line of every commit, newest first
+        $titles = array();
+        $installed = self::currentCommit();
+        if ($installed !== '' && $installed != $sha)
+        {
+            $compare = self::request($repo.'/compare/'.rawurlencode($installed).'...'.rawurlencode($sha));
+            $list = $compare['code'] == 200 ? json_decode($compare['body'], TRUE) : NULL;
+            if (is_array($list) && isset($list['commits']) && is_array($list['commits']))
+                foreach (array_reverse($list['commits']) as $commit)
+                    if (isset($commit['commit']['message']))
+                        $titles[] = '- '.strtok(strval($commit['commit']['message']), "\r\n");
+        }
+        if (empty($titles) && isset($data['commit']['message']))
+            $titles[] = '- '.strtok(strval($data['commit']['message']), "\r\n");
+
+        return array(
+            'version' => 'dev '.substr($sha, 0, 7),
+            'notes'   => implode("\n", $titles),
+            'zip'     => $repo.'/zipball/'.$sha,
+            'url'     => isset($data['html_url']) ? $data['html_url'] : self::pageUrl(),
+            'commit'  => $sha,
+        );
+    }
+
+    // A release as GitHub describes it -> what the program needs of it
+    private static function describe(array $data)
+    {
         // The archive built by tools/release.sh; if it is missing - the source code archive from GitHub
         $zip = isset($data['zipball_url']) ? $data['zipball_url'] : '';
         if ( ! empty($data['assets']) && is_array($data['assets']))
@@ -101,22 +202,36 @@ class Release
                 }
             }
         }
-
-        $release = array(
+        return array(
             'version' => self::normalizeVersion($data['tag_name']),
             'notes'   => isset($data['body']) ? trim(str_replace("\r\n", "\n", strval($data['body']))) : '',
             'zip'     => $zip,
             'url'     => isset($data['html_url']) ? $data['html_url'] : self::pageUrl(),
         );
-        self::saveCache($release, self::CACHE_TTL);
-        return $release;
     }
 
-    // Whether there is a release newer than the installed version
+    // Whether the channel's version is to be installed. Normally only a newer one is. Right after
+    // the channel was changed, any other version of the new channel is: also a lower one.
     public static function isNewer($release)
     {
-        return is_array($release) && ! empty($release['version'])
-            && version_compare($release['version'], self::currentVersion(), '>');
+        if ( ! is_array($release) || empty($release['version']))
+            return FALSE;
+        if ( ! empty($release['commit']))
+            return $release['commit'] != self::currentCommit();
+        if (version_compare($release['version'], self::currentVersion(), '>'))
+            return TRUE;
+        return self::isDowngrade($release);
+    }
+
+    // The version is offered because the channel was changed, and it is not above the installed one
+    public static function isDowngrade($release)
+    {
+        if ( ! is_array($release) || empty($release['version']) || ! empty($release['commit']) || ! State::channelChanged())
+            return FALSE;
+        if (version_compare($release['version'], self::currentVersion(), '>') || version_compare($release['version'], self::FLOOR, '<'))
+            return FALSE;
+        // the same number is still another version when the installed copy came from the dev channel
+        return $release['version'] != self::currentVersion() || self::currentCommit() !== '';
     }
 
     // Download the release file, return TRUE on success
@@ -135,12 +250,13 @@ class Release
         return Files::dir().'/release.cache.json';
     }
 
-    private static function saveCache($release, $ttl)
+    private static function saveCache($release, $ttl, $channel = 'stable')
     {
         $file = self::cacheFile();
         $data = json_encode(array(
             'checked' => time(),
             'ttl'     => $ttl,
+            'channel' => $channel,
             'release' => $release,
         ));
         if (@file_put_contents($file, $data, LOCK_EX) !== FALSE)

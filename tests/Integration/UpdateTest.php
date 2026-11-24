@@ -116,4 +116,135 @@ final class UpdateTest extends IntegrationTestCase
         $this->assertSame($before, AppState::version());
         $this->assertFalse($page['json']['ok']);
     }
+
+    // ---- update channels
+
+    private function channel($channel)
+    {
+        $saved = Env::ui('settings.save', array('autoUpdate' => true, 'updateChannel' => $channel));
+        $this->assertTrue($saved['json']['ok'], $saved['body']);
+        return $saved['json'];
+    }
+
+    private function commit()
+    {
+        $version = json_decode(file_get_contents('/app/version.txt'), true);
+        return isset($version['commit']) ? $version['commit'] : '';
+    }
+
+    public function testStableChannelIgnoresPreReleases()
+    {
+        Env::fake(array('github' => array('mode' => 'ok', 'version' => AppState::version(), 'beta' => '9.9.9-beta1')));
+        $this->channel('stable');
+        $this->assertNull($this->offered());
+    }
+
+    public function testBetaChannelTakesWhicheverIsNewer()
+    {
+        // a pre-release above the regular release
+        Env::fake(array('github' => array('mode' => 'ok', 'version' => '9.9.8', 'beta' => '9.9.9-beta1')));
+        $this->channel('beta');
+        $this->assertSame('9.9.9-beta1', $this->offered());
+
+        // the regular release above the pre-release
+        Env::fake(array('github' => array('mode' => 'ok', 'version' => '9.9.9', 'beta' => '9.9.9-beta1')));
+        Env::ui('update.check');
+        $this->assertSame('9.9.9', $this->offered());
+
+        $output = Env::runEngine();
+        $this->assertStringContainsString('Обновление до версии: 9.9.9 выполнено успешно.', $output);
+        $this->assertSame('9.9.9', AppState::version());
+    }
+
+    public function testChannelIsOnlyUsedWithAutomaticUpdates()
+    {
+        Env::fake(array('github' => array('mode' => 'ok', 'version' => AppState::version(), 'beta' => '9.9.9-beta1')));
+        $this->channel('beta');
+        $this->assertSame('9.9.9-beta1', $this->offered());
+
+        // switching automatic updates off goes back to regular releases and does not go down a version
+        $this->assertTrue(Env::ui('settings.save', array('autoUpdate' => false))['json']['ok']);
+        $this->assertNull($this->offered());
+        $this->assertFalse(AppState::state()['channelChanged']);
+    }
+
+    public function testDevChannelInstallsTheNewestCommitAndThenWaitsForTheNextOne()
+    {
+        $first = str_repeat('a1', 20);
+        Env::fake(array('github' => array('mode' => 'ok', 'version' => AppState::version(), 'commit' => $first, 'base' => '9.9.9-beta2')));
+        $json = $this->channel('dev');
+        $this->assertStringContainsString('будет установлена версия dev a1a1a1a', $json['message']);
+        $this->assertSame('dev a1a1a1a', $this->offered());
+
+        $output = Env::runEngine();
+        $this->assertStringContainsString('выполнено успешно', $output);
+        $this->assertSame('9.9.9-beta2', AppState::version(), 'the number is the one inside the archive');
+        $this->assertSame($first, $this->commit());
+        $this->assertSame('9.9.9-beta2 (dev a1a1a1a)', Env::uiOpen()['json']['status']['version']);
+        $this->assertFileExists('/app/src/AddedByRelease.php', 'the archive of a commit has its files one folder down');
+        $this->assertNull($this->offered(), 'the same commit is not installed again');
+        $this->assertNoWarnings();
+
+        // the next commit: its notes list what changed since the installed one
+        $second = str_repeat('b2', 20);
+        Env::fake(array('github' => array('commit' => $second)));
+        Env::ui('update.check');
+        $update = Env::uiOpen()['json']['status']['update'];
+        $this->assertSame('dev b2b2b2b', $update['version']);
+        $this->assertStringContainsString('Первое изменение после a1a1a1a', $update['notes']);
+        $this->assertStringContainsString('- Последнее изменение', $update['notes']);
+        $this->assertStringNotContainsString('подробности', $update['notes'], 'only the first line of a commit');
+    }
+
+    public function testChangingTheChannelInstallsItsVersionEvenIfLower()
+    {
+        // installed from the dev channel, on top of 9.9.9-beta2
+        $sha = str_repeat('a1', 20);
+        Env::fake(array('github' => array('mode' => 'ok', 'version' => '9.9.8', 'beta' => '9.9.9-beta1', 'commit' => $sha, 'base' => '9.9.9-beta2')));
+        $this->channel('dev');
+        Env::runEngine();
+        $this->assertSame('9.9.9-beta2', AppState::version());
+
+        // dev -> beta: the newest beta is lower and is installed
+        $json = $this->channel('beta');
+        $this->assertStringContainsString('будет установлена версия 9.9.9-beta1, она не выше текущей 9.9.9-beta2 (dev a1a1a1a)', $json['message']);
+        $update = Env::uiOpen()['json']['status']['update'];
+        $this->assertSame(array('9.9.9-beta1', true), array($update['version'], $update['downgrade']));
+        $output = Env::runEngine();
+        $this->assertStringContainsString('выполнено успешно', $output);
+        $this->assertSame('9.9.9-beta1', AppState::version());
+        $this->assertSame('', $this->commit(), 'a release has no commit recorded');
+        $this->assertFalse(AppState::state()['channelChanged'], 'the change of the channel is complete');
+
+        // beta -> stable: lower again
+        $this->channel('stable');
+        Env::runEngine();
+        $this->assertSame('9.9.8', AppState::version());
+        $this->assertNoWarnings();
+
+        // without a change of the channel a lower version is never installed
+        Env::fake(array('github' => array('version' => '9.9.7')));
+        Env::ui('update.check');
+        $this->assertNull($this->offered());
+        Env::runEngine();
+        $this->assertSame('9.9.8', AppState::version());
+    }
+
+    public function testChannelChangeDoesNotGoBelowTheFirstVersionWithPortableData()
+    {
+        Env::fake(array('github' => array('mode' => 'ok', 'version' => '3.9.0', 'beta' => '9.9.9-beta1')));
+        $this->channel('beta');
+        Env::runEngine();
+        $this->assertSame('9.9.9-beta1', AppState::version());
+
+        $this->channel('stable');
+        $this->assertNull($this->offered(), 'version 3 is not offered');
+        Env::runEngine();
+        $this->assertSame('9.9.9-beta1', AppState::version());
+    }
+
+    public function testUnknownChannelIsRefused()
+    {
+        $this->assertFalse(Env::ui('settings.save', array('autoUpdate' => true, 'updateChannel' => 'nightly'))['json']['ok']);
+    }
 }

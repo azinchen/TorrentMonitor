@@ -25,6 +25,14 @@ final class App
         return isset($version['system']) ? (string)$version['system'] : '0';
     }
 
+    // The version as it is shown: a copy installed from the dev channel also names its commit
+    public static function versionLabel(): string
+    {
+        $version = json_decode((string)@file_get_contents(self::root().'/version.txt'), TRUE);
+        $commit = isset($version['commit']) ? (string)$version['commit'] : '';
+        return self::version().($commit !== '' ? ' (dev '.substr($commit, 0, 7).')' : '');
+    }
+
     // Directory of saved torrent files
     public static function torrentsDir(): string
     {

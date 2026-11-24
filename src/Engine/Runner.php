@@ -325,7 +325,12 @@ final class Runner
     {
         $release = Release::latest();
         if ( ! Release::isNewer($release))
+        {
+            //nothing to install on a newly chosen channel: the change of the channel is complete
+            if (is_array($release))
+                State::setChannelChanged(FALSE);
             return;
+        }
         if (Settings::on('autoUpdate'))
         {
             $this->say('Установка обновлений.');
