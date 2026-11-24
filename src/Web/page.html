@@ -426,12 +426,15 @@
                         <label class="field"><span>Адрес или ключи</span>
                             <input type="text" x-model="settingsForm['notify' + n.key + 'Address']" autocomplete="off">
                             <small x-text="addressHint(settingsForm['notify' + n.key + 'Service'])"></small></label>
-                        <button type="button" class="btn btn--small" @click="testNotify(n.key)" :disabled="!!busy">Отправить пробное сообщение</button>
                     </div>
                 </fieldset>
             </template>
         </div>
-        <div class="actions"><button class="btn btn--primary" :disabled="!!busy">Сохранить</button></div>
+        <div class="actions">
+            <button class="btn btn--primary" :disabled="!!busy">Сохранить</button>
+            <button type="button" class="btn" x-show="settingsForm.send" @click="testNotifications()" :disabled="!!busy" x-text="busy == 'notify.check' ? 'Проверяю…' : 'Сохранить и проверить'"></button>
+        </div>
+        <p class="muted small" x-show="settingsForm.send">Проверка отправляет пробное сообщение по каждому включённому виду уведомлений: другого способа узнать, что адрес и ключи подходят, у сервисов нет.</p>
     </form>
 
     <form class="card" @submit.prevent="saveSettings()">
