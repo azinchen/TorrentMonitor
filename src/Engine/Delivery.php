@@ -12,6 +12,7 @@ use TorrentMonitor\Data\Warnings;
 use TorrentMonitor\Notify\Notifications;
 use TorrentMonitor\Tracker\Found;
 use TorrentMonitor\Tracker\Registry;
+use TorrentMonitor\Time;
 
 // What happens to a found torrent: the torrent file is saved, handed to the torrent client,
 // the user script is run, a notification is sent.
@@ -72,7 +73,8 @@ final class Delivery
         }
 
         $url = $topic['topicId'] !== '' && Registry::has($tracker) ? Registry::get($tracker)->topicUrl($topic['topicId']) : '';
-        Notifications::update($tracker, $message, $found->dateText, $url);
+        //the notification has no browser to show the date in the reader's zone: the server's clock and the tracker's
+        Notifications::update($tracker, $message, Time::both($found->date, $tracker) ?: $found->dateText, $url);
         $out($message);
         return $fields;
     }
@@ -166,7 +168,7 @@ final class Delivery
                 continue;
             Topics::update($topicId, array('hash' => $hash));
             $message = 'Torrent-клиент доступен и раздача '.$item['name'].' добавлена.';
-            Notifications::update($item['tracker'], $message, $item['date']);
+            Notifications::update($item['tracker'], $message, Time::both((string)$topic['updatedAt'], (string)$item['tracker']) ?: $item['date']);
             self::script($topic, $item['name'], $hash, $message, $item['date'], $out);
             $out($message);
         }

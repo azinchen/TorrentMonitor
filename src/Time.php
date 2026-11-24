@@ -81,6 +81,25 @@ final class Time
         return self::utc($wall, new \DateTimeZone(date_default_timezone_get()));
     }
 
+    // A release date for a notification or the log, where there is no browser to show it in the
+    // reader's zone: on the clock of the server and, when that differs, on the clock of the tracker.
+    // "23 ноя 2026, 06:23 (на трекере 14:23 МСК)"; '' if $wall is not a date.
+    public static function both(string $wall, string $tracker): string
+    {
+        $zone = self::zone($tracker);
+        $there = self::read($wall, $zone);
+        if ($there === NULL)
+            return '';
+        $months = array('янв', 'фев', 'мар', 'апр', 'мая', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек');
+        $day = function (\DateTimeImmutable $time) use ($months) { return $time->format('j').' '.$months[(int)$time->format('n') - 1]; };
+        $here = $there->setTimezone(new \DateTimeZone(date_default_timezone_get()));
+        $text = $day($here).' '.$here->format('Y, H:i');
+        if ($here->format('Y-m-d H:i') == $there->format('Y-m-d H:i'))
+            return $text;
+        //the day is repeated only when it is another day on the tracker
+        return $text.' (на трекере '.($here->format('Y-m-d') == $there->format('Y-m-d') ? '' : $day($there).', ').$there->format('H:i').' '.self::label($zone, $wall).')';
+    }
+
     // Short name of a zone at a moment: МСК for Moscow, otherwise the abbreviation (EET) or the offset (UTC+5)
     public static function label(\DateTimeZone $zone, string $wall = ''): string
     {
