@@ -309,7 +309,16 @@ fieldset { border: 0; border-top: 1px solid var(--border); margin: .75rem 0 0; p
     max-height: 26rem;
     overflow-y: auto;
 }
-.notes { font-family: var(--font); font-size: .93rem; }
+.notes { font-family: var(--font); font-size: .93rem; white-space: normal; }
+.notes > :first-child { margin-top: 0; }
+.notes > :last-child { margin-bottom: 0; }
+.notes h3 { font-size: 1.05rem; margin: 1rem 0 .4rem; }
+.notes h4 { font-size: .95rem; margin: .9rem 0 .3rem; }
+.notes p { margin: .4rem 0; }
+.notes ul { margin: .3rem 0; padding-left: 1.25rem; }
+.notes li { margin: .15rem 0; }
+.notes b { font-weight: 650; }
+.notes code { font-family: var(--mono); font-size: .85em; background: var(--surface); padding: .05rem .3rem; border-radius: 4px; }
 
 
 /* ---- narrow screens */

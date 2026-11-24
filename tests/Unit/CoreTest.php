@@ -420,4 +420,17 @@ final class CoreTest extends TestCase
         $this->assertSame('the-kitchen-2012', Topics::sonarrName('https://example.org/sonarr/series/the-kitchen-2012/'));
         $this->assertSame('The Kitchen (2012)', Topics::sonarrName(' The Kitchen (2012) '));
     }
+
+    public function testSummaryOfAReleaseDescription()
+    {
+        $summary = function ($notes) { return \TorrentMonitor\Update\Release::summary($notes); };
+        $this->assertSame('Часовые пояса и выбор версий.', $summary("Часовые пояса и **выбор версий**.\n\n### ✨ Новое\n\n- пункт"));
+        $this->assertSame('Две строки одного абзаца.', $summary("Две строки\nодного абзаца.\n\nВторой абзац."));
+        $this->assertSame('См. вики и config.php.', $summary("См. [вики](https://example.com/wiki) и `config.php`.\n- пункт"));
+        // several versions at once: the heading of the newest comes first
+        $this->assertSame('Итоговая версия.', $summary("## 9.9.9\n\nИтоговая версия.\n\n## 9.9.8\n\nПрежняя."));
+        // commit titles of the version in development have no summary
+        $this->assertSame('', $summary("- Первое изменение\n- Второе"));
+        $this->assertSame('', $summary(''));
+    }
 }

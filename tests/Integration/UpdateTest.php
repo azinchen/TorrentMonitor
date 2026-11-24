@@ -18,7 +18,7 @@ final class UpdateTest extends IntegrationTestCase
     public function testNoReleasesMeansNoUpdate()
     {
         $this->assertNull($this->offered());
-        $this->assertCount(1, Env::fakeRequests('/releases/latest'));
+        $this->assertCount(1, Env::fakeRequests('/releases'));
     }
 
     public function testNewerReleaseIsAnnouncedAndTheAnswerIsCached()
@@ -28,7 +28,7 @@ final class UpdateTest extends IntegrationTestCase
         $this->assertSame('9.9.9', $this->offered());
         $this->assertSame('9.9.9', $this->offered());
         $this->assertStringContainsString('пункт <b>один</b>', Env::uiOpen()['json']['status']['update']['notes'], 'notes are sent as text; the page shows them as text');
-        $this->assertCount(1, Env::fakeRequests('/releases/latest'), 'GitHub is asked once, then the cache is used');
+        $this->assertCount(1, Env::fakeRequests('/releases'), 'GitHub is asked once, then the cache is used');
     }
 
     public function testSameOrOlderReleaseIsNotAnnounced()
@@ -246,5 +246,24 @@ final class UpdateTest extends IntegrationTestCase
     public function testUnknownChannelIsRefused()
     {
         $this->assertFalse(Env::ui('settings.save', array('autoUpdate' => true, 'updateChannel' => 'nightly'))['json']['ok']);
+    }
+
+    // ---- release descriptions
+
+    public function testNotesOfSkippedVersionsAreShownToo()
+    {
+        Env::fake(array('github' => array('mode' => 'ok', 'version' => '9.9.9', 'notes' => "Итоговая версия.\n\n### Новое\n\n- пункт",
+            'older' => array('9.9.9-beta2' => 'Вторая бета.', '9.9.9-beta1' => 'Первая бета.', '0.0.1' => 'Старая версия.'))));
+        $this->channel('beta');
+        Env::ui('update.check');
+        $notes = Env::uiOpen()['json']['status']['update']['notes'];
+        $this->assertStringStartsWith("## 9.9.9\n\nИтоговая версия.", $notes);
+        $this->assertStringContainsString("## 9.9.9-beta2\n\nВторая бета.\n\n## 9.9.9-beta1\n\nПервая бета.", $notes, 'newest first');
+        $this->assertStringNotContainsString('Старая версия', $notes, 'versions not above the installed one are left out');
+
+        // the regular releases only: the betas between are not part of that channel
+        $this->channel('stable');
+        Env::ui('update.check');
+        $this->assertSame("Итоговая версия.\n\n### Новое\n\n- пункт", Env::uiOpen()['json']['status']['update']['notes']);
     }
 }

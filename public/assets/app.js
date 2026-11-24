@@ -386,6 +386,47 @@ document.addEventListener('alpine:init', () => {
             const year = Number(m[1]) === new Date().getFullYear() ? '' : ' ' + m[1];
             return Number(m[3]) + ' ' + months[Number(m[2]) - 1] + year + (m[4] ? ', ' + m[4] + ':' + m[5] : '');
         },
+        // A release description as HTML. Only a small part of Markdown is understood: headings,
+        // "-" lists, **bold**, `code` and [text](https://address). The text is escaped first, so
+        // whatever else a description holds is shown as it is written and never becomes markup.
+        markdown(text) {
+            const escape = s => s.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+            const inline = s => escape(s)
+                .replace(/`([^`]+)`/g, '<code>$1</code>')
+                .replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>')
+                .replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+            const out = [];
+            let list = false, paragraph = [];
+            const flush = () => {
+                if (paragraph.length) out.push('<p>' + paragraph.join(' ') + '</p>');
+                paragraph = [];
+                if (list) out.push('</ul>');
+                list = false;
+            };
+            for (const raw of String(text || '').replace(/\r/g, '').split('\n')) {
+                const line = raw.trim();
+                const heading = line.match(/^(#{1,4})\s+(.+)$/);
+                const item = line.match(/^[-*]\s+(.+)$/);
+                if (heading) {
+                    flush();
+                    out.push('<h' + (heading[1].length <= 2 ? 3 : 4) + '>' + inline(heading[2]) + '</h' + (heading[1].length <= 2 ? 3 : 4) + '>');
+                } else if (item) {
+                    if (paragraph.length) { out.push('<p>' + paragraph.join(' ') + '</p>'); paragraph = []; }
+                    if (!list) { out.push('<ul>'); list = true; }
+                    out.push('<li>' + inline(item[1]) + '</li>');
+                } else if (line === '') {
+                    flush();
+                } else if (list && /^\s+\S/.test(raw)) {
+                    // a wrapped line of a list item
+                    out[out.length - 1] = out[out.length - 1].replace(/<\/li>$/, ' ' + inline(line) + '</li>');
+                } else {
+                    if (list) flush();
+                    paragraph.push(inline(line));
+                }
+            }
+            flush();
+            return out.join('');
+        },
         // a moment (UTC, 2026-11-23T11:23:00Z) on the clock of this browser; $fallback - the stored text, if there is no moment
         local(utc, fallback) {
             const time = utc ? new Date(utc) : null;

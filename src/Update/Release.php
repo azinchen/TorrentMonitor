@@ -102,12 +102,7 @@ class Release
                 return isset($cache['release']) && is_array($cache['release']) ? $cache['release'] : NULL;
         }
 
-        if ($channel == 'dev')
-            $found = self::head();
-        elseif ($channel == 'beta')
-            $found = self::newest();
-        else
-            $found = self::regular();
+        $found = $channel == 'dev' ? self::head() : self::newest($channel == 'beta');
 
         // FALSE - GitHub is unavailable: keep the previous information and retry later
         if ($found === FALSE)
@@ -121,35 +116,65 @@ class Release
         return $found;
     }
 
-    // The latest regular release; NULL - there are none, FALSE - GitHub is unavailable
-    private static function regular()
-    {
-        $response = self::request(self::apiUrl().'/repos/'.self::repo().'/releases/latest');
-        // 404 - the repository has no regular releases yet
-        if ($response['code'] == 404)
-            return NULL;
-        $data = $response['code'] == 200 ? json_decode($response['body'], TRUE) : NULL;
-        if ( ! is_array($data) || empty($data['tag_name']))
-            return FALSE;
-        return self::describe($data);
-    }
-
-    // The release with the highest version number, pre-releases included
-    private static function newest()
+    // The release with the highest version number: regular releases only, or pre-releases too.
+    // NULL - there is none, FALSE - GitHub is unavailable.
+    // Its notes are followed by the notes of every release between the installed version and it,
+    // so that a copy that skips versions is still told what changed in each.
+    private static function newest($preReleases)
     {
         $response = self::request(self::apiUrl().'/repos/'.self::repo().'/releases?per_page=30');
         $list = $response['code'] == 200 ? json_decode($response['body'], TRUE) : NULL;
         if ( ! is_array($list))
             return FALSE;
-        $best = NULL;
+        $releases = array();
         foreach ($list as $data)
         {
-            if ( ! is_array($data) || empty($data['tag_name']) || ! empty($data['draft']))
+            if ( ! is_array($data) || empty($data['tag_name']) || ! empty($data['draft']) || ( ! $preReleases && ! empty($data['prerelease'])))
                 continue;
-            if ($best === NULL || version_compare(self::normalizeVersion($data['tag_name']), self::normalizeVersion($best['tag_name']), '>'))
-                $best = $data;
+            $releases[] = self::describe($data);
         }
-        return $best === NULL ? NULL : self::describe($best);
+        if (empty($releases))
+            return NULL;
+        usort($releases, function ($a, $b) { return version_compare($b['version'], $a['version']); });
+        $best = $releases[0];
+
+        $between = array();
+        foreach ($releases as $release)
+            if (version_compare($release['version'], self::currentVersion(), '>') && $release['notes'] !== '')
+                $between[] = $release;
+        if (count($between) > 1)
+        {
+            $notes = array();
+            foreach ($between as $release)
+                $notes[] = '## '.$release['version']."\n\n".$release['notes'];
+            $best['notes'] = implode("\n\n", $notes);
+        }
+        return $best;
+    }
+
+    // The sentence a release description starts with: everything before its first heading or list,
+    // as plain text. It is what a notification says about the release.
+    public static function summary($notes)
+    {
+        $lines = array();
+        foreach (explode("\n", strval($notes)) as $line)
+        {
+            $line = trim($line);
+            if (preg_match('/^(#|[-*] )/', $line))
+            {
+                // the heading of a version comes before its summary
+                if (empty($lines))
+                    continue;
+                break;
+            }
+            if ($line === '' && ! empty($lines))
+                break;
+            if ($line !== '')
+                $lines[] = $line;
+        }
+        $text = implode(' ', $lines);
+        $text = preg_replace('/\[([^\]]+)\]\([^)]*\)/', '$1', $text);
+        return trim(str_replace(array('**', '`'), '', $text));
     }
 
     // The newest commit of the main branch
