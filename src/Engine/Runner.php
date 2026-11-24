@@ -28,9 +28,12 @@ final class Runner
     private bool $dryRun;
     private ?string $onlyTracker;
     private ?int $onlyTopic;
+    private bool $fresh;
 
     // $options: tracker - check only this tracker; topic - only the topic with this id;
-    // dryRun - download and change nothing, only show what would be done
+    // dryRun - download and change nothing, only show what would be done;
+    // fresh - ask GitHub about a new version now instead of using the answer kept for six hours
+    // (a run started by hand: the person expects an update that is out to be installed)
     public function __construct(callable $out, array $options = array())
     {
         $this->out = $out;
@@ -38,6 +41,7 @@ final class Runner
         $this->dryRun = ! empty($options['dryRun']);
         $this->onlyTracker = ! empty($options['tracker']) ? (string)$options['tracker'] : NULL;
         $this->onlyTopic = ! empty($options['topic']) ? (int)$options['topic'] : NULL;
+        $this->fresh = ! empty($options['fresh']);
     }
 
     /** @var resource|null run log (data/engine.log): it is shown by the "Status" page */
@@ -424,7 +428,7 @@ final class Runner
 
     private function update(): void
     {
-        $release = Release::latest();
+        $release = Release::latest($this->fresh);
         if ( ! Release::isNewer($release))
         {
             //nothing to install on a newly chosen channel: the change of the channel is complete

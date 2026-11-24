@@ -3,6 +3,7 @@
 //  --tracker=rutracker.org  check only this tracker
 //  --topic=12               check only the topic with this number
 //  --dry-run                show the updates found without downloading or changing anything
+//  --fresh                  look for a new version of TorrentMonitor now, not from the answer kept for six hours
 require_once __DIR__.'/src/bootstrap.php';
 
 use TorrentMonitor\App;
@@ -16,11 +17,13 @@ if ($cli)
     {
         if ($argument == '--dry-run')
             $options['dryRun'] = TRUE;
+        elseif ($argument == '--fresh')
+            $options['fresh'] = TRUE;
         elseif (preg_match('/^--(tracker|topic)=(.+)$/', $argument, $m))
             $options[$m[1]] = $m[2];
         else
         {
-            echo "php engine.php [--tracker=<трекер>] [--topic=<номер темы>] [--dry-run]\n";
+            echo "php engine.php [--tracker=<трекер>] [--topic=<номер темы>] [--dry-run] [--fresh]\n";
             exit($argument == '--help' ? 0 : 1);
         }
     }

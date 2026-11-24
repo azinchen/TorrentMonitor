@@ -117,6 +117,35 @@ final class UpdateTest extends IntegrationTestCase
         $this->assertFalse($page['json']['ok']);
     }
 
+    // The answer of GitHub is kept for six hours. A run started by hand does not wait for that.
+    public function testRunStartedByHandLooksForANewVersionNow()
+    {
+        // "no new version" was answered and is remembered
+        $this->assertNull($this->offered());
+        $this->release('ok');
+        AppState::setSettings(array('autoUpdate' => '1'));
+
+        // a scheduled run trusts the remembered answer
+        Env::runEngine();
+        $this->assertSame(json_decode(file_get_contents('/src/version.txt'), true)['system'], AppState::version(), 'nothing is installed by the scheduled run');
+
+        // «Проверить сейчас» asks again and installs
+        $started = Env::ui('run');
+        $this->assertTrue($started['json']['ok'], $started['body']);
+        Env::waitFor(function () { return AppState::version() === '9.9.9'; }, 'the update to be installed by the run started by hand');
+        Env::waitFor(function () { return ! Env::ui('run.log')['json']['running']; }, 'the check to finish');
+        $this->assertNoWarnings();
+    }
+
+    public function testFreshOptionOfTheCommandLine()
+    {
+        $this->assertNull($this->offered());
+        $this->release('ok');
+        AppState::setSettings(array('autoUpdate' => '1'));
+        $output = Env::sh('cd /app && php engine.php --fresh 2>&1');
+        $this->assertStringContainsString('Обновление до версии: 9.9.9 выполнено успешно.', $output);
+    }
+
     // ---- update channels
 
     private function channel($channel)
