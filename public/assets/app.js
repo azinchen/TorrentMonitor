@@ -389,12 +389,17 @@ document.addEventListener('alpine:init', () => {
         // A release description as HTML. Only a small part of Markdown is understood: headings,
         // "-" lists, **bold**, `code` and [text](https://address). The text is escaped first, so
         // whatever else a description holds is shown as it is written and never becomes markup.
-        markdown(text) {
+        // $repository - address of the repository on GitHub: "(#15)" and "(1a2b3c4)" at the end of an
+        // item become links to that pull request or commit
+        markdown(text, repository) {
             const escape = s => s.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
             const inline = s => escape(s)
                 .replace(/`([^`]+)`/g, '<code>$1</code>')
                 .replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>')
-                .replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+                .replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>')
+                .replace(/\(((?:#\d+|[0-9a-f]{7,40})(?:,\s*(?:#\d+|[0-9a-f]{7,40}))*)\)/g, (all, refs) => !repository ? all
+                    : '(' + refs.split(/,\s*/).map(ref => '<a href="' + repository + (ref[0] === '#' ? '/pull/' + ref.slice(1) : '/commit/' + ref)
+                        + '" target="_blank" rel="noopener">' + ref + '</a>').join(', ') + ')');
             const out = [];
             let list = false, paragraph = [];
             const flush = () => {
@@ -439,6 +444,11 @@ document.addEventListener('alpine:init', () => {
             if (!t.updatedAt || !t.updatedAtUtc) return '';
             const own = this.date(t.updatedAt);
             return own === this.local(t.updatedAtUtc, t.updatedAt) ? '' : 'на трекере ' + own + ' ' + t.zone;
+        },
+        // address of the repository a version comes from: https://github.com/owner/name
+        repository() {
+            const m = this.status.update && String(this.status.update.url || '').match(/^https:\/\/github\.com\/[^\/]+\/[^\/]+/);
+            return m ? m[0] : '';
         },
         icon(tracker) { return 'img/' + tracker + '.ico'; },
     }));
