@@ -69,6 +69,21 @@ final class SettingsTest extends IntegrationTestCase
         $this->assertSame('Europe/Kaliningrad', AppState::setting('trackerTimezone'));
     }
 
+    public function testRequestLimitsAreSavedWithinBounds()
+    {
+        $this->assertSame(array('', '3'), array(AppState::setting('httpConcurrency'), AppState::setting('httpSites')), 'defaults: 10 per tracker, three trackers');
+        $this->assertTrue(Env::ui('settings.save', array('httpConcurrency' => '4', 'httpSites' => '1'))['json']['ok']);
+        $this->assertSame(array('4', '1'), array(AppState::setting('httpConcurrency'), AppState::setting('httpSites')));
+        // out of bounds: brought back in
+        Env::ui('settings.save', array('httpConcurrency' => '500', 'httpSites' => '99'));
+        $this->assertSame(array('50', '10'), array(AppState::setting('httpConcurrency'), AppState::setting('httpSites')));
+        Env::ui('settings.save', array('httpConcurrency' => '0', 'httpSites' => '0'));
+        $this->assertSame(array('1', '3'), array(AppState::setting('httpConcurrency'), AppState::setting('httpSites')));
+        // empty: the default again
+        Env::ui('settings.save', array('httpConcurrency' => ''));
+        $this->assertSame('', AppState::setting('httpConcurrency'));
+    }
+
     public function testOnlyKnownSettingsAreAccepted()
     {
         $before = AppState::setting('ApiKey');

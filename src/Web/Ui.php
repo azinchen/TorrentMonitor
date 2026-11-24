@@ -35,7 +35,7 @@ final class Ui
     const SETTINGS = array('serverAddress', 'auth', 'rss', 'debug', 'autoUpdate', 'userAgent', 'httpTimeout', 'flaresolverrUrl',
         'proxy', 'proxyAddress', 'proxyType', 'useTorrent', 'torrentClient', 'torrentAddress', 'torrentLogin', 'pathToDownload',
         'qbitCategory', 'deleteDistribution', 'deleteOldFiles', 'deleteFilesOnRemove', 'stopAfterDays', 'removeOnSeriesDelete', 'sonarrReplaceTopic', 'sonarrReplaceTorrent',
-        'send', 'sendUpdate', 'sendWarning', 'trackerTimezone', 'updateChannel', 'dataFileMode');
+        'send', 'sendUpdate', 'sendWarning', 'trackerTimezone', 'updateChannel', 'dataFileMode', 'httpConcurrency', 'httpSites');
 
     private array $in = array();
 
@@ -543,6 +543,11 @@ final class Ui
         foreach (array('httpTimeout' => 1, 'stopAfterDays' => 0) as $key => $min)
             if (isset($values[$key]))
                 $values[$key] = (string)max($min, (int)$values[$key]);
+        //empty - the default; otherwise within bounds a tracker and a small computer can bear
+        if (isset($values['httpConcurrency']) && $values['httpConcurrency'] !== '')
+            $values['httpConcurrency'] = (string)min(50, max(1, (int)$values['httpConcurrency']));
+        if (isset($values['httpSites']))
+            $values['httpSites'] = (string)min(10, max(1, (int)$values['httpSites'] ?: 3));
         if (isset($values['dataFileMode']) && $values['dataFileMode'] !== '' && ! Files::validMode($values['dataFileMode']))
             $this->fail('Права на файлы данных: три восьмеричные цифры, первая — 6 или 7 (например, 640). Пусто — по умолчанию.');
         if (isset($values['updateChannel']) && ! in_array($values['updateChannel'], array('stable', 'beta', 'dev'), TRUE))

@@ -14,8 +14,8 @@
 // Needed when it is not found automatically: custom build, open_basedir, several PHP versions.
 //Config::write('php.cli', '/usr/bin/php8.3');
 
-// How many requests one tracker gets at the same time (default 10). Up to three trackers are
-// asked at once, each within this limit. A higher number may get the account limited by the tracker.
+// How many requests one tracker gets at the same time (default 10). The same setting is in the
+// interface (Настройки, дополнительные настройки) and the interface wins when it is set there.
 //Config::write('curl.concurrency', 5);
 
 // Address used to check the internet connection before trackers are polled.

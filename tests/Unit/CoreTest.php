@@ -494,6 +494,8 @@ final class CoreTest extends TestCase
         $this->assertSame(array(), $startable($queue, $site, array('a' => 3, 'b' => 3, 'c' => 3), 9, 3));
         // a single site gets no more than its limit however long the queue is
         $this->assertCount(10, $startable(array_keys(array_fill(0, 50, 'x')), array_fill(0, 50, 'one'), array(), 0, 10));
+        // the number of sites asked at once can be set: one site at a time
+        $this->assertSame(array('a1', 'a2', 'a3'), \TorrentMonitor\Http\Client::startable($queue, $site, array(), 0, 3, 1));
     }
 
     private static function sorted(array $values): array
