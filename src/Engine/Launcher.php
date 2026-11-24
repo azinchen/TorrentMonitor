@@ -29,7 +29,9 @@ final class Launcher
         //Where the output of the run goes. Nowhere by default: the log is in the data directory.
         //config.php may name a file, for one the output of a container: Config::write('log.output', '/proc/1/fd/1');
         $output = \Config::read('log.output');
-        $output = ! empty($output) && is_string($output) ? escapeshellarg($output) : '/dev/null';
+        //a file that cannot be written must not keep the run from starting: the shell would refuse the whole command
+        $usable = ! empty($output) && is_string($output) && (file_exists($output) ? is_writable($output) : is_writable(dirname($output)));
+        $output = $usable ? escapeshellarg($output) : '/dev/null';
         exec($command.' >> '.$output.' 2>&1 &');
         return NULL;
     }

@@ -242,4 +242,19 @@ final class LoggingTest extends IntegrationTestCase
             file_put_contents('/app/config.php', $config);
         }
     }
+
+    public function testAnOutputFileThatCannotBeWrittenDoesNotStopTheRun()
+    {
+        $config = file_get_contents('/app/config.php');
+        file_put_contents('/app/config.php', $config."\nConfig::write('log.output', '/proc/1/no-such-place/output');\n");
+        try
+        {
+            $this->assertTrue(Env::ui('run')['json']['ok']);
+            Env::waitFor(function () { return count(AppState::journal('run')) == 1; }, 'the run to happen without its output file');
+        }
+        finally
+        {
+            file_put_contents('/app/config.php', $config);
+        }
+    }
 }
