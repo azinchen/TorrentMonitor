@@ -4,7 +4,7 @@ namespace TorrentMonitor\Storage;
 // All TorrentMonitor data is stored in three JSON files in the data directory:
 //   config.json   - settings, tracker credentials, notification addresses (changed only by the user)
 //   torrents.json - watched topics and users
-//   state.json    - working state: cookies, errors, news, queues (changes on every run)
+//   state.json    - working state: cookies, errors, queues (changes on every run)
 final class Files
 {
     // Format of each file. Do not raise these for a new section or field: add it with a default
@@ -178,7 +178,6 @@ final class Files
             'clearance'      => array(),
             'nextWarningId'  => 1,
             'warnings'       => array(),
-            'news'           => array(),
             // Topics found for watched users
             'nextFoundId'    => 1,
             'found'          => array(),

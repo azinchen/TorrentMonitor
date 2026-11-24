@@ -157,7 +157,7 @@ final class ConverterTest extends IntegrationTestCase
         $this->assertSame(12, $state['warnings'][0]['t_id']);
         $this->assertSame(5, $state['nextWarningId']);
         $this->assertSame('Новый фильм', $state['buffer'][0]['threme']);
-        $this->assertSame(array('id' => 'updated_3.3.6', 'text' => '<b>Обновление</b>', 'new' => 0), $state['news'][0]);
+        $this->assertArrayNotHasKey('news', $state, 'news of the old version are not carried over');
         $this->assertSame('8 Янв 2026', $state['temp']['7']['date']);
 
         $this->assertStringNotContainsString(Env::TRACKER_PASS, $report, 'the report never shows passwords');

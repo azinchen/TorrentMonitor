@@ -301,7 +301,7 @@ foreach ($bufferRows as $row)
         'tracker' => (string)$row['tracker'],
     );
 
-// errors, news, the torrent client queue
+// errors, the torrent client queue
 $warnings = array();
 $warningRows = rows($pdo, 'warning');
 usort($warningRows, 'byId');
@@ -310,10 +310,6 @@ foreach ($warningRows as $row)
         'id' => (int)$row['id'], 'time' => (string)$row['time'], 'where' => (string)$row['where'],
         'reason' => (string)$row['reason'], 't_id' => $row['t_id'] === NULL ? NULL : (int)$row['t_id'],
     );
-
-$news = array();
-foreach (rows($pdo, 'news') as $row)
-    $news[] = array('id' => (string)$row['id'], 'text' => (string)$row['text'], 'new' => (int)$row['new']);
 
 $temp = array();
 foreach (rows($pdo, 'temp') as $row)
@@ -376,7 +372,6 @@ $files = array(
         'cookies'       => $cookies,
         'nextWarningId' => $maxId($warnings),
         'warnings'      => $warnings,
-        'news'          => $news,
         'nextBufferId'  => $maxId($buffer),
         'buffer'        => $buffer,
         'temp'          => $temp,
@@ -395,7 +390,7 @@ say('  трекеров с учётными данными: '.count($trackers).'
 say('  адресов уведомлений: '.count($notifications));
 say('  тем: '.count($topics));
 say('  отслеживаемых пользователей: '.count($users).', найденных у них тем: '.count($buffer));
-say('  ошибок: '.count($warnings).', новостей: '.count($news).', раздач в очереди к torrent-клиенту: '.count($temp));
+say('  ошибок: '.count($warnings).', раздач в очереди к torrent-клиенту: '.count($temp));
 say('  прокси для отдельных трекеров: '.count($trackerProxy));
 
 if ($notes)

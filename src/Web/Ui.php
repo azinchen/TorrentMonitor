@@ -4,7 +4,6 @@ namespace TorrentMonitor\Web;
 use TorrentMonitor\App;
 use TorrentMonitor\Client\Clients;
 use TorrentMonitor\Data\Accounts;
-use TorrentMonitor\Data\News;
 use TorrentMonitor\Data\Pending;
 use TorrentMonitor\Data\Settings;
 use TorrentMonitor\Data\State;
@@ -224,12 +223,9 @@ final class Ui
         }
 
         $release = Release::latest();
-        $news = array();
-        foreach (News::all() as $n)
-            $news[] = array('id' => $n['id'], 'html' => $n['text'], 'unread' => ! empty($n['unread']));
 
         return array(
-            'topics' => $topics, 'users' => $users, 'trackers' => $trackers, 'settings' => $shown, 'warnings' => $warnings, 'news' => $news,
+            'topics' => $topics, 'users' => $users, 'trackers' => $trackers, 'settings' => $shown, 'warnings' => $warnings,
             'categories' => Topics::categories(), 'sonarrTitles' => Topics::sonarrTitles(), 'clients' => array_keys(Clients::CLASSES),
             'services' => array_values(array_unique(array_column(Settings::notificationServices(), 'service'))),
             'status' => array(
@@ -625,13 +621,6 @@ final class Ui
         $source = $this->str('source');
         foreach ($source !== '' ? array($source) : array_keys(Warnings::counts()) as $name)
             Warnings::clear($name);
-        return $this->doOverview();
-    }
-
-    private function doNewsRead(): array
-    {
-        foreach (News::all() as $n)
-            News::markRead($n['id']);
         return $this->doOverview();
     }
 

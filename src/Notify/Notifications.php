@@ -19,10 +19,10 @@ final class Notifications
         self::deliver('sendWarning', 'sendWarningService', 'Предупреждение.', self::body(date('Y-m-d H:i:s'), $source, Messages::text($code), $topicUrl));
     }
 
-    // News (a new version is out)
-    public static function news(string $text): void
+    // A new version is out, or was installed
+    public static function version(string $text): void
     {
-        self::deliver('sendUpdate', 'sendUpdateService', 'Новость.', htmlspecialchars($text, ENT_QUOTES));
+        self::deliver('sendUpdate', 'sendUpdateService', 'Новая версия.', htmlspecialchars($text, ENT_QUOTES));
     }
 
     // Arbitrary update message (a topic was added through the API)

@@ -69,10 +69,8 @@ final class Migrations
                 'code' => (string)$w['reason'], 'topicId' => isset($w['t_id']) ? $w['t_id'] : NULL);
         $data['warnings'] = $warnings;
 
-        $news = array();
-        foreach (isset($data['news']) ? $data['news'] : array() as $n)
-            $news[] = array('id' => (string)$n['id'], 'text' => (string)$n['text'], 'unread' => ! empty($n['new']));
-        $data['news'] = $news;
+        // the news list of earlier versions is not used any more
+        unset($data['news']);
 
         $found = array();
         foreach (isset($data['buffer']) ? $data['buffer'] : array() as $b)

@@ -2,7 +2,6 @@
 namespace TorrentMonitor\Engine;
 
 use TorrentMonitor\App;
-use TorrentMonitor\Data\News;
 use TorrentMonitor\Data\Settings;
 use TorrentMonitor\Data\State;
 use TorrentMonitor\Data\Topics;
@@ -10,6 +9,7 @@ use TorrentMonitor\Data\Users;
 use TorrentMonitor\Data\Warnings;
 use TorrentMonitor\Http\Request;
 use TorrentMonitor\Notify\Notifications;
+use TorrentMonitor\Storage\Files;
 use TorrentMonitor\Tracker\Registry;
 use TorrentMonitor\Tracker\TrackerException;
 use TorrentMonitor\Update\Release;
@@ -66,6 +66,9 @@ final class Runner
             $this->say('TorrentMonitor уже выполняется: этот запуск пропущен.');
             return FALSE;
         }
+        //the news list of earlier versions is not used any more: it is dropped from the state file
+        if (array_key_exists('news', Files::state()->read()))
+            Files::state()->update(function (&$data) { unset($data['news']); });
 
         $started = microtime(TRUE);
         $log = @fopen(self::logFile(), 'w');
@@ -334,8 +337,7 @@ final class Runner
         $message = 'Выпущена новая версия ТМ '.$release['version'].', автоматическое обновление отключено, обновите систему самостоятельно.';
         if ( ! empty($release['notes']))
             $message .= "\n\n".$release['notes'];
-        News::put('update_'.$release['version'], nl2br(htmlspecialchars($message)));
-        Notifications::news($message);
+        Notifications::version($message);
         State::setUpdateNotified(TRUE);
     }
 }

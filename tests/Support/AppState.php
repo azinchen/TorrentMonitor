@@ -109,9 +109,10 @@ class AppState
         return array_map(function ($w) { return $w['where'].':'.$w['reason']; }, self::warnings());
     }
 
-    public static function news()
+    // the whole state file
+    public static function state()
     {
-        return array_map(function ($n) { return array('id' => $n['id'], 'text' => $n['text']); }, self::read('state')['news']);
+        return self::read('state');
     }
 
     public static function version()

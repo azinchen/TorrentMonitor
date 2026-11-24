@@ -75,7 +75,6 @@ final class UpdateTest extends IntegrationTestCase
         unlink('/app/torrents/keep.torrent');
         $this->assertFileDoesNotExist('/app/update.zip');
         $this->assertDirectoryDoesNotExist('/app/tmp_update');
-        $this->assertSame('updated_9.9.9', AppState::news()[0]['id']);
         $this->assertNoWarnings();
         $this->assertNull($this->offered());
     }
@@ -87,10 +86,8 @@ final class UpdateTest extends IntegrationTestCase
         Env::runEngine();
         Env::runEngine();
 
-        $news = AppState::news();
-        $this->assertCount(1, $news);
-        $this->assertSame('update_9.9.9', $news[0]['id']);
-        $this->assertStringContainsString('пункт два', $news[0]['text']);
+        $this->assertTrue(AppState::state()['updateNotified'], 'the announcement is not repeated at the next run');
+        $this->assertNotNull($this->offered(), 'the interface offers the version');
         $this->assertSame(json_decode(file_get_contents('/src/version.txt'), true)['system'], AppState::version(), 'nothing is installed');
     }
 

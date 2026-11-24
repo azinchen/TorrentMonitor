@@ -148,7 +148,7 @@ final class CoreTest extends TestCase
         $this->assertTrue($new['updateNotified']);
         $this->assertSame('2026-11-21 10:05:00', $new['lastRun']);
         $this->assertSame(array('id' => 1, 'time' => '2026-11-21 10:00:00', 'source' => 'rutracker.org', 'code' => 'cant_find_date', 'topicId' => 5), $new['warnings'][0]);
-        $this->assertTrue($new['news'][0]['unread']);
+        $this->assertArrayNotHasKey('news', $new, 'the news list is dropped');
         $this->assertSame(array('77', 'T', true, false, 4), array($new['found'][0]['topicId'], $new['found'][0]['title'], $new['found'][0]['accepted'], $new['found'][0]['unread'], $new['nextFoundId']));
         $this->assertSame('[rutracker.org]_5.torrent', $new['pending']['5']['file']);
         foreach (array('settings', 'lastStart', 'buffer', 'temp', 'nextBufferId') as $gone)
