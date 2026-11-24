@@ -248,7 +248,14 @@ The tracker and the indexer are the fake server: it speaks Torznab (`/torznab/ap
 protocol Sonarr uses for torrent indexers, and offers the releases a test sets through
 `Env::fake(array('torznab' => ...))`. Its `/hook` address records any webhook event whole,
 to look at what Sonarr really sends. Only Sonarr itself needs the internet, for the
-description of the series, so this stack does not use the VPN. `TM_KEEP=1` leaves it running.
+description of the series. `TM_KEEP=1` leaves the stack running.
+
+When `tests/env/secrets/vpn.env` exists, every container of this stack runs through the VPN
+(`tests/env/compose.sonarr-vpn.yml`): they all share the network of the VPN container, so
+nothing reaches the internet outside the tunnel. In that one network the containers find
+each other on localhost, qBittorrent listens on 8081 instead of 8080, and Transmission is
+switched to IPv4. `TM_VPN=0` runs the stack without the VPN, `TM_VPN_COUNTRY` chooses the
+exit country.
 
 ## Reachability
 

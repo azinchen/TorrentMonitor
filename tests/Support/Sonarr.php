@@ -63,7 +63,7 @@ class Sonarr
             array('enableRss' => false, 'enableAutomaticSearch' => true, 'enableInteractiveSearch' => true, 'priority' => 25));
 
         if ($client == 'qBittorrent')
-            self::create('downloadclient', 'QBittorrent', 'qBittorrent', array('host' => 'qbittorrent', 'port' => 8080,
+            self::create('downloadclient', 'QBittorrent', 'qBittorrent', array('host' => parse_url(Env::qbt(), PHP_URL_HOST), 'port' => parse_url(Env::qbt(), PHP_URL_PORT),
                 'username' => Env::CLIENT_USER, 'password' => Env::CLIENT_PASS, 'tvCategory' => 'tv-sonarr', 'initialState' => 2));
         elseif ($client == 'Transmission')
             self::create('downloadclient', 'Transmission', 'Transmission', array('host' => 'transmission', 'port' => 9091,

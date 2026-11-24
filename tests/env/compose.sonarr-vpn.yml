@@ -1,0 +1,77 @@
+# The Sonarr flow through a VPN (tests/run.sh sonarr, when tests/env/secrets/vpn.env exists).
+# Every container shares the network of the "vpn" container, so nothing reaches the internet
+# except through the tunnel. Inside that one network the containers find each other on
+# localhost: their names, and the name of the faked tracker, are written to the hosts file,
+# which containers of a shared network share too. Two services cannot listen on one port
+# there, so qBittorrent moves to 8081 and the fake tracker gives up plain HTTP on port 80.
+services:
+  vpn:
+    extends:
+      file: compose.vpn.yml
+      service: vpn
+    extra_hosts:
+      - "fake:127.0.0.1"
+      - "app:127.0.0.1"
+      - "qbittorrent:127.0.0.1"
+      - "transmission:127.0.0.1"
+      - "deluge:127.0.0.1"
+      - "sonarr:127.0.0.1"
+      - "rutracker.org:127.0.0.1"
+      - "www.rutracker.org:127.0.0.1"
+
+  mtu:
+    extends:
+      file: compose.vpn.yml
+      service: mtu
+    network_mode: service:vpn
+    depends_on:
+      vpn:
+        condition: service_started
+
+  fake:
+    network_mode: service:vpn
+    networks: !reset null
+    environment:
+      - TM_FAKE_NO_HTTP=1
+    depends_on:
+      vpn:
+        condition: service_healthy
+
+  app:
+    network_mode: service:vpn
+    ports: !reset []
+    environment:
+      - TM_QBT=http://qbittorrent:8081
+    depends_on:
+      vpn:
+        condition: service_healthy
+
+  qbittorrent:
+    network_mode: service:vpn
+    environment:
+      - WEBUI_PORT=8081
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fs http://127.0.0.1:8081/ > /dev/null"]
+    depends_on:
+      vpn:
+        condition: service_healthy
+
+  transmission:
+    network_mode: service:vpn
+    volumes:
+      - ./transmission/ipv4.sh:/custom-cont-init.d/10-tm-tests.sh:ro
+    depends_on:
+      vpn:
+        condition: service_healthy
+
+  deluge:
+    network_mode: service:vpn
+    depends_on:
+      vpn:
+        condition: service_healthy
+
+  sonarr:
+    network_mode: service:vpn
+    depends_on:
+      vpn:
+        condition: service_healthy
