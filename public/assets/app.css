@@ -311,8 +311,6 @@ fieldset { border: 0; border-top: 1px solid var(--border); margin: .75rem 0 0; p
 }
 .notes { font-family: var(--font); font-size: .93rem; }
 
-.news { padding: .6rem 0; border-top: 1px solid var(--border); overflow-wrap: anywhere; }
-.news--unread { border-left: 3px solid var(--accent); padding-left: .75rem; }
 
 /* ---- narrow screens */
 @media (max-width: 800px) {

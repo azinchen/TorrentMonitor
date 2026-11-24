@@ -26,7 +26,7 @@ document.addEventListener('alpine:init', () => {
         toasts: [],
 
         // data from the server
-        topics: [], users: [], trackers: [], settings: {}, warnings: [], news: [], categories: [], sonarrTitles: [], clients: [], services: [],
+        topics: [], users: [], trackers: [], settings: {}, warnings: [], categories: [], sonarrTitles: [], clients: [], services: [],
         status: { version: '', lastRun: '', running: false, client: null, update: null, authRequired: true, wiki: '' },
 
         // forms
@@ -77,7 +77,7 @@ document.addEventListener('alpine:init', () => {
 
         // distributes the server response into fields
         apply(data) {
-            for (const key of ['topics', 'users', 'trackers', 'warnings', 'news', 'categories', 'sonarrTitles', 'clients', 'services', 'status']) {
+            for (const key of ['topics', 'users', 'trackers', 'warnings', 'categories', 'sonarrTitles', 'clients', 'services', 'status']) {
                 if (data[key] !== undefined) this[key] = data[key];
             }
             if (data.settings !== undefined) {

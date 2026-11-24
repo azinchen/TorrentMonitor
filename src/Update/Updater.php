@@ -2,7 +2,6 @@
 namespace TorrentMonitor\Update;
 
 use TorrentMonitor\App;
-use TorrentMonitor\Data\News;
 use TorrentMonitor\Data\Settings;
 use TorrentMonitor\Data\State;
 use TorrentMonitor\Data\Warnings;
@@ -208,17 +207,8 @@ final class Updater
         Warnings::clear('system');
         State::setUpdateNotified(FALSE);
 
-        $newsId = 'updated_'.$release['version'];
-        if ( ! News::exists($newsId))
-        {
-            $newsHtml = '<b>'.htmlspecialchars($msg).'</b>';
-            if ( ! empty($release['notes']))
-                $newsHtml .= '<br />'.nl2br(htmlspecialchars($release['notes']));
-            News::put($newsId, $newsHtml);
-        }
-
         if (self::$isCLI)
-            Notifications::news($msg.( ! empty($release['notes']) ? "\n\n".$release['notes'] : ''));
+            Notifications::version($msg.( ! empty($release['notes']) ? "\n\n".$release['notes'] : ''));
         else
             echo 'Перейти на <a href="'.htmlspecialchars((string)Settings::get('serverAddress')).'">главную страницу</a>.<br />';
 

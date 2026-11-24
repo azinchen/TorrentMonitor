@@ -4,7 +4,6 @@
 require '/app/src/bootstrap.php';
 
 use TorrentMonitor\Data\Accounts;
-use TorrentMonitor\Data\News;
 use TorrentMonitor\Data\Settings;
 use TorrentMonitor\Data\State;
 use TorrentMonitor\Data\Topics;
@@ -29,6 +28,5 @@ Warnings::add('rutracker.org', 'cant_find_date', $broken);
 
 $user = Users::add('rutracker.org', 'releaser');
 Users::addFound($user, 'rutracker.org', 'Операционные системы', '1005', 'Fedora Workstation 43 Live x86_64', date('Y-m-d'));
-News::put('demo', 'Это пример новости: так выглядит сообщение о новой версии.');
 State::setLastRun(date('Y-m-d H:i:s', time() - 900));
 echo "demo data written\n";

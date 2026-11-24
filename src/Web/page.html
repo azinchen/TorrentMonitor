@@ -508,15 +508,6 @@
         </template>
     </div>
 
-    <div class="card" x-show="news.length">
-        <div class="card__head">
-            <h2>Новости</h2><span class="spacer"></span>
-            <button class="btn btn--small" x-show="news.some(n => n.unread)" @click="act('news.read')">Отметить прочитанными</button>
-        </div>
-        <template x-for="n in news" :key="n.id">
-            <div class="news" :class="n.unread && 'news--unread'" x-html="n.html"></div>
-        </template>
-    </div>
 
     <p><button class="link" @click="act('update.check')">Проверить обновления TorrentMonitor</button></p>
 </section>
