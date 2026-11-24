@@ -1,0 +1,20 @@
+# Sonarr for the test of the whole Sonarr flow (tests/run.sh sonarr): a series is added, a
+# release is found at the fake indexer and grabbed, the webhook reaches TorrentMonitor.
+# Used together with compose.yml and compose.offline.yml. The API key is a throwaway test value.
+services:
+  sonarr:
+    image: lscr.io/linuxserver/sonarr:${TM_SONARR_VERSION:-latest}
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - SONARR__AUTH__APIKEY=0123456789abcdef0123456789abcdef
+      - SONARR__AUTH__METHOD=External
+      - SONARR__AUTH__REQUIRED=DisabledForLocalAddresses
+      - SONARR__LOG__LEVEL=info
+    volumes:
+      - downloads:/downloads
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fs -H 'X-Api-Key: 0123456789abcdef0123456789abcdef' http://127.0.0.1:8989/api/v3/system/status > /dev/null"]
+      interval: 3s
+      timeout: 5s
+      retries: 60

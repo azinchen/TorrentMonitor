@@ -12,7 +12,7 @@ name: tm-staging
 
 services:
   vpn:
-    image: azinchen/nordvpn-wg:latest
+    image: azinchen/nordvpn-wg:${TM_VPN_VERSION:-latest}
     restart: unless-stopped
     cap_add:
       - NET_ADMIN
@@ -66,7 +66,7 @@ services:
     command: ["/start.sh"]
 
   byparr:
-    image: ghcr.io/thephaseless/byparr:latest
+    image: ghcr.io/thephaseless/byparr:${TM_BYPARR_VERSION:-latest}
     restart: unless-stopped
     shm_size: 2gb
     network_mode: service:vpn
@@ -75,7 +75,7 @@ services:
         condition: service_healthy
 
   qbittorrent:
-    image: lscr.io/linuxserver/qbittorrent:latest
+    image: lscr.io/linuxserver/qbittorrent:${TM_QBITTORRENT_VERSION:-latest}
     restart: unless-stopped
     network_mode: service:vpn
     depends_on:

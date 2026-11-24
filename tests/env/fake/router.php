@@ -31,6 +31,9 @@ function default_state()
             // topic id => array('title' => ..., 'date' => '21-Ноя-26 10:00', 'revision' => 1)
             'topics'     => array(),
         ),
+        // what the torrent indexer (Torznab, for Sonarr) offers:
+        // array of array('title' => release name, 'topic' => topic id of the fake tracker, 'revision' => 1)
+        'torznab' => array('releases' => array()),
     );
 }
 
@@ -178,13 +181,64 @@ file_put_contents(LOG_FILE, json_encode(array(
     'query'     => $query,
     'cookie'    => $cookie,
     'userAgent' => isset($_SERVER['HTTP_USER_AGENT']) ? $_SERVER['HTTP_USER_AGENT'] : '',
-    'body'      => substr($body, 0, 2000),
+    // webhook events are kept whole: tests look at what Sonarr really sends
+    'body'      => substr($body, 0, $path == '/hook' ? 100000 : 2000),
 ), JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE)."\n", FILE_APPEND | LOCK_EX);
 
 if ($host == 'rutracker.org')
 {
     list($status, $headers, $out) = rutracker_response($state, $method, $path, $query, $cookie, $body, false);
     return send($status, $out, $headers);
+}
+
+// a webhook receiver that only records what it was sent (see /__control/requests)
+if ($path == '/hook')
+    return send_json(array('ok' => true));
+
+// Torznab: the protocol Sonarr speaks to torrent indexers. The releases are torrents of topics
+// of the fake tracker, with the topic address in the torrent comment, as real trackers do.
+if ($path == '/torznab/api')
+{
+    parse_str($query, $q);
+    $type = isset($q['t']) ? $q['t'] : '';
+    header('Content-Type: application/xml; charset=utf-8');
+    if ($type == 'caps')
+    {
+        echo '<?xml version="1.0" encoding="UTF-8"?><caps><server version="1.0" title="TorrentMonitor test indexer"/>'
+            .'<limits max="100" default="100"/><searching><search available="yes" supportedParams="q"/>'
+            .'<tv-search available="yes" supportedParams="q,season,ep"/></searching>'
+            .'<categories><category id="5000" name="TV"><subcat id="5040" name="TV/HD"/></category></categories></caps>';
+        return;
+    }
+    $base = 'http://'.$_SERVER['HTTP_HOST'];
+    $items = '';
+    foreach ((array)$state['torznab']['releases'] as $release)
+    {
+        // every search returns every release: Sonarr itself decides which one fits the series and season
+        $topic = (int)$release['topic'];
+        $revision = isset($release['revision']) ? (int)$release['revision'] : 1;
+        $link = htmlspecialchars($base.'/torznab/download?t='.$topic.'&r='.$revision, ENT_XML1);
+        $size = 1073741824 + $topic;
+        $items .= '<item><title>'.htmlspecialchars($release['title'], ENT_XML1).'</title><guid>'.$link.'</guid><link>'.$link.'</link>'
+            .'<comments>https://rutracker.org/forum/viewtopic.php?t='.$topic.'</comments><pubDate>'.date(DATE_RSS, time() - 3600).'</pubDate>'
+            .'<size>'.$size.'</size><enclosure url="'.$link.'" length="'.$size.'" type="application/x-bittorrent"/>'
+            .'<torznab:attr name="category" value="5000"/><torznab:attr name="category" value="5040"/>'
+            .'<torznab:attr name="seeders" value="25"/><torznab:attr name="peers" value="30"/>'
+            .'<torznab:attr name="infohash" value="'.TorrentBuilder::infoHash($topic, $revision).'"/></item>';
+    }
+    echo '<?xml version="1.0" encoding="UTF-8"?><rss version="2.0" xmlns:torznab="http://torznab.com/schemas/2015/feed">'
+        .'<channel><title>TorrentMonitor test indexer</title>'.$items.'</channel></rss>';
+    return;
+}
+if ($path == '/torznab/download')
+{
+    parse_str($query, $q);
+    $topic = isset($q['t']) ? (int)$q['t'] : 0;
+    $revision = isset($q['r']) ? (int)$q['r'] : 1;
+    header('Content-Type: application/x-bittorrent');
+    header('Content-Disposition: attachment; filename="'.$topic.'.torrent"');
+    echo TorrentBuilder::torrent($topic, $revision, 'https://rutracker.org/forum/viewtopic.php?t='.$topic);
+    return;
 }
 
 // GitHub Releases API

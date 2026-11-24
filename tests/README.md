@@ -16,6 +16,7 @@ Docker with Compose v2. PHP is not needed on the host.
 | `tests/run.sh integration` | the application against a fake tracker and real torrent clients | – |
 | `tests/run.sh all` | the three above; **must pass before a merge** | – |
 | `tests/run.sh live` | real trackers, notification services and a Synology NAS with real accounts | `secrets/trackers.env`, `secrets/services.env` |
+| `tests/run.sh sonarr` | the whole Sonarr flow against a real Sonarr, once per torrent client | internet (Sonarr loads the series description) |
 | `tests/run.sh reach` | which trackers answer from here, which show Cloudflare, and whether the solver passes it | – |
 | `tests/run.sh record <tracker> <path> <name>` | save a scrubbed tracker page as a fixture | a running live stack |
 | `tests/run.sh up` / `down` | start the stack for manual work at http://127.0.0.1:8088 / remove it | – |
@@ -93,6 +94,29 @@ What the suites cover on top of the older tests:
 
 Covered only by live tests, because they need real accounts: every tracker except
 rutracker.org, the notification services other than Gotify and e-mail, SynologyDS.
+
+## Versions of the outside services
+
+Torrent clients, Sonarr and MariaDB run from the [linuxserver.io](https://www.linuxserver.io/)
+images. TorrServer, Gotify, PostgreSQL, Byparr, FlareSolverr and the VPN have no
+linuxserver.io image and run from the images of their projects.
+
+Every service runs its newest image unless a version (an image tag) is chosen:
+
+```bash
+TM_QBITTORRENT_VERSION=4.6.7 tests/run.sh integration
+TM_SONARR_VERSION=4.0.10 TM_DELUGE_VERSION=2.1.1 tests/run.sh sonarr
+```
+
+To keep versions for every run, copy `tests/env/versions.env.example` to
+`tests/env/versions.env` (not committed) and edit it; a variable of the shell wins over
+the file. The variables: `TM_QBITTORRENT_VERSION`, `TM_TRANSMISSION_VERSION`,
+`TM_DELUGE_VERSION`, `TM_SONARR_VERSION`, `TM_MARIADB_VERSION`, `TM_TORRSERVER_VERSION`,
+`TM_GOTIFY_VERSION`, `TM_POSTGRES_VERSION`, `TM_BYPARR_VERSION`,
+`TM_FLARESOLVERR_VERSION`, `TM_VPN_VERSION`.
+
+Each run prints the images it started and the version each image reports, so the
+output shows what was really tested.
 
 ## Screenshots of the interface
 
@@ -202,6 +226,29 @@ Results so far (23.11.2026):
   newstudio.tv are read correctly (newstudio.tv only through a network that reaches it).
 - Login, the download of the torrent file and the delivery to the client of those trackers,
   the notification services and SynologyDS wait for accounts.
+
+## Sonarr flow
+
+`tests/run.sh sonarr` starts the integration stack plus a real Sonarr
+(`tests/env/compose.sonarr.yml`) and runs `Sonarr/SonarrFlowTest.php` once for qBittorrent,
+Transmission and Deluge. Everything is done through Sonarr's API, nothing by hand:
+
+1. first setup of Sonarr: root folder, the torrent client (torrents are added stopped, so
+   nothing is downloaded), the webhook of TorrentMonitor, and an indexer;
+2. a series is added by its TVDB number. It is a Russian one, which Sonarr names in English
+   with the year: "The Kitchen (2012)";
+3. Sonarr searches the indexer and grabs a season pack: the torrent must be in the client and
+   its topic monitored, with the series and season recorded;
+4. another pack of the season is grabbed: the first topic and its torrent must be gone;
+5. a topic is added by hand and linked to the series by the address of its page in Sonarr;
+   a single-episode grab must replace nothing, the season pack must replace both;
+6. the series is deleted in Sonarr: the remaining topics and torrents must be gone.
+
+The tracker and the indexer are the fake server: it speaks Torznab (`/torznab/api`), the
+protocol Sonarr uses for torrent indexers, and offers the releases a test sets through
+`Env::fake(array('torznab' => ...))`. Its `/hook` address records any webhook event whole,
+to look at what Sonarr really sends. Only Sonarr itself needs the internet, for the
+description of the series, so this stack does not use the VPN. `TM_KEEP=1` leaves it running.
 
 ## Reachability
 

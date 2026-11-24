@@ -11,7 +11,7 @@ services:
       - ./secrets:/secrets:ro
 
   byparr:
-    image: ghcr.io/thephaseless/byparr:latest
+    image: ghcr.io/thephaseless/byparr:${TM_BYPARR_VERSION:-latest}
     shm_size: 2gb
     # the image's own check runs every 15 minutes, which would stall the start
     healthcheck:
@@ -21,7 +21,7 @@ services:
       retries: 36
 
   flaresolverr:
-    image: ghcr.io/flaresolverr/flaresolverr:latest
+    image: ghcr.io/flaresolverr/flaresolverr:${TM_FLARESOLVERR_VERSION:-latest}
     environment:
       - PORT=8192
       - LOG_LEVEL=info

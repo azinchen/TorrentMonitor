@@ -24,7 +24,16 @@ final class QBittorrent extends HttpClientBase
     private function call(Request $request)
     {
         $this->signIn();
-        return $this->send($request->cookie($this->cookie)->referer($this->address));
+        $response = $this->send($request->cookie($this->cookie)->referer($this->address));
+        // qBittorrent drops old sessions when another program (Sonarr, for one) keeps logging in:
+        // sign in again and repeat the request once
+        if ($response->status == 403 && $this->cookie !== '')
+        {
+            $this->cookie = '';
+            $this->signIn();
+            $response = $this->send($request->cookie($this->cookie)->referer($this->address));
+        }
+        return $response;
     }
 
     public function add(string $file, array $options): string

@@ -20,12 +20,12 @@ services:
       - "${TM_STAGING_PORT:-8090}:80"
 
   byparr:
-    image: ghcr.io/thephaseless/byparr:latest
+    image: ghcr.io/thephaseless/byparr:${TM_BYPARR_VERSION:-latest}
     restart: unless-stopped
     shm_size: 2gb
 
   qbittorrent:
-    image: lscr.io/linuxserver/qbittorrent:latest
+    image: lscr.io/linuxserver/qbittorrent:${TM_QBITTORRENT_VERSION:-latest}
     restart: unless-stopped
     environment:
       - PUID=1000

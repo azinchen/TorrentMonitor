@@ -7,5 +7,6 @@
         <testsuite name="unit"><directory>Unit</directory></testsuite>
         <testsuite name="integration"><directory>Integration</directory></testsuite>
         <testsuite name="live"><directory>Live</directory></testsuite>
+        <testsuite name="sonarr"><directory>Sonarr</directory></testsuite>
     </testsuites>
 </phpunit>

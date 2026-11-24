@@ -306,7 +306,9 @@ final class Api
 
         $title = isset($body['series']['title']) ? (string)$body['series']['title'] : '';
         $category = isset($_GET['category']) ? (string)$_GET['category'] : NULL;
-        //seasons of the grabbed episodes; a season pack is told by the release type (newer Sonarr) or by several episodes
+        //Seasons of the grabbed episodes. A season pack is told by the release type if Sonarr sends it
+        //(4.0.20 does not), by a release named after a season without an episode (Show.S01.1080p),
+        //otherwise by several episodes in the event.
         $episodes = isset($body['episodes']) && is_array($body['episodes']) ? $body['episodes'] : array();
         $seasons = array();
         foreach ($episodes as $episode)
@@ -314,7 +316,11 @@ final class Api
                 $seasons[(int)$episode['seasonNumber']] = (int)$episode['seasonNumber'];
         $seasons = array_values($seasons);
         $type = isset($body['release']['releaseType']) ? (string)$body['release']['releaseType'] : '';
-        $pack = $type !== '' && strcasecmp($type, 'Unknown') != 0 ? strcasecmp($type, 'SeasonPack') == 0 : count($episodes) > 1;
+        $release = isset($body['release']['releaseTitle']) ? (string)$body['release']['releaseTitle'] : '';
+        if ($type !== '' && strcasecmp($type, 'Unknown') != 0)
+            $pack = strcasecmp($type, 'SeasonPack') == 0;
+        else
+            $pack = count($episodes) > 1 || (bool)preg_match('/(?<![A-Za-z0-9])S\d{1,3}(?![0-9]|\s*\.?\s*E\d)/i', $release);
 
         self::respondAndContinue('Принято.');
         self::grab($hash, $title, $seriesId, $category, $seasons, $pack);
