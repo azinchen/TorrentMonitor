@@ -15,7 +15,7 @@
 //Config::write('php.cli', '/usr/bin/php8.3');
 
 // How many requests one tracker gets at the same time (default 10). The same setting is in the
-// interface (Настройки, дополнительные настройки) and the interface wins when it is set there.
+// interface (Настройки, «Показать расширенные») and the interface wins when it is set there.
 //Config::write('curl.concurrency', 5);
 
 // Address used to check the internet connection before trackers are polled.

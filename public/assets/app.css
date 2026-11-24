@@ -174,7 +174,7 @@ code { font-family: var(--mono); font-size: .9em; background: var(--surface-2); 
 .row--compact .row__flags .tag { margin-top: 0; }
 .row--compact .row__error { display: none; }
 .check--inline { margin: 0; align-items: center; white-space: nowrap; }
-/* a setting that rarely needs changing: shown when «Дополнительные настройки» is on */
+/* a setting that rarely needs changing: shown when «Показать расширенные» is on */
 .field.field--advanced > span { color: var(--warn); }
 .check--inline input { margin-top: 0; }
 
