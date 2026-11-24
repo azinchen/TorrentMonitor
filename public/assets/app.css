@@ -191,6 +191,7 @@ code { font-family: var(--mono); font-size: .9em; background: var(--surface-2); 
 .filters { display: flex; gap: .5rem; flex-wrap: wrap; margin-bottom: .75rem; }
 .filters input { flex: 1; min-width: 12rem; }
 .filters select { width: auto; }
+.pager { display: flex; align-items: center; justify-content: center; gap: 1rem; margin-top: .75rem; }
 
 .inline { display: flex; gap: .5rem; flex-wrap: wrap; margin: 1rem 0; }
 .inline select { width: auto; }

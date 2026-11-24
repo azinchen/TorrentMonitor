@@ -142,6 +142,18 @@
             <option value="paused">На паузе</option>
             <option value="stopped">Проверка прекращена</option>
         </select>
+        <select x-model="sort" title="Порядок списка">
+            <option value="new">Сначала новые</option>
+            <option value="old">Сначала старые</option>
+            <option value="az">По названию, А→Я</option>
+            <option value="za">По названию, Я→А</option>
+        </select>
+        <select x-model="pageSize" x-show="topics.length > 50" title="Сколько тем показывать на одной странице">
+            <option value="50">по 50</option>
+            <option value="100">по 100</option>
+            <option value="200">по 200</option>
+            <option value="all">все</option>
+        </select>
     </div>
 
     <div class="empty" x-show="!topics.length">
@@ -191,6 +203,12 @@
             </li>
         </template>
     </ul>
+
+    <nav class="pager" x-show="pageCount > 1" aria-label="Страницы списка">
+        <button class="btn btn--small" @click="turnPage(-1)" :disabled="currentPage == 0">‹ Назад</button>
+        <span class="muted" x-text="pageText"></span>
+        <button class="btn btn--small" @click="turnPage(1)" :disabled="currentPage >= pageCount - 1">Вперёд ›</button>
+    </nav>
 </section>
 
 <!-- ---------------------------------------------------------------- Users -->
