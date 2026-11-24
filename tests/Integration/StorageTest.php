@@ -296,4 +296,38 @@ final class StorageTest extends IntegrationTestCase
         $this->assertMatchesRegularExpression('/"lastRun": "\d{4}-\d\d-\d\d \d\d:\d\d:\d\d"/', AppState::file('state.json'));
         $this->assertMatchesRegularExpression('/^\d{4}-\d\d-\d\d \d\d:\d\d:\d\d$/', Env::uiOpen()['json']['status']['lastRun']);
     }
+
+    // By default the data files are closed to other users; the dataFileMode setting opens them.
+    public function testAccessModeOfTheDataFilesCanBeSet()
+    {
+        $mode = function ($name) { clearstatcache(); return substr(sprintf('%o', fileperms($this->dataFile($name))), -4); };
+        AppState::setSettings(array('userAgent' => 'one'));
+        AppState::setSettings(array('userAgent' => 'two'));   // makes config.json.bak
+        $default = $mode('config.json');
+        $this->assertContains($default, array('0600', '0660'));
+
+        $saved = Env::ui('settings.save', array('dataFileMode' => '640'));
+        $this->assertTrue($saved['json']['ok'], $saved['body']);
+        foreach (array('config.json', 'config.json.bak', 'state.json', 'torrents.json') as $name)
+            if (is_file($this->dataFile($name)))
+                $this->assertSame('0640', $mode($name), $name.' right after saving the setting');
+
+        // files written later, by the engine too, get the same mode
+        Env::runEngine();
+        Env::ui('settings.save', array('userAgent' => 'three'));
+        foreach (array('config.json', 'config.json.bak', 'state.json') as $name)
+            $this->assertSame('0640', $mode($name), $name.' after later writes');
+
+        // a leading zero is accepted; the owner must keep access
+        $this->assertTrue(Env::ui('settings.save', array('dataFileMode' => '0644'))['json']['ok']);
+        $this->assertSame('0644', $mode('config.json'));
+        foreach (array('444', '64', '888', 'rw-r--r--', '1644') as $bad)
+            $this->assertFalse(Env::ui('settings.save', array('dataFileMode' => $bad))['json']['ok'], $bad);
+        $this->assertSame('0644', AppState::setting('dataFileMode'));
+
+        // empty: back to the default
+        $this->assertTrue(Env::ui('settings.save', array('dataFileMode' => ''))['json']['ok']);
+        foreach (array('config.json', 'config.json.bak', 'state.json') as $name)
+            $this->assertSame($default, $mode($name), $name.' back to the default');
+    }
 }

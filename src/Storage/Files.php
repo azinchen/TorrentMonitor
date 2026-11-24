@@ -32,13 +32,47 @@ final class Files
         return self::$dir;
     }
 
-    // Access to a file of the data directory: the owner only, and the group if the directory is
-    // set up for two users (web server and cron). Nobody else: the files hold passwords.
+    //the dataFileMode setting as read from config.json: FALSE - not read yet, NULL - not set
+    private static $mode = FALSE;
+
+    // Whether the text is an access mode for the data files: three octal digits (a leading 0 is
+    // allowed), the owner must keep reading and writing
+    public static function validMode(string $text): bool
+    {
+        return (bool)preg_match('/^0?[67][0-7]{2}$/', $text);
+    }
+
+    // The access mode from the settings, or NULL when it is not set. It is read straight from the
+    // file, not through the store: this runs while the store is writing that very file.
+    private static function mode(): ?int
+    {
+        if (self::$mode === FALSE)
+        {
+            $config = json_decode((string)@file_get_contents(self::dir().'/config.json'), TRUE);
+            $text = isset($config['settings']['dataFileMode']) ? (string)$config['settings']['dataFileMode'] : '';
+            self::$mode = self::validMode($text) ? octdec($text) : NULL;
+        }
+        return self::$mode;
+    }
+
+    // Tells the mode that is being saved right now (the file does not hold it yet) and gives it to
+    // the files that exist; '' - back to the default
+    public static function setMode(string $text): void
+    {
+        self::$mode = self::validMode($text) ? octdec($text) : NULL;
+        foreach (array_merge((array)glob(self::dir().'/*.json'), (array)glob(self::dir().'/*.json.bak')) as $file)
+            self::protect($file);
+    }
+
+    // Access to a file of the data directory. By default: the owner only, and the group if the
+    // directory is set up for two users (web server and cron); nobody else, the files hold
+    // passwords. The dataFileMode setting replaces that with a mode of the user's choice.
     public static function protect(string $file): void
     {
         $dir = dirname($file);
         $dirMode = @fileperms($dir);
-        @chmod($file, ($dirMode !== FALSE && ($dirMode & 0020)) ? 0660 : 0600);
+        $mode = self::mode();
+        @chmod($file, $mode !== NULL ? $mode : (($dirMode !== FALSE && ($dirMode & 0020)) ? 0660 : 0600));
         // engine.php run as root must not take the files away from the web server user
         if (function_exists('posix_geteuid') && posix_geteuid() === 0)
         {
@@ -110,6 +144,8 @@ final class Files
             'debug'                => '0',
             'debugFor'             => '',
             'autoUpdate'           => '0',
+            // access mode of the data files, three octal digits (640); empty - the owner only
+            'dataFileMode'         => '',
             // what automatic updates install: stable, beta or dev
             'updateChannel'        => 'stable',
             // time zone the trackers show their dates in; a tracker may have its own
