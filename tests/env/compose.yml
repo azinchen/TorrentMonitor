@@ -40,7 +40,7 @@ services:
       retries: 30
 
   qbittorrent:
-    image: lscr.io/linuxserver/qbittorrent:latest
+    image: lscr.io/linuxserver/qbittorrent:${TM_QBITTORRENT_VERSION:-latest}
     environment:
       - PUID=1000
       - PGID=1000
@@ -55,7 +55,7 @@ services:
       retries: 40
 
   transmission:
-    image: lscr.io/linuxserver/transmission:latest
+    image: lscr.io/linuxserver/transmission:${TM_TRANSMISSION_VERSION:-latest}
     environment:
       - PUID=1000
       - PGID=1000
@@ -70,7 +70,7 @@ services:
       retries: 40
 
   deluge:
-    image: lscr.io/linuxserver/deluge:latest
+    image: lscr.io/linuxserver/deluge:${TM_DELUGE_VERSION:-latest}
     environment:
       - PUID=1000
       - PGID=1000
@@ -83,7 +83,7 @@ services:
       retries: 40
 
   torrserver:
-    image: ghcr.io/yourok/torrserver:latest
+    image: ghcr.io/yourok/torrserver:${TM_TORRSERVER_VERSION:-latest}
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8090/echo || curl -fs -o /dev/null http://127.0.0.1:8090/echo"]
       interval: 3s
@@ -92,7 +92,7 @@ services:
 
   # self-hosted notification service: tests create an application in it and read back what arrived
   gotify:
-    image: gotify/server:latest
+    image: gotify/server:${TM_GOTIFY_VERSION:-latest}
     environment:
       - GOTIFY_DEFAULTUSER_NAME=admin
       - GOTIFY_DEFAULTUSER_PASS=tm-test-pass

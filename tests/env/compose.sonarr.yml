@@ -3,7 +3,7 @@
 # Used together with compose.yml and compose.offline.yml. The API key is a throwaway test value.
 services:
   sonarr:
-    image: lscr.io/linuxserver/sonarr:latest
+    image: lscr.io/linuxserver/sonarr:${TM_SONARR_VERSION:-latest}
     environment:
       - PUID=1000
       - PGID=1000

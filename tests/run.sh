@@ -19,6 +19,8 @@
 # Environment: TM_PHP=8.0|8.5 (PHP for the stack, default 8.5), TM_PORT (default 8088),
 #              TM_SOLVER (live: solver address, default Byparr), TM_VPN_COUNTRY (default Portugal),
 #              TM_VPN=0 (live, reach: do not use the VPN even if its secrets exist),
+#              TM_<SERVICE>_VERSION (image tag of an outside service, e.g. TM_QBITTORRENT_VERSION=4.6.7;
+#              the list is in tests/env/versions.env.example),
 #              TM_KEEP=1 (live: leave the stack running afterwards, e.g. for "record").
 set -euo pipefail
 
@@ -38,7 +40,26 @@ build_images() {
     done
 }
 
-offline() { docker compose --project-directory "$env_dir" -f "$env_dir/compose.yml" -f "$env_dir/compose.offline.yml" "$@"; }
+# docker compose with the versions of the outside services: tests/env/versions.env if it exists,
+# and TM_<SERVICE>_VERSION variables of the shell, which win over the file
+dc() {
+    local args=()
+    [[ -f "$env_dir/versions.env" ]] && args+=(--env-file "$env_dir/versions.env")
+    docker compose "${args[@]}" "$@"
+}
+
+# what really runs: image tag and the version the image reports about itself
+show_versions() {
+    local id image version
+    for id in $("$@" ps -q 2> /dev/null); do
+        image=$(docker inspect -f '{{.Config.Image}}' "$id")
+        [[ "$image" == tm-tests:* ]] && continue
+        version=$(docker inspect -f '{{index .Config.Labels "org.opencontainers.image.version"}}' "$id" 2> /dev/null || true)
+        printf '   %-55s %s\n' "$image" "$version"
+    done | sort
+}
+
+offline() { dc --project-directory "$env_dir" -f "$env_dir/compose.yml" -f "$env_dir/compose.offline.yml" "$@"; }
 
 # the VPN is used when its secrets exist, unless TM_VPN=0
 use_vpn() { [[ "${TM_VPN:-1}" == 1 && -f "$env_dir/secrets/vpn.env" ]]; }
@@ -46,7 +67,7 @@ use_vpn() { [[ "${TM_VPN:-1}" == 1 && -f "$env_dir/secrets/vpn.env" ]]; }
 live() {
     local files=(-f "$env_dir/compose.yml" -f "$env_dir/compose.live.yml")
     use_vpn && files+=(-f "$env_dir/compose.vpn.yml")
-    docker compose --project-directory "$env_dir" "${files[@]}" "$@"
+    dc --project-directory "$env_dir" "${files[@]}" "$@"
 }
 
 # starts services of the live stack; shows what went wrong if they do not come up
@@ -64,7 +85,7 @@ live_up() {
 
 remove_stack() {
     offline down -v --remove-orphans > /dev/null 2>&1 || true
-    docker compose --project-directory "$env_dir" -f "$env_dir/compose.yml" -f "$env_dir/compose.offline.yml" -f "$env_dir/compose.sonarr.yml" down -v --remove-orphans > /dev/null 2>&1 || true
+    dc --project-directory "$env_dir" -f "$env_dir/compose.yml" -f "$env_dir/compose.offline.yml" -f "$env_dir/compose.sonarr.yml" down -v --remove-orphans > /dev/null 2>&1 || true
 }
 
 phpunit_in_app() { "$1" exec -T -e TM_ROOT=/app -e TM_SONARR="${TM_SONARR:-0}" -e TM_LIVE_WRONG_PASSWORD="${TM_LIVE_WRONG_PASSWORD:-0}" -e TM_LIVE_AUTO="${TM_LIVE_AUTO:-0}" -e TM_LIVE_GUEST="${TM_LIVE_GUEST:-0}" app phpunit -c /src/tests/phpunit.xml --testsuite "$2" "${@:3}"; }
@@ -97,6 +118,7 @@ cmd_integration() {
     # always a fresh stack: containers keep DNS and database state between runs
     remove_stack
     offline up -d --wait --quiet-pull > /dev/null 2>&1
+    show_versions offline
     local status=0
     phpunit_in_app offline integration "$@" || status=$?
     if [[ $status -ne 0 ]]; then
@@ -112,6 +134,7 @@ cmd_live() {
     say "live tests, PHP $TM_PHP$(use_vpn && echo ', through the VPN' || echo ', without VPN')"
     remove_stack
     live_up fake app byparr flaresolverr qbittorrent
+    show_versions live
     local status=0
     phpunit_in_app live live "$@" || status=$?
     if [[ "${TM_KEEP:-0}" == 1 ]]; then
@@ -124,7 +147,7 @@ cmd_live() {
 
 # The offline stack plus a real Sonarr. The tracker and the indexer are fake; Sonarr itself
 # needs the internet to load the description of a series.
-sonarr_stack() { docker compose --project-directory "$env_dir" -f "$env_dir/compose.yml" -f "$env_dir/compose.offline.yml" -f "$env_dir/compose.sonarr.yml" "$@"; }
+sonarr_stack() { dc --project-directory "$env_dir" -f "$env_dir/compose.yml" -f "$env_dir/compose.offline.yml" -f "$env_dir/compose.sonarr.yml" "$@"; }
 
 cmd_sonarr() {
     build_images
@@ -138,6 +161,7 @@ cmd_sonarr() {
         sonarr_stack down -v --remove-orphans > /dev/null 2>&1 || true
         exit 1
     fi
+    show_versions sonarr_stack
     local status=0
     TM_SONARR=1 phpunit_in_app sonarr_stack sonarr "$@" || status=$?
     if [[ "${TM_KEEP:-0}" == 1 || $status -ne 0 ]]; then
@@ -173,7 +197,7 @@ cmd_record() {
 cmd_staging() {
     local file="$env_dir/staging/compose.yml"
     [[ "${2:-}" == "--no-vpn" || -f "$env_dir/staging/.no-vpn" ]] && file="$env_dir/staging/compose.novpn.yml"
-    local compose=(docker compose -f "$file")
+    local compose=(dc -f "$file")
     case "${1:-}" in
         up)
             build_images

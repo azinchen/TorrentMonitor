@@ -95,6 +95,29 @@ What the suites cover on top of the older tests:
 Covered only by live tests, because they need real accounts: every tracker except
 rutracker.org, the notification services other than Gotify and e-mail, SynologyDS.
 
+## Versions of the outside services
+
+Torrent clients, Sonarr and MariaDB run from the [linuxserver.io](https://www.linuxserver.io/)
+images. TorrServer, Gotify, PostgreSQL, Byparr, FlareSolverr and the VPN have no
+linuxserver.io image and run from the images of their projects.
+
+Every service runs its newest image unless a version (an image tag) is chosen:
+
+```bash
+TM_QBITTORRENT_VERSION=4.6.7 tests/run.sh integration
+TM_SONARR_VERSION=4.0.10 TM_DELUGE_VERSION=2.1.1 tests/run.sh sonarr
+```
+
+To keep versions for every run, copy `tests/env/versions.env.example` to
+`tests/env/versions.env` (not committed) and edit it; a variable of the shell wins over
+the file. The variables: `TM_QBITTORRENT_VERSION`, `TM_TRANSMISSION_VERSION`,
+`TM_DELUGE_VERSION`, `TM_SONARR_VERSION`, `TM_MARIADB_VERSION`, `TM_TORRSERVER_VERSION`,
+`TM_GOTIFY_VERSION`, `TM_POSTGRES_VERSION`, `TM_BYPARR_VERSION`,
+`TM_FLARESOLVERR_VERSION`, `TM_VPN_VERSION`.
+
+Each run prints the images it started and the version each image reports, so the
+output shows what was really tested.
+
 ## Screenshots of the interface
 
 `tests/run.sh screenshots` retakes the three pictures the readme shows

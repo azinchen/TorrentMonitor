@@ -3,7 +3,7 @@
 # every request to a tracker leaves through the tunnel.
 services:
   vpn:
-    image: azinchen/nordvpn-wg:latest
+    image: azinchen/nordvpn-wg:${TM_VPN_VERSION:-latest}
     cap_add:
       - NET_ADMIN
     devices:
