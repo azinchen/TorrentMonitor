@@ -35,7 +35,7 @@ final class Ui
     const SETTINGS = array('serverAddress', 'auth', 'rss', 'debug', 'autoUpdate', 'userAgent', 'httpTimeout', 'flaresolverrUrl',
         'proxy', 'proxyAddress', 'proxyType', 'useTorrent', 'torrentClient', 'torrentAddress', 'torrentLogin', 'pathToDownload',
         'qbitCategory', 'deleteDistribution', 'deleteOldFiles', 'deleteFilesOnRemove', 'stopAfterDays', 'removeOnSeriesDelete', 'sonarrReplaceTopic', 'sonarrReplaceTorrent',
-        'send', 'sendUpdate', 'sendWarning', 'trackerTimezone', 'updateChannel');
+        'send', 'sendUpdate', 'sendWarning', 'trackerTimezone', 'updateChannel', 'dataFileMode');
 
     private array $in = array();
 
@@ -543,6 +543,8 @@ final class Ui
         foreach (array('httpTimeout' => 1, 'stopAfterDays' => 0) as $key => $min)
             if (isset($values[$key]))
                 $values[$key] = (string)max($min, (int)$values[$key]);
+        if (isset($values['dataFileMode']) && $values['dataFileMode'] !== '' && ! Files::validMode($values['dataFileMode']))
+            $this->fail('Права на файлы данных: три восьмеричные цифры, первая — 6 или 7 (например, 640). Пусто — по умолчанию.');
         if (isset($values['updateChannel']) && ! in_array($values['updateChannel'], array('stable', 'beta', 'dev'), TRUE))
             $this->fail('Неизвестный канал обновлений.');
         if (isset($values['trackerTimezone']) && ! Time::valid($values['trackerTimezone']))
@@ -569,7 +571,12 @@ final class Ui
                 Settings::setNotificationAddress($id, $this->str('notify'.$what.'Address'));
         }
         $channel = Release::channel();
+        //the files are written with the new access mode at once, this one included
+        if (isset($values['dataFileMode']))
+            Files::setMode($values['dataFileMode']);
         Settings::setMany($values);
+        if (isset($values['dataFileMode']))
+            Files::setMode($values['dataFileMode']);
         App::resetHttp();
 
         //another update channel: its newest version is installed even if it is lower than the installed one.
