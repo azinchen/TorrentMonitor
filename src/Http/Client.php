@@ -229,6 +229,27 @@ final class Client
      * @param array<int|string,Request> $requests
      * @return array<int|string,Response>
      */
+    //how many sites are asked at the same time, each up to the limit of simultaneous requests
+    const SITES = 3;
+
+    // Which of the waiting requests may start now. $queue - their keys in order, $site - key => site,
+    // $busy - site => requests running, $active - requests running in all, $limit - per site.
+    public static function startable(array $queue, array $site, array $busy, int $active, int $limit): array
+    {
+        $start = array();
+        foreach ($queue as $key)
+        {
+            if ($active + count($start) >= $limit * self::SITES)
+                break;
+            $running = isset($busy[$site[$key]]) ? $busy[$site[$key]] : 0;
+            if ($running >= $limit)
+                continue;
+            $busy[$site[$key]] = $running + 1;
+            $start[] = $key;
+        }
+        return $start;
+    }
+
     private function transfer(array $requests): array
     {
         $responses = array();
@@ -241,10 +262,19 @@ final class Client
         $active = array();
         $multi = curl_multi_init();
 
-        $start = function () use (&$queue, &$active, &$handles, &$headers, &$started, &$sent, $requests, $multi) {
-            while ( ! empty($queue) && count($active) < $this->concurrency)
+        // The limit of simultaneous requests is counted per site: several trackers are asked at the
+        // same time, and none of them sees more requests at once than the limit. All sites together
+        // get at most SITES times the limit.
+        $site = array();
+        foreach ($requests as $key => $request)
+            $site[$key] = $request->tracker !== NULL ? $request->tracker : $request->host();
+        $busy = array();
+
+        $start = function () use (&$queue, &$active, &$handles, &$headers, &$started, &$sent, &$busy, $site, $requests, $multi) {
+            foreach (self::startable($queue, $site, $busy, count($active), $this->concurrency) as $key)
             {
-                $key = array_shift($queue);
+                unset($queue[array_search($key, $queue, TRUE)]);
+                $busy[$site[$key]] = (isset($busy[$site[$key]]) ? $busy[$site[$key]] : 0) + 1;
                 $headers[$key] = '';
                 $handles[$key] = $this->handle($requests[$key], $headers[$key], $sent[$key]);
                 $started[$key] = microtime(TRUE);
@@ -267,6 +297,7 @@ final class Client
                 $ch = $info['handle'];
                 $key = $active[spl_object_id($ch)];
                 unset($active[spl_object_id($ch)]);
+                $busy[$site[$key]]--;
 
                 $response = new Response();
                 $response->status = (int)curl_getinfo($ch, CURLINFO_RESPONSE_CODE);

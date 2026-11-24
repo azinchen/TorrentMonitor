@@ -249,23 +249,37 @@ final class Runner
     private array $failures = array();
     private float $savedAt = 0;
 
-    // Splits the topics (id => topic, ordered by tracker) into parts loaded together. The series
-    // of one tracker share a feed, which is requested once for all of them: they stay in one part.
+    // Splits the topics (id => topic) into parts loaded together. A part takes topics of every
+    // tracker in turn: trackers are asked at the same time, each within its own limit of
+    // simultaneous requests, so a part of one tracker only would wait for that one site.
+    // The series of one tracker share a feed, which is requested once for all of them: they are
+    // taken together and stay in one part.
     private function parts(array $topics): array
     {
+        $queues = array();
+        foreach ($topics as $id => $topic)
+            $queues[$topic['tracker']][$id] = $topic;
+
         $parts = array();
         $part = array();
-        $last = NULL;
-        foreach ($topics as $id => $topic)
+        while ( ! empty($queues))
         {
-            $shared = Registry::kind($topic['tracker']) == 'series' && $topic['tracker'] === $last;
-            if (count($part) >= self::PART && ! $shared)
+            foreach (array_keys($queues) as $tracker)
             {
-                $parts[] = $part;
-                $part = array();
+                $take = Registry::kind($tracker) == 'series' ? count($queues[$tracker]) : 1;
+                foreach (array_slice($queues[$tracker], 0, $take, TRUE) as $id => $topic)
+                {
+                    $part[$id] = $topic;
+                    unset($queues[$tracker][$id]);
+                }
+                if (empty($queues[$tracker]))
+                    unset($queues[$tracker]);
+                if (count($part) >= self::PART)
+                {
+                    $parts[] = $part;
+                    $part = array();
+                }
             }
-            $part[$id] = $topic;
-            $last = $topic['tracker'];
         }
         if ( ! empty($part))
             $parts[] = $part;

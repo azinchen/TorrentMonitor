@@ -447,4 +447,58 @@ final class CoreTest extends TestCase
         $this->assertSame('', \TorrentMonitor\Time::both('', 'kinozal.me'));
         date_default_timezone_set($before);
     }
+
+    public function testRunTakesTopicsOfEveryTrackerInTurn()
+    {
+        $runner = new \TorrentMonitor\Engine\Runner(function ($line) {}, array('dryRun' => true));
+        $parts = new \ReflectionMethod($runner, 'parts');
+        $parts->setAccessible(true);
+        $topics = array();
+        $id = 0;
+        foreach (array('rutracker.org' => 150, 'kinozal.me' => 150, 'lostfilm.tv' => 30, 'nnmclub.to' => 5) as $tracker => $count)
+            for ($i = 0; $i < $count; $i++)
+                $topics[++$id] = array('id' => $id, 'tracker' => $tracker);
+
+        $result = $parts->invoke($runner, $topics);
+        $this->assertSame(335, array_sum(array_map('count', $result)), 'every topic is in exactly one part');
+        $this->assertSame(array_keys($topics), self::sorted(array_merge(...array_map('array_keys', $result))));
+        foreach ($result as $part)
+            $this->assertLessThanOrEqual(\TorrentMonitor\Engine\Runner::PART + 30, count($part));
+
+        // the first part holds topics of every tracker, and all the series of the feed tracker
+        $first = array_count_values(array_column($result[0], 'tracker'));
+        $this->assertSame(30, $first['lostfilm.tv'], 'the series of one tracker share a feed and stay together');
+        $this->assertGreaterThan(20, $first['rutracker.org']);
+        $this->assertGreaterThan(20, $first['kinozal.me']);
+        $this->assertSame(5, $first['nnmclub.to']);
+        foreach (array_slice($result, 1) as $part)
+            $this->assertArrayNotHasKey('lostfilm.tv', array_count_values(array_column($part, 'tracker')));
+    }
+
+    public function testSimultaneousRequestsAreLimitedPerSite()
+    {
+        $startable = function ($queue, $site, $busy, $active, $limit) { return \TorrentMonitor\Http\Client::startable($queue, $site, $busy, $active, $limit); };
+        $site = array();
+        foreach (array('a' => 8, 'b' => 8, 'c' => 8, 'd' => 8) as $name => $count)
+            for ($i = 1; $i <= $count; $i++)
+                $site[$name.$i] = $name;
+        $queue = array_keys($site);
+
+        // nothing runs yet, 3 per site: three sites start, the fourth waits for the total (3 sites x 3)
+        $this->assertSame(array('a1', 'a2', 'a3', 'b1', 'b2', 'b3', 'c1', 'c2', 'c3'), $startable($queue, $site, array(), 0, 3));
+        // one site is full: its requests wait, the others go on
+        $this->assertSame(array('b1', 'c1'), $startable($queue, $site, array('a' => 3, 'b' => 2, 'c' => 2), 7, 3));
+        // one request of the full site has finished
+        $this->assertSame(array('a1'), $startable($queue, $site, array('a' => 2, 'b' => 3, 'c' => 3), 8, 3));
+        // everything is busy
+        $this->assertSame(array(), $startable($queue, $site, array('a' => 3, 'b' => 3, 'c' => 3), 9, 3));
+        // a single site gets no more than its limit however long the queue is
+        $this->assertCount(10, $startable(array_keys(array_fill(0, 50, 'x')), array_fill(0, 50, 'one'), array(), 0, 10));
+    }
+
+    private static function sorted(array $values): array
+    {
+        sort($values);
+        return $values;
+    }
 }
