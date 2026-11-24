@@ -228,7 +228,7 @@ final class Runner
                 {
                     if ($this->dryRun)
                     {
-                        $this->say('Найдено обновление: '.$release->message.' ('.$release->dateText.')');
+                        $this->say('Найдено обновление: '.$release->message.' ('.(\TorrentMonitor\Time::both($release->date, $name) ?: $release->dateText).')');
                         continue;
                     }
                     $changes = Delivery::deliver(array_merge($topic, $fields), $release, $this->out);

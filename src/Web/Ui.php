@@ -693,7 +693,8 @@ final class Ui
     private function doRunLog(): array
     {
         $log = (string)@file_get_contents(Runner::logFile());
-        return array('running' => Lock::busy(), 'log' => strlen($log) > 200000 ? substr($log, -200000) : $log);
+        //the lines are stamped on the server's clock: with its offset from UTC the page shows them on the browser's
+        return array('running' => Lock::busy(), 'log' => strlen($log) > 200000 ? substr($log, -200000) : $log, 'offset' => (int)date('Z'));
     }
 
     private function doUpdateCheck(): array

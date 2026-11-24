@@ -345,7 +345,7 @@ document.addEventListener('alpine:init', () => {
             this.logTimer = setInterval(async () => {
                 const data = await this.call('run.log', {}, { silent: true });
                 if (!data) return;
-                this.runLog = data.log;
+                this.runLog = this.logLocal(data.log, data.offset);
                 if (!data.running) {
                     clearInterval(this.logTimer);
                     this.status.running = false;
@@ -356,7 +356,17 @@ document.addEventListener('alpine:init', () => {
         },
         async loadLog() {
             const data = await this.call('run.log', {}, { silent: true });
-            if (data) this.runLog = data.log;
+            if (data) this.runLog = this.logLocal(data.log, data.offset);
+        },
+        // The log is stamped on the clock of the server ("[2026-11-24 00:04:42] ..."): the stamps are
+        // shown on the clock of this browser. $offset - seconds the server's clock is ahead of UTC.
+        logLocal(log, offset) {
+            if (typeof offset !== 'number') return log;
+            const pad = n => String(n).padStart(2, '0');
+            return String(log || '').replace(/^\[(\d{4})-(\d\d)-(\d\d) (\d\d):(\d\d):(\d\d)\]/gm, (all, y, mo, d, h, mi, s) => {
+                const t = new Date(Date.UTC(+y, mo - 1, +d, +h, +mi, +s) - offset * 1000);
+                return '[' + t.getFullYear() + '-' + pad(t.getMonth() + 1) + '-' + pad(t.getDate()) + ' ' + pad(t.getHours()) + ':' + pad(t.getMinutes()) + ':' + pad(t.getSeconds()) + ']';
+            });
         },
         async checkHealth() {
             const data = await this.call('health', {}, { silent: true });

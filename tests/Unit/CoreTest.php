@@ -433,4 +433,18 @@ final class CoreTest extends TestCase
         $this->assertSame('', $summary("- Первое изменение\n- Второе"));
         $this->assertSame('', $summary(''));
     }
+
+    public function testReleaseDateOnTwoClocks()
+    {
+        $before = date_default_timezone_get();
+        date_default_timezone_set('America/New_York');
+        $this->assertSame('23 ноя 2026, 06:23 (на трекере 14:23 МСК)', \TorrentMonitor\Time::both('2026-11-23 14:23:00', 'kinozal.me'));
+        // another day on the tracker
+        $this->assertSame('22 ноя 2026, 17:10 (на трекере 23 ноя, 01:10 МСК)', \TorrentMonitor\Time::both('2026-11-23 01:10:00', 'kinozal.me'));
+        // the server on the tracker's clock: one time is enough
+        date_default_timezone_set('Europe/Moscow');
+        $this->assertSame('23 ноя 2026, 14:23', \TorrentMonitor\Time::both('2026-11-23 14:23:00', 'kinozal.me'));
+        $this->assertSame('', \TorrentMonitor\Time::both('', 'kinozal.me'));
+        date_default_timezone_set($before);
+    }
 }
