@@ -20,6 +20,12 @@ if [ ! -f /certs/ready ]; then
 fi
 
 mkdir -p /run/nginx /tmp/fake
-nginx -c /src/tests/env/fake/nginx.conf
+conf=/src/tests/env/fake/nginx.conf
+if [ "${TM_FAKE_NO_HTTP:-0}" = 1 ]; then
+    # port 80 belongs to the application when all containers share one network
+    sed '/listen 80;/d' "$conf" > /tmp/fake/nginx.conf
+    conf=/tmp/fake/nginx.conf
+fi
+nginx -c "$conf"
 export PHP_CLI_SERVER_WORKERS=4
 exec php -S 0.0.0.0:8080 -t /tmp/fake /src/tests/env/fake/router.php

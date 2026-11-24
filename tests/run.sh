@@ -18,7 +18,7 @@
 #
 # Environment: TM_PHP=8.0|8.5 (PHP for the stack, default 8.5), TM_PORT (default 8088),
 #              TM_SOLVER (live: solver address, default Byparr), TM_VPN_COUNTRY (default Portugal),
-#              TM_VPN=0 (live, reach: do not use the VPN even if its secrets exist),
+#              TM_VPN=0 (live, reach, sonarr: do not use the VPN even if its secrets exist),
 #              TM_<SERVICE>_VERSION (image tag of an outside service, e.g. TM_QBITTORRENT_VERSION=4.6.7;
 #              the list is in tests/env/versions.env.example),
 #              TM_KEEP=1 (live: leave the stack running afterwards, e.g. for "record").
@@ -147,17 +147,23 @@ cmd_live() {
 
 # The offline stack plus a real Sonarr. The tracker and the indexer are fake; Sonarr itself
 # needs the internet to load the description of a series.
-sonarr_stack() { dc --project-directory "$env_dir" -f "$env_dir/compose.yml" -f "$env_dir/compose.offline.yml" -f "$env_dir/compose.sonarr.yml" "$@"; }
+sonarr_stack() {
+    local files=(-f "$env_dir/compose.yml" -f "$env_dir/compose.offline.yml" -f "$env_dir/compose.sonarr.yml")
+    use_vpn && files+=(-f "$env_dir/compose.sonarr-vpn.yml")
+    dc --project-directory "$env_dir" "${files[@]}" "$@"
+}
 
 cmd_sonarr() {
     build_images
-    say "Sonarr flow, PHP $TM_PHP"
+    say "Sonarr flow, PHP $TM_PHP$(use_vpn && echo ', every container through the VPN' || echo ', without VPN')"
     remove_stack
     sonarr_stack down -v --remove-orphans > /dev/null 2>&1 || true
+    # the VPN only becomes healthy after the MTU keeper has lowered the tunnel MTU
+    use_vpn && sonarr_stack up -d --quiet-pull vpn mtu > /dev/null 2>&1
     local log
     if ! log=$(sonarr_stack up -d --wait --quiet-pull fake app qbittorrent transmission deluge sonarr 2>&1); then
         echo "$log" | tail -15
-        echo "the Sonarr stack did not start"
+        echo "the Sonarr stack did not start$(use_vpn && echo ' (TM_VPN=0 runs it without the VPN)')"
         sonarr_stack down -v --remove-orphans > /dev/null 2>&1 || true
         exit 1
     fi
