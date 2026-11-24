@@ -32,6 +32,21 @@ final class Files
         return self::$dir;
     }
 
+    // Access to a file of the data directory: the owner only, and the group if the directory is
+    // set up for two users (web server and cron). Nobody else: the files hold passwords.
+    public static function protect(string $file): void
+    {
+        $dir = dirname($file);
+        $dirMode = @fileperms($dir);
+        @chmod($file, ($dirMode !== FALSE && ($dirMode & 0020)) ? 0660 : 0600);
+        // engine.php run as root must not take the files away from the web server user
+        if (function_exists('posix_geteuid') && posix_geteuid() === 0)
+        {
+            @chown($file, fileowner($dir));
+            @chgrp($file, filegroup($dir));
+        }
+    }
+
     // Creates the data directory and closes it from being served by the Apache web server
     public static function prepare(): bool
     {

@@ -143,9 +143,8 @@ class Release
             'ttl'     => $ttl,
             'release' => $release,
         ));
-        // The web server and cron may run as different users
         if (@file_put_contents($file, $data, LOCK_EX) !== FALSE)
-            @chmod($file, 0666);
+            Files::protect($file);
     }
 
     private static function request($url, $timeout = 15)

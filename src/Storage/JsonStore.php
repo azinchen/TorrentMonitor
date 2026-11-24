@@ -155,18 +155,11 @@ class JsonStore
         if (@file_put_contents($tmp, $json."\n") === FALSE)
             throw new StorageException('Нет прав на запись в каталог данных: '.$dir);
 
-        // The files contain passwords: access for the owner only (and the group, if the directory is set up that way)
-        $dirMode = @fileperms($dir);
-        @chmod($tmp, ($dirMode !== FALSE && ($dirMode & 0020)) ? 0660 : 0600);
-        // engine.php run as root must not take the files away from the web server user
-        if (function_exists('posix_geteuid') && posix_geteuid() === 0)
-        {
-            @chown($tmp, fileowner($dir));
-            @chgrp($tmp, filegroup($dir));
-        }
+        Files::protect($tmp);
 
         if ($this->backup && is_file($this->file))
-            @copy($this->file, $this->file.'.bak');
+            if (@copy($this->file, $this->file.'.bak'))
+                Files::protect($this->file.'.bak');
 
         if ( ! @rename($tmp, $this->file))
         {

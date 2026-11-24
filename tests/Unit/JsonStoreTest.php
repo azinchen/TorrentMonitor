@@ -97,6 +97,14 @@ final class JsonStoreTest extends TestCase
         $this->assertSame('0600', substr(sprintf('%o', fileperms($this->file)), -4));
     }
 
+    public function testBackupIsPrivateToo()
+    {
+        $store = $this->store();
+        $store->update(function (&$data) { $data['name'] = 'first'; });
+        $store->update(function (&$data) { $data['name'] = 'second'; });
+        $this->assertSame('0600', substr(sprintf('%o', fileperms($this->file.'.bak')), -4));
+    }
+
     public function testGroupWritableDirectoryGivesGroupAccess()
     {
         chmod($this->dir, 0770);
