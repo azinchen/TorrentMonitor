@@ -520,6 +520,27 @@ final class CoreTest extends TestCase
         $this->assertSame('http://qbittorrent:8080', $clean('http://qbittorrent:8080'));
     }
 
+    // what the real services answered to a wrong key (asked on 2026-11-24)
+    public function testRefusalOfANotificationServiceIsExplained()
+    {
+        $refusal = function ($status, $body) { return \TorrentMonitor\Notify\Services::refusal($status, $body); };
+        $this->assertSame('', $refusal(200, '{"ok":true,"result":{}}'));
+        $this->assertSame('', $refusal(200, '{"status":1,"request":"x"}'));
+        $this->assertSame('', $refusal(200, ''));
+        $this->assertSame('HTTP 401: Unauthorized', $refusal(401, '{"ok":false,"error_code":401,"description":"Unauthorized"}'));
+        $this->assertSame('HTTP 400: application token is invalid, see https://pushover.net/api',
+            $refusal(400, '{"token":"invalid","errors":["application token is invalid, see https://pushover.net/api"],"status":0,"request":"8e04"}'));
+        $this->assertSame('HTTP 401: Access token is missing or invalid.',
+            $refusal(401, '{"error":{"code":"invalid_access_token","type":"invalid_request","message":"Access token is missing or invalid."},"error_code":"invalid_access_token"}'));
+        // Pushall refuses with status 200
+        $this->assertSame('HTTP 200: wrong key', $refusal(200, '{"error":"wrong key"}'));
+        $this->assertSame('HTTP 401: Invalid API key(s).', $refusal(401, "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<prowl>\n<error code=\"401\">Invalid API key(s).</error>\n</prowl>"));
+        $this->assertSame('HTTP 401: Unauthorized: you need to provide a valid access token or user credentials to access this api',
+            $refusal(401, '{"error":"Unauthorized","errorCode":401,"errorDescription":"you need to provide a valid access token or user credentials to access this api"}'));
+        $this->assertSame('HTTP 502', $refusal(502, '<html>Bad Gateway</html>'));
+        $this->assertSame('сервис не отвечает', $refusal(0, ''));
+    }
+
     private static function sorted(array $values): array
     {
         sort($values);

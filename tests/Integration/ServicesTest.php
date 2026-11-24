@@ -140,6 +140,44 @@ final class ServicesTest extends IntegrationTestCase
         $this->assertFalse($refused['ok'], 'a wrong token is reported');
     }
 
+    public function testSavedNotificationSettingsAreChecked()
+    {
+        // off: nothing to check
+        $this->assertFalse(Env::ui('notify.check')['json']['ok']);
+
+        $application = $this->gotify('POST', '/application', array('name' => 'tm-'.uniqid()))['json'];
+        $address = Env::GOTIFY.';'.$application['token'];
+        $save = function ($values) { return Env::ui('settings.save', $values)['json']['ok']; };
+
+        // both kinds go to one place: one test message
+        $this->assertTrue($save(array('send' => true, 'sendUpdate' => true, 'notifyUpdateService' => 'Gotify', 'notifyUpdateAddress' => $address,
+            'sendWarning' => true, 'notifyWarningService' => 'Gotify', 'notifyWarningAddress' => $address)));
+        $checked = Env::ui('notify.check')['json'];
+        $this->assertTrue($checked['ok'], json_encode($checked, JSON_UNESCAPED_UNICODE));
+        $this->assertSame('Об обновлениях (Gotify): сообщение отправлено. Об ошибках (Gotify): сообщение отправлено.', $checked['message']);
+        $this->assertCount(1, $this->gotify('GET', '/application/'.$application['id'].'/message')['json']['messages']);
+
+        // a wrong token for one kind: the answer of the service is shown, the other kind still reported
+        $this->assertTrue($save(array('notifyWarningService' => 'Gotify', 'notifyWarningAddress' => Env::GOTIFY.';wrong-token')));
+        $checked = Env::ui('notify.check')['json'];
+        $this->assertFalse($checked['ok']);
+        $this->assertStringContainsString('Об обновлениях (Gotify): сообщение отправлено.', $checked['message']);
+        $this->assertMatchesRegularExpression('/Об ошибках \(Gotify\): сервис не принял сообщение — HTTP 401: Unauthorized/u', $checked['message']);
+
+        // a server that is not there, an address without its token, e-mail
+        $this->assertTrue($save(array('notifyWarningService' => 'Gotify', 'notifyWarningAddress' => 'http://127.0.0.1:9;token')));
+        $this->assertStringContainsString('сервис не отвечает', Env::ui('notify.check')['json']['message']);
+        $this->assertTrue($save(array('notifyWarningService' => 'Gotify', 'notifyWarningAddress' => Env::GOTIFY)));
+        $this->assertStringContainsString('Об ошибках (Gotify): сервис не принял сообщение — адрес указан не полностью.', Env::ui('notify.check')['json']['message']);
+        $this->assertTrue($save(array('sendUpdate' => false, 'notifyWarningService' => 'E-mail', 'notifyWarningAddress' => 'someone@example.invalid')));
+        $this->assertSame('Об ошибках (E-mail): сообщение передано почтовой программе сервера.', Env::ui('notify.check')['json']['message']);
+
+        // the checks are in the journal, without the token
+        $lines = array_values(array_filter(AppState::journal('service'), function ($l) { return strpos($l, 'Уведомления проверены') === 0; }));
+        $this->assertCount(5, $lines);
+        $this->assertStringNotContainsString($application['token'], implode("\n", AppState::journal()));
+    }
+
     // ---- e-mail
 
     public function testEmailIsHandedToTheMailSystem()

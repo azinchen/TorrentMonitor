@@ -34,19 +34,31 @@ final class Notifications
     // Test message through the given service; TRUE if the service accepted it
     public static function test(string $service, string $address): bool
     {
+        return self::check($service, $address)[0];
+    }
+
+    // Sends a test message and tells how it went: array(accepted, text). There is no other way to
+    // find out whether an address and its keys work: the services have no call that only checks them.
+    public static function check(string $service, string $address): array
+    {
         $notifier = Services::get($service);
-        if ($notifier === NULL || $address === '')
-            return FALSE;
+        if ($notifier === NULL)
+            return array(FALSE, 'сервис не выбран');
+        if (trim($address) === '')
+            return array(FALSE, 'адрес или ключи не указаны');
         Services::$delivered = FALSE;
+        Services::$reason = '';
         try
         {
             $notifier->send($address, 'Проверка.', self::body(date('Y-m-d H:i:s'), 'TorrentMonitor', 'Проверка уведомлений: всё работает.', ''));
         }
         catch (\Throwable $e)
         {
-            return FALSE;
+            return array(FALSE, 'сообщение не отправлено');
         }
-        return Services::$delivered;
+        if (Services::$delivered)
+            return array(TRUE, $service == 'E-mail' ? 'сообщение передано почтовой программе сервера' : 'сообщение отправлено');
+        return array(FALSE, 'сервис не принял сообщение'.(Services::$reason !== '' ? ' — '.Services::$reason : ''));
     }
 
     private static function body(string $date, string $source, string $message, string $url): string

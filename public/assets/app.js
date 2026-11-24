@@ -330,8 +330,8 @@ document.addEventListener('alpine:init', () => {
         async testClient() {
             if (await this.saveSettings()) await this.call('client.test');
         },
-        testNotify(what) {
-            this.call('notify.test', { service: this.settingsForm['notify' + what + 'Service'], address: this.settingsForm['notify' + what + 'Address'] });
+        async testNotifications() {
+            if (await this.saveSettings()) await this.call('notify.check');
         },
         async changePassword() {
             if (this.passwordForm.password !== this.passwordForm.password2) {
@@ -415,7 +415,7 @@ document.addEventListener('alpine:init', () => {
         journalKinds: [
             { id: 'run', title: 'Проверки' }, { id: 'update', title: 'Обновления' }, { id: 'settings', title: 'Настройки' },
             { id: 'tracker', title: 'Трекеры' }, { id: 'topic', title: 'Темы' }, { id: 'access', title: 'Вход' },
-            { id: 'service', title: 'Клиент и решатель' }, { id: 'data', title: 'Данные' },
+            { id: 'service', title: 'Подключения' }, { id: 'data', title: 'Данные' },
         ],
         journalTitle(kind) { return (this.journalKinds.find(k => k.id === kind) || { title: kind }).title; },
         get shownJournal() { return this.journal.filter(e => !this.journalKind || e.kind === this.journalKind).slice(0, 100); },

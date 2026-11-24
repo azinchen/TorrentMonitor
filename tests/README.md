@@ -189,8 +189,17 @@ of that user (watching users), and `TM_LIVE_WRONG_PASSWORD=1` checks that a wron
 password is reported as such. The second is off by default, because repeated
 failed logins make some trackers ask for a captcha.
 
-**Services** (`Live/ServicesLiveTest.php`). Every notification service filled in
-`services.env` gets one test message and must refuse a spoiled key. A Synology NAS
+**Services** (`Live/ServicesLiveTest.php`). The notification services are tested through the
+saved settings and the «Сохранить и проверить» action, in two ways:
+
+- *made-up keys*, which need no secrets: Telegram, Pushover, Pushbullet, Prowl and Pushall are
+  really asked and must refuse the key, and the interface must show the service's own answer
+  (Pushall, for one, refuses with status 200). Nothing is delivered to anyone;
+- *real keys* from `services.env`: one message is really sent (whether it reached the phone
+  is for a person to see), then the key is spoiled and must be refused. A service that is not
+  filled in is skipped.
+
+A Synology NAS
 gets one torrent by link (the Debian netinst image unless `SYNOLOGY_TORRENT_URL`
 is set), must refuse the same link twice, and the task is removed at once.
 
@@ -224,8 +233,10 @@ Results so far (23.11.2026):
 - Without an account, the public pages of rutracker.org, nnmclub.to, kinozal.me,
   pornolab.net, booktracker.org, anidub.com, animelayer.ru, riperam.org, lostfilm.tv and
   newstudio.tv are read correctly (newstudio.tv only through a network that reaches it).
+- The notification services refuse made-up keys with the answers the tests expect (Telegram,
+  Pushover, Pushbullet, Prowl, Pushall).
 - Login, the download of the torrent file and the delivery to the client of those trackers,
-  the notification services and SynologyDS wait for accounts.
+  a real message through each notification service and SynologyDS wait for accounts.
 
 ## Sonarr flow
 

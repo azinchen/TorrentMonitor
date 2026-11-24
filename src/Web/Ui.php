@@ -670,9 +670,47 @@ final class Ui
 
     private function doNotifyTest(): array
     {
-        if ( ! Notifications::test($this->str('service'), $this->str('address')))
-            $this->fail('Сервис не принял сообщение. Проверьте адрес или ключи.');
+        list($ok, $text) = Notifications::check($this->str('service'), $this->str('address'));
+        if ( ! $ok)
+            $this->fail(self::sentence($text).' Проверьте адрес или ключи.');
         return array('message' => 'Пробное сообщение отправлено.');
+    }
+
+    private static function sentence(string $text): string
+    {
+        return function_exists('mb_strtoupper') ? mb_strtoupper(mb_substr($text, 0, 1)).mb_substr($text, 1).'.' : ucfirst($text).'.';
+    }
+
+    //«Сохранить и проверить» of the notification settings: a test message to every kind that is on
+    private function doNotifyCheck(): array
+    {
+        if ( ! Settings::on('send'))
+            $this->fail('Уведомления выключены. Включите их и сохраните настройки.');
+        $kinds = array('Update' => 'Об обновлениях', 'Warning' => 'Об ошибках');
+        $lines = array();
+        $failed = FALSE;
+        $done = array();
+        foreach ($kinds as $key => $title)
+        {
+            if ( ! Settings::on('send'.$key))
+                continue;
+            $target = Settings::notificationTarget('send'.$key.'Service');
+            $service = (string)$target['service'];
+            $address = (string)$target['address'];
+            //both kinds going to one place get one message
+            $same = $service.'|'.$address;
+            if ( ! isset($done[$same]))
+                $done[$same] = Notifications::check($service, $address);
+            list($ok, $text) = $done[$same];
+            $failed = $failed || ! $ok;
+            $lines[] = $title.($service !== '' ? ' ('.$service.')' : '').': '.$text.'.';
+        }
+        if (empty($lines))
+            $this->fail('Не отмечено, о чём уведомлять: об обновлениях или об ошибках.');
+        Journal::add('service', 'Уведомления проверены. '.implode(' ', $lines));
+        if ($failed)
+            $this->fail(implode(' ', $lines));
+        return array('message' => implode(' ', $lines));
     }
 
     //checks the connection to the torrent client with the saved settings
