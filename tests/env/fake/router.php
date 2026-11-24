@@ -337,6 +337,10 @@ if ($path == '/github/release.zip')
 }
 
 // FlareSolverr / Byparr API: "solves" the challenge of the fake tracker
+// the solver names itself at its main address, as FlareSolverr does
+if ($path == '/solver/' || $path == '/solver')
+    return send_json(array('msg' => 'FlareSolverr is ready!', 'version' => '9.8.7', 'userAgent' => 'Mozilla/5.0 (fake)'));
+
 if ($path == '/solver/v1' && $method == 'POST')
 {
     $request = (array)json_decode($body, true);

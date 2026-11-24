@@ -77,6 +77,7 @@ final class UpdateTest extends IntegrationTestCase
         $this->assertDirectoryDoesNotExist('/app/tmp_update');
         $this->assertNoWarnings();
         $this->assertNull($this->offered());
+        $this->assertSame(array('Установлена версия 9.9.9 (была '.json_decode(file_get_contents('/src/version.txt'), true)['system'].'), стабильные версии, вручную'), AppState::journal('update'));
     }
 
     public function testEngineAnnouncesReleaseOnceWhenAutoUpdateIsOff()

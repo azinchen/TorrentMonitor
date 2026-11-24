@@ -29,11 +29,22 @@ final class Runner
     private ?string $onlyTracker;
     private ?int $onlyTopic;
     private bool $fresh;
+    //how the run was started, as the log and the journal say it
+    private string $by;
+    //what the run did, for its summary
+    private array $count = array('checked' => 0, 'updated' => 0, 'failed' => 0, 'client' => 0, 'paused' => 0, 'stopped' => 0);
+    /** @var int[] "source — what went wrong" => how many times */
+    private array $errors = array();
+    //the topic being checked, not written to the log yet: it is written when something happens to it
+    private ?string $label = NULL;
+    private bool $clientSeen = FALSE;
+    private bool $offline = FALSE;
 
     // $options: tracker - check only this tracker; topic - only the topic with this id;
     // dryRun - download and change nothing, only show what would be done;
     // fresh - ask GitHub about a new version now instead of using the answer kept for six hours
-    // (a run started by hand: the person expects an update that is out to be installed)
+    // (a run started by hand: the person expects an update that is out to be installed);
+    // by - who started the run: manual (the interface), api; otherwise the schedule or the command line
     public function __construct(callable $out, array $options = array())
     {
         $this->out = $out;
@@ -42,14 +53,36 @@ final class Runner
         $this->onlyTracker = ! empty($options['tracker']) ? (string)$options['tracker'] : NULL;
         $this->onlyTopic = ! empty($options['topic']) ? (int)$options['topic'] : NULL;
         $this->fresh = ! empty($options['fresh']);
+        $by = isset($options['by']) ? (string)$options['by'] : '';
+        if ($by == 'manual')
+            $this->by = 'вручную';
+        elseif ($by == 'api')
+            $this->by = 'через API';
+        else
+            $this->by = PHP_SAPI == 'cli' && function_exists('posix_isatty') && @posix_isatty(STDOUT) ? 'из командной строки' : 'по расписанию';
     }
 
     /** @var resource|null run log (data/engine.log): it is shown by the "Status" page */
     private $log = NULL;
 
+    // A line of the log. The usual log holds what happened: topics updated, errors, the result.
     private function say(string $line): void
     {
+        //the topic the line is about is named first
+        if ($this->label !== NULL)
+        {
+            $label = $this->label;
+            $this->label = NULL;
+            call_user_func($this->out, $label);
+        }
         call_user_func($this->out, $line);
+    }
+
+    // A line of the detailed log only («Подробный журнал проверки»): every topic checked, every step
+    private function detail(string $line): void
+    {
+        if ($this->debug)
+            $this->say($line);
     }
 
     public static function logFile(): string
@@ -86,6 +119,8 @@ final class Runner
         };
         try
         {
+            foreach (About::lines($this->by.$this->scope()) as $line)
+                $this->say($line);
             if ($this->debug)
                 App::setLogger(function ($line) { $this->say('  '.$line); });
             $partial = $this->dryRun || $this->onlyTracker !== NULL || $this->onlyTopic !== NULL;
@@ -96,16 +131,17 @@ final class Runner
             if ($online)
             {
                 Warnings::clear('system');
-                $this->say('Опрос новых раздач на трекерах:');
+                $this->detail('Опрос новых раздач на трекерах:');
                 $this->topics();
                 if ( ! $partial)
                 {
-                    $this->say('Опрос новых раздач пользователей на трекерах:');
+                    $this->detail('Опрос новых раздач пользователей на трекерах:');
                     $this->users();
                 }
             }
             else
             {
+                $this->offline = TRUE;
                 $this->say(\TorrentMonitor\Messages::text('no_internet'));
                 if (Warnings::count('system') == 0)
                     Problems::report('system', 'no_internet');
@@ -113,11 +149,9 @@ final class Runner
 
             if ( ! $partial)
             {
-                $this->say('==================');
-                $this->say('Выполнение служебных функций:');
-                $this->say('Передача в torrent-клиент отложенных раздач.');
-                Delivery::retryPending($this->out);
-                $this->say('Удаление старых torrent-файлов.');
+                $this->detail('Передача в torrent-клиент отложенных раздач.');
+                Delivery::retryPending(function ($line) { $this->say($line); });
+                $this->detail('Удаление старых torrent-файлов.');
                 Delivery::cleanFiles();
                 if ($online)
                     $this->update();
@@ -125,7 +159,8 @@ final class Runner
         }
         finally
         {
-            $this->say(sprintf('Готово за %.1f с.', microtime(TRUE) - $started));
+            $this->label = NULL;
+            $this->finish(microtime(TRUE) - $started);
             App::setLogger(NULL);
             Lock::release();
             $this->out = $direct;
@@ -172,9 +207,15 @@ final class Runner
                 continue;
             $label = self::label($topic);
             if ($topic['paused'])
-                $this->say($label.': наблюдение приостановлено.');
+            {
+                $this->count['paused']++;
+                $this->detail($label.': наблюдение приостановлено.');
+            }
             elseif ($this->onlyTopic === NULL && Topics::expired($topic, $stopAfter))
-                $this->say($label.': давно не обновлялась, проверка прекращена.');
+            {
+                $this->count['stopped']++;
+                $this->detail($label.': давно не обновлялась, проверка прекращена.');
+            }
             else
                 $byTracker[$topic['tracker']][] = $topic;
         }
@@ -294,11 +335,18 @@ final class Runner
     {
         $id = $topic['id'];
         $name = $topic['tracker'];
-        $this->say(self::label($topic));
+        $this->count['checked']++;
+        //the detailed log names every topic; the usual one only those something happened to
+        if ($this->debug)
+            $this->say(self::label($topic));
+        else
+            $this->label = self::label($topic);
+        $out = function ($line) { $this->say($line); };
         try
         {
             $found = Registry::get($name)->check($topic, $response);
             $fields = array('error' => FALSE);
+            $delivered = FALSE;
             foreach ($found as $release)
             {
                 if ($this->dryRun)
@@ -306,15 +354,28 @@ final class Runner
                     $this->say('Найдено обновление: '.$release->message.' ('.(\TorrentMonitor\Time::both($release->date, $name) ?: $release->dateText).')');
                     continue;
                 }
-                $changes = Delivery::deliver(array_merge($topic, $fields), $release, $this->out);
+                $changes = Delivery::deliver(array_merge($topic, $fields), $release, $out);
                 if ($changes === NULL)
                 {
                     $this->topicProblem($name, 'save_file_fail', $topic);
                     $fields['error'] = TRUE;
                     break;
                 }
+                $delivered = TRUE;
+                if (isset($changes['hash']))
+                {
+                    $this->count['client']++;
+                    //the client has just been talked to: a good moment to note what it is
+                    if ( ! $this->clientSeen)
+                    {
+                        $this->clientSeen = TRUE;
+                        About::seeClient();
+                    }
+                }
                 $fields = array_merge($fields, $changes);
             }
+            if ($delivered && empty($fields['error']))
+                $this->count['updated']++;
             if ( ! $this->dryRun)
                 $this->changes[$id] = $fields;
         }
@@ -327,12 +388,15 @@ final class Runner
             $this->say('Ошибка ('.$name.'): '.$e->getMessage());
             $this->topicProblem($name, 'engine_error', $topic);
         }
+        $this->label = NULL;
     }
 
     //an error of one topic: recorded and marked on the topic with the next save
     private function topicProblem(string $source, string $code, array $topic): void
     {
         $this->say($source.': '.\TorrentMonitor\Messages::text($code));
+        $this->count['failed']++;
+        $this->noteError($source, $code);
         if ($this->dryRun)
             return;
         $this->failures[] = array($source, $code, $topic);
@@ -360,6 +424,62 @@ final class Runner
             Problems::reportTopics($failures);
     }
 
+    //counts what went wrong, by source and kind, for the result of the run
+    private function noteError(string $source, string $code): void
+    {
+        $key = $source.' — '.rtrim(\TorrentMonitor\Messages::text($code), '.');
+        $this->errors[$key] = (isset($this->errors[$key]) ? $this->errors[$key] : 0) + 1;
+    }
+
+    //what a run of a part of the topics is limited to, for the first line of the log
+    private function scope(): string
+    {
+        if ($this->dryRun)
+            return ', пробный (ничего не скачивается и не меняется)';
+        if ($this->onlyTopic !== NULL)
+            return ', только тема '.$this->onlyTopic;
+        return $this->onlyTracker !== NULL ? ', только трекер '.$this->onlyTracker : '';
+    }
+
+    // The result of the run: the last lines of its log, the line above the log in the interface
+    // and a line of the journal.
+    private function finish(float $seconds): void
+    {
+        $c = $this->count;
+        if ($this->offline)
+            $result = 'Нет подключения к интернету: темы не проверялись.';
+        else
+        {
+            $result = 'Проверено тем: '.$c['checked'].' — обновлено '.$c['updated'].', без изменений '.max(0, $c['checked'] - $c['updated'] - $c['failed'])
+                .', с ошибками '.$c['failed'].'.';
+            if (\TorrentMonitor\Client\Clients::currentName() !== NULL)
+                $result .= ' Передано в torrent-клиент: '.$c['client'].'.';
+            if ($c['paused'] + $c['stopped'] > 0)
+                $result .= ' Пропущено: на паузе '.$c['paused'].', проверка прекращена '.$c['stopped'].'.';
+        }
+        //what went wrong, the most frequent first; the journal has room for three kinds
+        arsort($this->errors);
+        $errors = array();
+        foreach ($this->errors as $what => $times)
+            $errors[] = $what.($times > 1 ? ' ×'.$times : '');
+
+        $this->say($result);
+        if ( ! empty($errors))
+            $this->say('Ошибки: '.implode('; ', $errors).'.');
+        $this->say(sprintf('Готово за %.1f с.', $seconds));
+
+        if ($this->dryRun)
+            return;
+        if (App::http()->solverUsed)
+            About::seeSolver();
+        State::setLastRunSummary($result.(empty($errors) ? '' : ' Ошибки: '.implode('; ', $errors).'.'));
+        $short = array_slice($errors, 0, 3);
+        if (count($errors) > 3)
+            $short[] = 'и другие';
+        \TorrentMonitor\Data\Journal::add('run', 'Проверка ('.$this->by.$this->scope().'), '.sprintf('%.0f', $seconds).' с. '.$result
+            .(empty($short) ? '' : ' Ошибки: '.implode('; ', $short).'.'));
+    }
+
     // How the topic is named in the log
     private static function label(array $topic): string
     {
@@ -369,6 +489,7 @@ final class Runner
     private function problem(string $source, string $code, ?array $topic = NULL): void
     {
         $this->say($source.': '.\TorrentMonitor\Messages::text($code));
+        $this->noteError($source, $code);
         if ( ! $this->dryRun)
             Problems::report($source, $code, $topic);
     }
@@ -380,7 +501,7 @@ final class Runner
         foreach (Users::all() as $user)
         {
             $name = $user['tracker'];
-            $this->say('Пользователь '.$user['name'].' на трекере '.$name);
+            $this->detail('Пользователь '.$user['name'].' на трекере '.$name);
             if ( ! Registry::has($name))
             {
                 $this->problem($name, 'unknown_tracker');

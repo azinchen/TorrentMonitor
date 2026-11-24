@@ -142,8 +142,9 @@ final class Files
             'ApiKey'               => '',
             'rss'                  => '1',
             'debug'                => '0',
-            'debugFor'             => '',
             'autoUpdate'           => '0',
+            // how many lines the journal of events keeps; 0 - no journal
+            'journalSize'          => '1000',
             // access mode of the data files, three octal digits (640); empty - the owner only
             'dataFileMode'         => '',
             // what automatic updates install: stable, beta or dev
@@ -213,6 +214,11 @@ final class Files
     {
         return array(
             'updateNotified' => FALSE,
+            // result of the last check run, one line: shown above its log
+            'lastRunSummary' => '',
+            // what the torrent client and the Cloudflare solver said about themselves when they were last
+            // talked to: 'client' | 'solver' => array(name, version, details, address, at)
+            'services'       => array(),
             // the update channel was changed, its version is not installed yet
             'channelChanged' => FALSE,
             // "Remember me" logins: sha256 of the token => expiry time (unix)

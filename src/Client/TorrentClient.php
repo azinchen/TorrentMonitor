@@ -18,4 +18,9 @@ interface TorrentClient
     // 'content' => path of the downloaded file or folder, '' if the client does not tell).
     // NULL if there is no such torrent or the client cannot do this.
     public function info(string $id): ?array;
+
+    // What the client says about itself: array('version' => '5.3.0', 'details' => 'libtorrent 2.1.2.0').
+    // Both are '' when the client does not tell. Who packaged the client (an image of linuxserver.io,
+    // for one) is not something a client reports.
+    public function about(): array;
 }

@@ -13,6 +13,27 @@ final class Solver
         $this->maxTimeout = $maxTimeout;
     }
 
+    // What the solver at $url says about itself: array('name' => 'FlareSolverr', 'version' => '3.5.2'),
+    // or NULL when nothing answers there. FlareSolverr tells at its main address, Byparr at /health;
+    // a solver that answers without naming itself gives empty strings.
+    public static function about(Client $http, string $url): ?array
+    {
+        $alive = FALSE;
+        foreach (array('/', '/health') as $path)
+        {
+            $response = $http->send(Request::get(rtrim($url, '/').$path)->plain()->timeout(8));
+            if ($response->status == 0)
+                continue;
+            $alive = TRUE;
+            $data = json_decode($response->body, TRUE);
+            if ( ! is_array($data) || empty($data['version']) || ! is_scalar($data['version']))
+                continue;
+            $name = isset($data['msg']) && preg_match('/^(\w+)/', (string)$data['msg'], $m) ? $m[1] : '';
+            return array('name' => $name, 'version' => (string)$data['version']);
+        }
+        return $alive ? array('name' => '', 'version' => '') : NULL;
+    }
+
     // Opens a page in the solver's browser.
     // Returns array(status, body, cookies => array(name => value), userAgent) or NULL
     public function request(string $method, string $url, string $cookie = '', string $postData = '', ?string $proxy = NULL): ?array

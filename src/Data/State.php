@@ -17,6 +17,55 @@ final class State implements ClearanceStore
         Files::state()->update(function (&$data) use ($time) { $data['lastRun'] = $time; });
     }
 
+    public static function lastRunSummary(): string
+    {
+        $state = Files::state()->read();
+        return isset($state['lastRunSummary']) ? (string)$state['lastRunSummary'] : '';
+    }
+
+    public static function setLastRunSummary(string $text): void
+    {
+        Files::state()->update(function (&$data) use ($text) { $data['lastRunSummary'] = $text; });
+    }
+
+    // What a service ('client' - the torrent client, 'solver' - the Cloudflare solver) said about
+    // itself when it was last talked to: array(name, version, details, address, at) or NULL
+    public static function service(string $key): ?array
+    {
+        $state = Files::state()->read();
+        return isset($state['services'][$key]) && is_array($state['services'][$key]) ? $state['services'][$key] : NULL;
+    }
+
+    // Remembers what a service said about itself. A version that is new or different goes to the
+    // journal: that is how an upgrade of the client shows up there.
+    public static function sawService(string $key, string $name, string $version, string $details, string $address): void
+    {
+        $before = self::service($key);
+        $now = array('name' => $name, 'version' => $version, 'details' => $details, 'address' => $address, 'at' => date('Y-m-d H:i:s'));
+        Files::state()->update(function (&$data) use ($key, $now) {
+            if ( ! isset($data['services']) || ! is_array($data['services']))
+                $data['services'] = array();
+            $data['services'][$key] = $now;
+        });
+        $title = $key == 'client' ? 'Torrent-клиент' : 'Решатель Cloudflare';
+        $text = function (array $s) { return trim($s['name'].' '.$s['version']).($s['details'] !== '' ? ' ('.$s['details'].')' : ''); };
+        if ($before === NULL || $before['name'] != $name || $before['address'] != $address)
+            Journal::add('service', $title.': '.$text($now).', '.$address);
+        elseif ($before['version'] != $version || $before['details'] != $details)
+            Journal::add('service', $title.': '.$text($before).' → '.$text($now));
+    }
+
+    //a service that is not used any more is forgotten
+    public static function forgetService(string $key): void
+    {
+        Files::state()->update(function (&$data) use ($key) {
+            if ( ! isset($data['services'][$key]))
+                return FALSE;
+            unset($data['services'][$key]);
+            return TRUE;
+        });
+    }
+
     // The update channel was changed and its version is not installed yet: until then a lower
     // version of the new channel is installed too
     public static function channelChanged(): bool

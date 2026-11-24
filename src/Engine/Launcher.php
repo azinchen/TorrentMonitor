@@ -8,7 +8,7 @@ use TorrentMonitor\Tracker\Registry;
 final class Launcher
 {
     // Starts engine.php as a separate process. Returns NULL on success or the reason why it is impossible.
-    //$options: tracker, topic, fresh (look for a new version now)
+    //$options: tracker, topic, fresh (look for a new version now), by (manual | api: who starts the run)
     public static function start(array $options = array()): ?string
     {
         if ( ! function_exists('exec'))
@@ -24,7 +24,15 @@ final class Launcher
             $command .= ' --topic='.(int)$options['topic'];
         if ( ! empty($options['fresh']))
             $command .= ' --fresh';
-        exec($command.' > /dev/null 2>&1 &');
+        if (isset($options['by']) && in_array($options['by'], array('manual', 'api'), TRUE))
+            $command .= ' --by='.$options['by'];
+        //Where the output of the run goes. Nowhere by default: the log is in the data directory.
+        //config.php may name a file, for one the output of a container: Config::write('log.output', '/proc/1/fd/1');
+        $output = \Config::read('log.output');
+        //a file that cannot be written must not keep the run from starting: the shell would refuse the whole command
+        $usable = ! empty($output) && is_string($output) && (file_exists($output) ? is_writable($output) : is_writable(dirname($output)));
+        $output = $usable ? escapeshellarg($output) : '/dev/null';
+        exec($command.' >> '.$output.' 2>&1 &');
         return NULL;
     }
 

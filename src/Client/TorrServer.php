@@ -14,6 +14,13 @@ final class TorrServer extends HttpClientBase
         return $request->follow();
     }
 
+    public function about(): array
+    {
+        //"MatriX.151"
+        $version = trim($this->send($this->authorized(Request::get($this->address.'/echo')))->body);
+        return array('version' => preg_match('/^[\w.\-]{1,40}$/', $version) ? $version : '', 'details' => '');
+    }
+
     public function add(string $file, array $options): string
     {
         if (empty($options['url']))

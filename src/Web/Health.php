@@ -129,8 +129,12 @@ final class Health
                 $online = TRUE;
         $this->add($g, $online, $online ? 'Подключение к интернету есть.' : 'Нет подключения к интернету.');
         if ($solver !== '')
+        {
             $this->add($g, $responses['solver']->status != 0, $responses['solver']->status != 0 ? 'Решатель Cloudflare '.$solver.' отвечает.'
                 : 'Решатель Cloudflare '.$solver.' не отвечает.');
+            if ($responses['solver']->status != 0)
+                \TorrentMonitor\Engine\About::seeSolver();
+        }
 
         $g = 'Трекеры';
         if (empty($names))
@@ -170,6 +174,8 @@ final class Health
             return;
         }
         $problem = self::clientProblem();
+        if ($problem === NULL)
+            \TorrentMonitor\Engine\About::seeClient();
         $this->add($g, $problem === NULL, $problem === NULL ? $name.' по адресу '.Settings::get('torrentAddress').' отвечает, вход выполнен.'
             : $name.' по адресу '.Settings::get('torrentAddress').': '.$problem);
         if ($name == 'SynologyDS' || $name == 'TorrServer')
@@ -216,17 +222,13 @@ final class Health
             $lines[] = array(NULL, 'Решатель Cloudflare не задан.');
             return $lines;
         }
-        //Only whether the solver answers at its address: no page is opened through it. FlareSolverr
-        //names itself and its version at "/", which is shown when it is there.
-        $response = $http->send(Request::get(rtrim($solver, '/').'/')->plain()->timeout(8));
-        if ($response->status == 0)
-            $lines[] = array(FALSE, 'Решатель Cloudflare '.$solver.' не отвечает'.($response->failureText() !== '' ? ': '.$response->failureText() : '').'.');
+        //Only whether the solver answers at its address: no page is opened through it. What it
+        //says about itself is remembered for the log of check runs.
+        $about = \TorrentMonitor\Engine\About::seeSolver();
+        if ($about === NULL)
+            $lines[] = array(FALSE, 'Решатель Cloudflare '.$solver.' не отвечает.');
         else
-        {
-            $about = json_decode($response->body, TRUE);
-            $name = is_array($about) && ! empty($about['version']) && is_scalar($about['version']) ? ' (версия '.$about['version'].')' : '';
-            $lines[] = array(TRUE, 'Решатель Cloudflare '.$solver.' отвечает'.$name.'.');
-        }
+            $lines[] = array(TRUE, 'Решатель Cloudflare '.$solver.' отвечает'.($about['version'] !== '' ? ': '.trim($about['name'].' '.$about['version']) : '').'.');
         return $lines;
     }
 

@@ -33,6 +33,11 @@ abstract class HttpClientBase implements TorrentClient
         return $response;
     }
 
+    public function about(): array
+    {
+        return array('version' => '', 'details' => '');
+    }
+
     protected static function read(string $file): string
     {
         $data = @file_get_contents($file);

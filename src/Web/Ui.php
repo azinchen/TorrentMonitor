@@ -4,12 +4,14 @@ namespace TorrentMonitor\Web;
 use TorrentMonitor\App;
 use TorrentMonitor\Client\Clients;
 use TorrentMonitor\Data\Accounts;
+use TorrentMonitor\Data\Journal;
 use TorrentMonitor\Data\Pending;
 use TorrentMonitor\Data\Settings;
 use TorrentMonitor\Data\State;
 use TorrentMonitor\Data\Topics;
 use TorrentMonitor\Data\Users;
 use TorrentMonitor\Data\Warnings;
+use TorrentMonitor\Engine\About;
 use TorrentMonitor\Engine\Delivery;
 use TorrentMonitor\Engine\Launcher;
 use TorrentMonitor\Engine\Lock;
@@ -35,7 +37,7 @@ final class Ui
     const SETTINGS = array('serverAddress', 'auth', 'rss', 'debug', 'autoUpdate', 'userAgent', 'httpTimeout', 'flaresolverrUrl',
         'proxy', 'proxyAddress', 'proxyType', 'useTorrent', 'torrentClient', 'torrentAddress', 'torrentLogin', 'pathToDownload',
         'qbitCategory', 'deleteDistribution', 'deleteOldFiles', 'deleteFilesOnRemove', 'stopAfterDays', 'removeOnSeriesDelete', 'sonarrReplaceTopic', 'sonarrReplaceTorrent',
-        'send', 'sendUpdate', 'sendWarning', 'trackerTimezone', 'updateChannel', 'dataFileMode', 'httpConcurrency', 'httpSites');
+        'send', 'sendUpdate', 'sendWarning', 'trackerTimezone', 'updateChannel', 'dataFileMode', 'httpConcurrency', 'httpSites', 'journalSize');
 
     private array $in = array();
 
@@ -52,6 +54,7 @@ final class Ui
             if ($_SERVER['REQUEST_METHOD'] != 'POST')
                 $ui->fail('Нужен запрос POST.', 405);
             Auth::start();
+            Journal::$by = 'интерфейс';
             if ( ! Auth::csrfValid() && $action != 'boot')
                 $ui->fail('Страница устарела. Обновите её.', 403);
             if ( ! in_array($action, self::OPEN, TRUE) && ! Auth::ok())
@@ -119,7 +122,10 @@ final class Ui
         if (self::fresh())
             $this->fail('Сначала выполните первоначальную настройку.');
         if ( ! Auth::login((string)(isset($this->in['password']) ? $this->in['password'] : ''), $this->flag('remember')))
+        {
+            Journal::failedSignIn(isset($_SERVER['REMOTE_ADDR']) ? (string)$_SERVER['REMOTE_ADDR'] : '');
             $this->fail('Неверный пароль.');
+        }
         return array('in' => TRUE) + $this->doOverview();
     }
 
@@ -234,8 +240,9 @@ final class Ui
             'categories' => Topics::categories(), 'sonarrTitles' => Topics::sonarrTitles(), 'clients' => array_keys(Clients::CLASSES),
             'services' => array_values(array_unique(array_column(Settings::notificationServices(), 'service'))),
             'timezones' => Time::names(),
+            'journal' => array_map(function ($e) { return $e + array('timeUtc' => Time::serverUtc($e['time'])); }, Journal::recent(300)),
             'status' => array(
-                'version' => App::versionLabel(), 'lastRun' => State::lastRun(), 'lastRunUtc' => Time::serverUtc((string)State::lastRun()), 'running' => Lock::busy(), 'client' => Clients::currentName(),
+                'version' => App::versionLabel(), 'lastRun' => State::lastRun(), 'lastRunUtc' => Time::serverUtc((string)State::lastRun()), 'lastRunSummary' => State::lastRunSummary(), 'running' => Lock::busy(), 'client' => Clients::currentName(),
                 'authRequired' => Auth::required(), 'wiki' => Release::wikiUrl(),
                 'update' => Release::isNewer($release) ? array('version' => $release['version'], 'notes' => $release['notes'], 'url' => $release['url'], 'downgrade' => Release::isDowngrade($release)) : NULL,
             ),
@@ -448,6 +455,8 @@ final class Ui
         $name = $this->str('name');
         if ( ! Registry::has($name))
             $this->fail('Неизвестный трекер.');
+        $was = Accounts::get($name) + array('timezone' => Accounts::timezone($name), 'cookie' => Accounts::cookie($name),
+            'proxy' => isset(Accounts::proxies()[$name]) ? json_encode(Accounts::proxies()[$name]) : '');
         $fields = array('login' => $this->str('login'), 'passkey' => $this->str('passkey'), 'address' => $this->str('address'), 'timezone' => $this->str('timezone'));
         if ($fields['timezone'] !== '' && ! Time::valid($fields['timezone']))
             $this->fail('Неизвестный часовой пояс: '.$fields['timezone']);
@@ -483,6 +492,18 @@ final class Ui
         App::resetHttp();
         Registry::reset();
         Warnings::clear($name);
+
+        $now = Accounts::get($name) + array('timezone' => Accounts::timezone($name), 'cookie' => Accounts::cookie($name),
+            'proxy' => isset($proxies[$name]) ? json_encode($proxies[$name]) : '');
+        $changes = array();
+        foreach (array('login' => 'логин', 'password' => 'пароль', 'passkey' => 'passkey', 'cookie' => 'cookie', 'proxy' => 'прокси') as $key => $title)
+            if ($was[$key] !== $now[$key])
+                $changes[] = $title.($now[$key] === '' ? ($key == 'proxy' ? ': как в общих настройках' : ' удалён') : ' изменён');
+        foreach (array('address' => 'адрес', 'timezone' => 'часовой пояс') as $key => $title)
+            if ($was[$key] !== $now[$key])
+                $changes[] = $title.': '.($was[$key] === '' ? 'по умолчанию' : $was[$key]).' → '.($now[$key] === '' ? 'по умолчанию' : $now[$key]);
+        if ( ! empty($changes))
+            Journal::add('tracker', 'Трекер '.$name.' (интерфейс): '.implode(', ', $changes));
         return array('message' => 'Сохранено.') + $this->doOverview();
     }
 
@@ -494,6 +515,7 @@ final class Ui
             $this->fail('Неизвестный трекер.');
         Accounts::set($name, array('login' => '', 'password' => '', 'passkey' => ''));
         Accounts::setCookie($name, '');
+        Journal::add('tracker', 'Трекер '.$name.' (интерфейс): учётные данные удалены');
         App::resetHttp();
         Registry::reset();
         Warnings::clear($name);
@@ -546,6 +568,8 @@ final class Ui
         //empty - the default; otherwise within bounds a tracker and a small computer can bear
         if (isset($values['httpConcurrency']) && $values['httpConcurrency'] !== '')
             $values['httpConcurrency'] = (string)min(50, max(1, (int)$values['httpConcurrency']));
+        if (isset($values['journalSize']))
+            $values['journalSize'] = (string)min(100000, max(0, (int)$values['journalSize']));
         if (isset($values['httpSites']))
             $values['httpSites'] = (string)min(10, max(1, (int)$values['httpSites'] ?: 3));
         if (isset($values['dataFileMode']) && $values['dataFileMode'] !== '' && ! Files::validMode($values['dataFileMode']))
@@ -576,6 +600,7 @@ final class Ui
                 Settings::setNotificationAddress($id, $this->str('notify'.$what.'Address'));
         }
         $channel = Release::channel();
+        $before = Settings::all();
         //the files are written with the new access mode at once, this one included
         if (isset($values['dataFileMode']))
             Files::setMode($values['dataFileMode']);
@@ -583,6 +608,12 @@ final class Ui
         if (isset($values['dataFileMode']))
             Files::setMode($values['dataFileMode']);
         App::resetHttp();
+        Journal::settings($before, Settings::all());
+        //what was known about a client or a solver does not describe another one
+        if (Clients::currentName() === NULL)
+            State::forgetService('client');
+        if ((string)Settings::get('flaresolverrUrl') === '')
+            State::forgetService('solver');
 
         //another update channel: its newest version is installed even if it is lower than the installed one.
         //Switching automatic updates off is not a request to go back to the regular releases.
@@ -619,6 +650,7 @@ final class Ui
         Auth::setPassword($password);
         Settings::set('auth', '1');
         $_SESSION['in'] = TRUE;
+        Journal::add('access', 'Пароль входа изменён');
         return array('message' => 'Пароль изменён.') + $this->doOverview();
     }
 
@@ -627,6 +659,7 @@ final class Ui
     {
         $key = bin2hex(random_bytes(32));
         Settings::set('ApiKey', $key);
+        Journal::add('access', 'Ключ API создан заново');
         return array('key' => $key, 'message' => 'Создан новый ключ API. Прежний больше не действует.') + $this->doOverview();
     }
 
@@ -650,7 +683,16 @@ final class Ui
         $problem = Health::clientProblem();
         if ($problem !== NULL)
             $this->fail($problem);
-        return array('message' => 'Подключение к '.Clients::currentName().' работает.');
+        //the client has just answered: what it says about itself is remembered for the log
+        About::seeClient();
+        $seen = State::service('client');
+        return array('message' => 'Подключение к '.Clients::currentName().($seen !== NULL && $seen['version'] !== '' ? ' '.$seen['version'] : '').' работает.');
+    }
+
+    //«Скопировать сведения»: what TorrentMonitor runs with, as text for a bug report
+    private function doAbout(): array
+    {
+        return array('text' => implode("\n", About::lines()));
     }
 
     //«Сохранить и проверить подключение» of the network settings
@@ -698,6 +740,7 @@ final class Ui
 
     private function startRun(array $options): array
     {
+        $options['by'] = 'manual';
         if (Lock::busy())
             return array('message' => 'Проверка уже выполняется.', 'running' => TRUE);
         if (Launcher::start($options) === NULL)
