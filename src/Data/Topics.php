@@ -108,9 +108,13 @@ final class Topics
             return 0;
         Files::torrents()->update(function (&$data) use ($updates, &$found) {
             $changed = FALSE;
+            //one pass over the list instead of a search per topic: a run saves hundreds at once
+            $places = array();
+            foreach ($data['topics'] as $i => $item)
+                $places[(string)$item['id']] = $i;
             foreach ($updates as $id => $fields)
             {
-                $i = self::index($data['topics'], $id);
+                $i = isset($places[(string)$id]) ? $places[(string)$id] : NULL;
                 if ($i === NULL)
                     continue;
                 $found++;

@@ -143,4 +143,53 @@ final class EngineRutrackerTest extends IntegrationTestCase
 
         $this->assertTrue(Qbt::has(TorrentBuilder::infoHash(108, 1)));
     }
+
+    // A run loads the pages a hundred topics at a time and saves what it finds once per part.
+    // Every topic must still be handled, whether it has an update, has none or fails.
+    public function testManyTopicsAreCheckedInParts()
+    {
+        $this->loginToTracker();
+        AppState::setSettings(array('useTorrent' => '0'));
+        $count = 230;
+        $topics = array();
+        for ($i = 0; $i < $count; $i++)
+        {
+            $topicId = 60000 + $i;
+            \TorrentMonitor\Data\Topics::add(array('tracker' => 'rutracker.org', 'topicId' => (string)$topicId, 'name' => 'Тема '.$topicId));
+            $topics[(string)$topicId] = array('title' => 'Тема '.$topicId, 'date' => '21-Ноя-26 10:00', 'revision' => 1);
+        }
+        Env::fake(array('rutracker' => array('topics' => $topics)));
+
+        // first run: every topic is new
+        $output = Env::runEngine();
+        $stored = AppState::topics();
+        $this->assertCount($count, $stored);
+        foreach ($stored as $topic)
+            $this->assertSame(array('2026-11-21 10:00:00', 0), array($topic['timestamp'], (int)$topic['error']), 'topic '.$topic['torrent_id']);
+        $this->assertNoWarnings();
+        $this->assertSame($count, substr_count($output, 'обновлён'), $output);
+
+        // second run: nothing changed, nothing is downloaded
+        array_map('unlink', glob('/app/torrents/*.torrent'));
+        Env::runEngine();
+        $this->assertSame(array(), glob('/app/torrents/*.torrent'));
+        $this->assertNoWarnings();
+
+        // every topic fails at once: all are marked, all errors are recorded, one notification is due
+        $gone = array();
+        foreach (array_keys($topics) as $topicId)
+            $gone[$topicId] = null;
+        Env::fake(array('rutracker' => array('topics' => $gone)));
+        Env::runEngine();
+        foreach (AppState::topics() as $topic)
+            $this->assertSame(1, (int)$topic['error'], 'topic '.$topic['torrent_id']);
+        $this->assertCount($count, AppState::warnings());
+
+        // and they recover together
+        Env::fake(array('rutracker' => array('topics' => $topics)));
+        Env::runEngine();
+        foreach (AppState::topics() as $topic)
+            $this->assertSame(0, (int)$topic['error'], 'topic '.$topic['torrent_id']);
+        $this->assertNoWarnings();
+    }
 }
