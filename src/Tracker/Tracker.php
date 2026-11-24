@@ -235,6 +235,12 @@ abstract class Tracker
     }
 
     // month as a word (янв, Feb, марта...) -> number '01'..'12'; NULL if not recognized
+    // the time zone the tracker shows its dates in
+    protected function zone(): \DateTimeZone
+    {
+        return \TorrentMonitor\Time::zone($this->name);
+    }
+
     public static function monthNumber(string $month): ?string
     {
         $names = array('янв' => '01', 'фев' => '02', 'мар' => '03', 'апр' => '04', 'мая' => '05', 'май' => '05', 'июн' => '06',

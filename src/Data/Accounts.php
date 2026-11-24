@@ -19,6 +19,13 @@ final class Accounts
         );
     }
 
+    // Time zone the tracker shows its dates in; '' - as in the general settings
+    public static function timezone(string $tracker): string
+    {
+        $config = Files::config()->read();
+        return isset($config['trackers'][$tracker]['timezone']) ? (string)$config['trackers'][$tracker]['timezone'] : '';
+    }
+
     // Whether the login and password are set
     public static function filled(string $tracker): bool
     {
@@ -26,13 +33,16 @@ final class Accounts
         return trim($account['login']) !== '' && trim($account['password']) !== '';
     }
 
-    // Saves the given fields (login, password, passkey, address), leaves the rest untouched
+    // Saves the given fields (login, password, passkey, address, timezone), leaves the rest untouched
     public static function set(string $tracker, array $fields): void
     {
-        $fields = array_intersect_key($fields, array('login' => 1, 'password' => 1, 'passkey' => 1, 'address' => 1));
+        $fields = array_intersect_key($fields, array('login' => 1, 'password' => 1, 'passkey' => 1, 'address' => 1, 'timezone' => 1));
         Files::config()->update(function (&$data) use ($tracker, $fields) {
             $before = isset($data['trackers'][$tracker]) ? (array)$data['trackers'][$tracker] : array();
             $after = array_merge($before, array_map('strval', $fields));
+            //no own time zone is the usual case: it is not written at all
+            if (isset($after['timezone']) && $after['timezone'] === '')
+                unset($after['timezone']);
             if ($after === $before)
                 return FALSE;
             $data['trackers'][$tracker] = $after;

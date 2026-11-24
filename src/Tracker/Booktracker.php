@@ -49,10 +49,10 @@ final class Booktracker extends ForumTracker
         if ( ! preg_match('/Зарегистрирован(?:&nbsp;|\x{A0}|\s)*\[\s*<span[^>]*>([^<]+)<\/span>/u', $page, $m))
             return NULL;
         //2026-11-21 10:00
-        $time = strtotime(trim($m[1]));
-        if ($time === FALSE)
+        $time = \TorrentMonitor\Time::read($m[1], $this->zone());
+        if ($time === NULL)
             return NULL;
-        return array(date('Y-m-d H:i:s', $time), date('Y', $time).' '.self::monthName(date('n', $time)).' '.date('d H:i:s', $time));
+        return array($time->format('Y-m-d H:i:s'), $time->format('Y').' '.self::monthName($time->format('n')).' '.$time->format('d H:i:s'));
     }
 
     protected function parseTitle(string $page): ?string

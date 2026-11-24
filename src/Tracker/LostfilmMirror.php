@@ -64,7 +64,7 @@ final class LostfilmMirror extends SeriesTracker
                     throw $e;
                 break;
             }
-            list($date, $dateText) = self::date((string)$item->pubDate);
+            list($date, $dateText) = $this->feedDate((string)$item->pubDate);
             $file = str_replace(' ', '.', $topic['name']).'.S'.$se[1].'E'.$se[2].'.'.$quality[1];
             $release = new Found($torrent, $date, $dateText, $file, self::message($topic['name'], $quality[1], $season, $episode));
             $release->episode = 'S'.$se[1].'E'.$se[2];
@@ -72,13 +72,5 @@ final class LostfilmMirror extends SeriesTracker
             $have = $release->episode;
         }
         return $found;
-    }
-
-    // date from the feed as is, without time zone conversion: array('Y-m-d H:i:s', 'd Mon Y H:i:s')
-    private static function date(string $pubDate): array
-    {
-        if ( ! preg_match('/(\d{1,2})\s+(\w{3})\s+(\d{4})\s+(\d{2}:\d{2}:\d{2})/', $pubDate, $m) || self::monthNumber($m[2]) === NULL)
-            return self::feedDate($pubDate);
-        return array($m[3].'-'.self::monthNumber($m[2]).'-'.sprintf('%02d', $m[1]).' '.$m[4], $m[1].' '.$m[2].' '.$m[3].' '.$m[4]);
     }
 }

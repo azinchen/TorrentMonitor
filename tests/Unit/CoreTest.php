@@ -234,13 +234,47 @@ final class CoreTest extends TestCase
 
     public function testKinozalDates()
     {
-        $now = strtotime('2026-11-22 12:34:56');
+        // 12:34 UTC is 15:34 on the tracker's (Moscow) clock
+        $now = strtotime('2026-11-22 12:34:56 UTC');
         $this->assertSame(array('2026-11-05 10:15:00', '5 ноября 2026 в 10:15'), Kinozal::date('5 ноября 2026 в 10:15', $now));
         $this->assertSame('2026-11-22 09:07:00', Kinozal::date('сегодня в 09:07', $now)[0]);
         $this->assertSame('2026-11-21 23:00:00', Kinozal::date('вчера в 23:00', $now)[0]);
         $this->assertSame('21 Ноя 2026 в 23:00', Kinozal::date('вчера в 23:00', $now)[1]);
-        $this->assertSame('2026-11-22 12:34:00', Kinozal::date('сейчас', $now)[0]);
+        $this->assertSame('2026-11-22 15:34:00', Kinozal::date('сейчас', $now)[0]);
         $this->assertNull(Kinozal::date('когда-то', $now));
+    }
+
+    // "today" of the tracker is not "today" of a server in another time zone: the date must not
+    // depend on where the server is, or the topic looks changed and is downloaded again
+    public function testKinozalTodayIsTheDayOfTheTracker()
+    {
+        // 22 Nov 22:30 UTC: already 23 Nov 01:30 in Moscow, still 22 Nov 17:30 in New York
+        $now = strtotime('2026-11-22 22:30:00 UTC');
+        $before = date_default_timezone_get();
+        foreach (array('UTC', 'America/New_York', 'Asia/Vladivostok') as $server)
+        {
+            date_default_timezone_set($server);
+            $this->assertSame('2026-11-23 01:10:00', Kinozal::date('сегодня в 01:10', $now)[0], 'server in '.$server);
+            $this->assertSame('2026-11-22 19:00:00', Kinozal::date('вчера в 19:00', $now)[0], 'server in '.$server);
+        }
+        date_default_timezone_set($before);
+        // a tracker set to another zone
+        $this->assertSame('2026-11-22 17:00:00', Kinozal::date('сегодня в 17:00', $now, new \DateTimeZone('America/New_York'))[0]);
+    }
+
+    public function testTimeZones()
+    {
+        $moscow = new \DateTimeZone('Europe/Moscow');
+        $this->assertSame('2026-11-23T11:23:00Z', \TorrentMonitor\Time::utc('2026-11-23 14:23:00', $moscow));
+        $this->assertSame('', \TorrentMonitor\Time::utc('', $moscow));
+        $this->assertSame('', \TorrentMonitor\Time::utc('not a date', $moscow));
+        $this->assertSame('МСК', \TorrentMonitor\Time::label($moscow));
+        $this->assertSame('EST', \TorrentMonitor\Time::label(new \DateTimeZone('America/New_York'), '2026-11-23 10:00:00'));
+        $this->assertSame('UTC+5', \TorrentMonitor\Time::label(new \DateTimeZone('Asia/Yekaterinburg'), '2026-11-23 10:00:00'));
+        $this->assertSame('UTC+5:45', \TorrentMonitor\Time::label(new \DateTimeZone('Asia/Kathmandu'), '2026-11-23 10:00:00'));
+        $this->assertTrue(\TorrentMonitor\Time::valid('Europe/Kyiv') || \TorrentMonitor\Time::valid('Europe/Kiev'));
+        $this->assertFalse(\TorrentMonitor\Time::valid('Mars/Olympus'));
+        $this->assertFalse(\TorrentMonitor\Time::valid(''));
     }
 
     public function testNewerEpisode()

@@ -18,12 +18,13 @@ final class Rutor extends ForumTracker
         if ( ! preg_match('/<td class=\"header\">Добавлен<\/td><td>(.+) \((.+) назад\)<\/td>/', $page, $m))
             return NULL;
         //21-11-2026 10:15:30
-        $time = strtotime($m[1]);
-        if ($time === FALSE)
+        //read on the tracker's clock: the server's clock may have no such hour on the day it changes
+        $time = \TorrentMonitor\Time::read($m[1], $this->zone());
+        if ($time === NULL)
             return NULL;
         $parts = preg_split('/\s/', str_replace('-', ' ', $m[1]));
         $text = count($parts) >= 4 ? $parts[0].' '.self::monthText($parts[1]).' '.$parts[2].' '.$parts[3] : $m[1];
-        return array(date('Y-m-d H:i:s', $time), $text);
+        return array($time->format('Y-m-d H:i:s'), $text);
     }
 
     private static function monthText(string $month): string

@@ -2,6 +2,7 @@
 namespace TorrentMonitor\Tracker;
 
 use TorrentMonitor\Http\Request;
+use TorrentMonitor\Time;
 
 // kinozal.me and its mirrors kinozal.guru, kinozal.tv: one site under different addresses, with the
 // same accounts. The kinozal.tv domain no longer resolves (November 2026); its entry is kept so that
@@ -51,22 +52,23 @@ final class Kinozal extends ForumTracker
         if ( ! preg_match('/<li>Обновлен<span class="floatright green n">(.*)<\/span><\/li>/U', $page, $m)
             && ! preg_match('/<li>Залит<span class="floatright green n">(.*)<\/span><\/li>/U', $page, $m))
             return NULL;
-        return self::date(trim($m[1]));
+        return self::date(trim($m[1]), NULL, $this->zone());
     }
 
     //"сегодня в 10:15", "вчера в 23:00", "сейчас", "5 ноября 2026 в 10:15"
-    public static function date(string $text, ?int $now = NULL): ?array
+    // "today" and "yesterday" are days of the tracker's clock, not of the server's
+    public static function date(string $text, ?int $now = NULL, ?\DateTimeZone $zone = NULL): ?array
     {
-        $now = $now === NULL ? time() : $now;
+        $current = Time::at($zone ?: new \DateTimeZone(Time::DEFAULT_ZONE), $now);
         if (strpos($text, 'сейчас') !== FALSE)
-            $time = $now - $now % 60;
+            $time = $current->setTime((int)$current->format('G'), (int)$current->format('i'), 0);
         elseif (preg_match('/^(сегодня|вчера)\s+в\s+(\d{1,2}):(\d{2})/u', $text, $m))
-            $time = strtotime(date('Y-m-d', $m[1] == 'вчера' ? $now - 86400 : $now).sprintf(' %02d:%s:00', $m[2], $m[3]));
+            $time = ($m[1] == 'вчера' ? $current->modify('-1 day') : $current)->setTime((int)$m[2], (int)$m[3], 0);
         elseif (preg_match('/^(\d{1,2})\s+(\S+)\s+(\d{4})\s+в\s+(\d{1,2}):(\d{2})/u', $text, $m) && self::monthNumber($m[2]) !== NULL)
             return array(sprintf('%s-%s-%02d %02d:%s:00', $m[3], self::monthNumber($m[2]), $m[1], $m[4], $m[5]), $text);
         else
             return NULL;
-        return array(date('Y-m-d H:i:s', $time), date('d', $time).' '.self::monthName(date('n', $time)).' '.date('Y', $time).' в '.date('H:i', $time));
+        return array($time->format('Y-m-d H:i:s'), $time->format('d').' '.self::monthName($time->format('n')).' '.$time->format('Y').' в '.$time->format('H:i'));
     }
 
     protected function parseTitle(string $page): ?string

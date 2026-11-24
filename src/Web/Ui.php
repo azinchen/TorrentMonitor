@@ -18,6 +18,7 @@ use TorrentMonitor\Messages;
 use TorrentMonitor\Notify\Notifications;
 use TorrentMonitor\Storage\Files;
 use TorrentMonitor\Storage\StorageException;
+use TorrentMonitor\Time;
 use TorrentMonitor\Tracker\Registry;
 use TorrentMonitor\Tracker\TrackerException;
 use TorrentMonitor\Update\Release;
@@ -34,7 +35,7 @@ final class Ui
     const SETTINGS = array('serverAddress', 'auth', 'rss', 'debug', 'autoUpdate', 'userAgent', 'httpTimeout', 'flaresolverrUrl',
         'proxy', 'proxyAddress', 'proxyType', 'useTorrent', 'torrentClient', 'torrentAddress', 'torrentLogin', 'pathToDownload',
         'qbitCategory', 'deleteDistribution', 'deleteOldFiles', 'deleteFilesOnRemove', 'stopAfterDays', 'removeOnSeriesDelete', 'sonarrReplaceTopic', 'sonarrReplaceTorrent',
-        'send', 'sendUpdate', 'sendWarning');
+        'send', 'sendUpdate', 'sendWarning', 'trackerTimezone');
 
     private array $in = array();
 
@@ -162,7 +163,7 @@ final class Ui
         $stopAfter = (int)$settings['stopAfterDays'];
         $warnings = array();
         foreach (Warnings::all() as $w)
-            $warnings[] = array('id' => $w['id'], 'time' => $w['time'], 'source' => $w['source'], 'code' => $w['code'],
+            $warnings[] = array('id' => $w['id'], 'time' => $w['time'], 'timeUtc' => Time::serverUtc((string)$w['time']), 'source' => $w['source'], 'code' => $w['code'],
                 'text' => Messages::text($w['code']), 'topic' => $w['topicId']);
 
         $topics = array();
@@ -170,7 +171,11 @@ final class Ui
         foreach (Topics::all() as $t)
         {
             $known = Registry::has($t['tracker']);
+            $zone = Time::zone($t['tracker']);
             $topics[] = array(
+                //the release date is the tracker's clock, the rest is the server's: the page shows both in the browser's time zone
+                'updatedAtUtc' => Time::utc((string)$t['updatedAt'], $zone), 'zone' => Time::label($zone, (string)$t['updatedAt']),
+                'addedAtUtc' => Time::serverUtc((string)$t['addedAt']),
                 'id' => $t['id'], 'tracker' => $t['tracker'], 'kind' => $known ? Registry::kind($t['tracker']) : 'topic', 'name' => $t['name'],
                 'topicId' => $t['topicId'], 'url' => $known && $t['topicId'] !== '' ? Registry::get($t['tracker'])->topicUrl($t['topicId']) : '',
                 'quality' => $t['quality'], 'episode' => $t['episode'], 'updatedAt' => $t['updatedAt'], 'autoRename' => (bool)$t['autoRename'],
@@ -204,7 +209,7 @@ final class Ui
             $trackers[] = array(
                 'name' => $name, 'kind' => Registry::kind($name), 'needsAccount' => Registry::needsAccount($name), 'watchesUsers' => Registry::watchesUsers($name),
                 'ready' => Registry::ready($name), 'login' => $account['login'], 'hasPassword' => $account['password'] !== '', 'passkey' => $account['passkey'],
-                'usesPasskey' => FALSE, 'address' => $account['address'], 'defaultAddress' => Registry::get($name)->base(),
+                'usesPasskey' => FALSE, 'address' => $account['address'], 'timezone' => Accounts::timezone($name), 'defaultAddress' => Registry::get($name)->base(),
                 'hasCookie' => Accounts::cookie($name) !== '',
                 'proxy' => isset($proxy['use']) ? ($proxy['use'] == 'yes' ? 'own' : 'off') : 'default',
                 'proxyAddress' => isset($proxy['address']) ? (string)$proxy['address'] : '', 'proxyType' => isset($proxy['type']) ? strtoupper((string)$proxy['type']) : 'SOCKS5',
@@ -228,8 +233,9 @@ final class Ui
             'topics' => $topics, 'users' => $users, 'trackers' => $trackers, 'settings' => $shown, 'warnings' => $warnings,
             'categories' => Topics::categories(), 'sonarrTitles' => Topics::sonarrTitles(), 'clients' => array_keys(Clients::CLASSES),
             'services' => array_values(array_unique(array_column(Settings::notificationServices(), 'service'))),
+            'timezones' => Time::names(),
             'status' => array(
-                'version' => App::version(), 'lastRun' => State::lastRun(), 'running' => Lock::busy(), 'client' => Clients::currentName(),
+                'version' => App::version(), 'lastRun' => State::lastRun(), 'lastRunUtc' => Time::serverUtc((string)State::lastRun()), 'running' => Lock::busy(), 'client' => Clients::currentName(),
                 'authRequired' => Auth::required(), 'wiki' => Release::wikiUrl(),
                 'update' => Release::isNewer($release) ? array('version' => $release['version'], 'notes' => $release['notes'], 'url' => $release['url']) : NULL,
             ),
@@ -442,7 +448,9 @@ final class Ui
         $name = $this->str('name');
         if ( ! Registry::has($name))
             $this->fail('Неизвестный трекер.');
-        $fields = array('login' => $this->str('login'), 'passkey' => $this->str('passkey'), 'address' => $this->str('address'));
+        $fields = array('login' => $this->str('login'), 'passkey' => $this->str('passkey'), 'address' => $this->str('address'), 'timezone' => $this->str('timezone'));
+        if ($fields['timezone'] !== '' && ! Time::valid($fields['timezone']))
+            $this->fail('Неизвестный часовой пояс: '.$fields['timezone']);
         $password = isset($this->in['password']) ? (string)$this->in['password'] : '';
         //the saved password is not sent to the browser: an empty field means "do not change"
         if ($password !== '')
@@ -535,6 +543,8 @@ final class Ui
         foreach (array('httpTimeout' => 1, 'stopAfterDays' => 0) as $key => $min)
             if (isset($values[$key]))
                 $values[$key] = (string)max($min, (int)$values[$key]);
+        if (isset($values['trackerTimezone']) && ! Time::valid($values['trackerTimezone']))
+            $this->fail('Неизвестный часовой пояс: '.$values['trackerTimezone']);
         if (isset($values['torrentClient']) && $values['torrentClient'] !== '' && ! isset(Clients::CLASSES[$values['torrentClient']]))
             $this->fail('Неизвестный torrent-клиент.');
         if (isset($values['auth']) && $values['auth'] == '1' && (string)Settings::get('password') === '')

@@ -26,7 +26,7 @@ document.addEventListener('alpine:init', () => {
         toasts: [],
 
         // data from the server
-        topics: [], users: [], trackers: [], settings: {}, warnings: [], categories: [], sonarrTitles: [], clients: [], services: [],
+        topics: [], users: [], trackers: [], settings: {}, warnings: [], categories: [], sonarrTitles: [], clients: [], services: [], timezones: [],
         status: { version: '', lastRun: '', running: false, client: null, update: null, authRequired: true, wiki: '' },
 
         // forms
@@ -77,7 +77,7 @@ document.addEventListener('alpine:init', () => {
 
         // distributes the server response into fields
         apply(data) {
-            for (const key of ['topics', 'users', 'trackers', 'warnings', 'categories', 'sonarrTitles', 'clients', 'services', 'status']) {
+            for (const key of ['topics', 'users', 'trackers', 'warnings', 'categories', 'sonarrTitles', 'clients', 'services', 'timezones', 'status']) {
                 if (data[key] !== undefined) this[key] = data[key];
             }
             if (data.settings !== undefined) {
@@ -194,7 +194,7 @@ document.addEventListener('alpine:init', () => {
                         default: return true;
                     }
                 })
-                .sort((a, b) => (b.updatedAt || b.addedAt).localeCompare(a.updatedAt || a.addedAt));
+                .sort((a, b) => (b.updatedAtUtc || b.addedAtUtc || b.updatedAt || b.addedAt).localeCompare(a.updatedAtUtc || a.addedAtUtc || a.updatedAt || a.addedAt));
         },
         get usedTrackers() { return [...new Set(this.topics.map(t => t.tracker))].sort(); },
         get topicTrackers() { return this.trackers.filter(t => t.kind === 'topic'); },
@@ -249,7 +249,7 @@ document.addEventListener('alpine:init', () => {
 
         // ---- trackers
         editableTracker(t) {
-            return { name: t.name, login: t.login, password: '', passkey: t.passkey, address: t.address, cookie: '', clearCookie: false,
+            return { name: t.name, login: t.login, password: '', passkey: t.passkey, address: t.address, timezone: t.timezone || '', cookie: '', clearCookie: false,
                 proxy: t.proxy, proxyAddress: t.proxyAddress, proxyType: t.proxyType || 'SOCKS5', showCookie: false };
         },
         toggleTracker(t) {
@@ -385,6 +385,19 @@ document.addEventListener('alpine:init', () => {
             const months = ['янв', 'фев', 'мар', 'апр', 'мая', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек'];
             const year = Number(m[1]) === new Date().getFullYear() ? '' : ' ' + m[1];
             return Number(m[3]) + ' ' + months[Number(m[2]) - 1] + year + (m[4] ? ', ' + m[4] + ':' + m[5] : '');
+        },
+        // a moment (UTC, 2026-11-23T11:23:00Z) on the clock of this browser; $fallback - the stored text, if there is no moment
+        local(utc, fallback) {
+            const time = utc ? new Date(utc) : null;
+            if (!time || isNaN(time)) return this.date(fallback);
+            const pad = n => String(n).padStart(2, '0');
+            return this.date(time.getFullYear() + '-' + pad(time.getMonth() + 1) + '-' + pad(time.getDate()) + ' ' + pad(time.getHours()) + ':' + pad(time.getMinutes()));
+        },
+        // the release date as the tracker shows it, when that differs from the browser's clock
+        trackerTime(t) {
+            if (!t.updatedAt || !t.updatedAtUtc) return '';
+            const own = this.date(t.updatedAt);
+            return own === this.local(t.updatedAtUtc, t.updatedAt) ? '' : 'на трекере ' + own + ' ' + t.zone;
         },
         icon(tracker) { return 'img/' + tracker + '.ico'; },
     }));
