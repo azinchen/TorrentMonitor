@@ -671,7 +671,8 @@ final class Ui
 
     private function doRun(): array
     {
-        return $this->startRun(array());
+        //«Проверить сейчас»: a new version is looked for now too, and installed if updates are automatic
+        return $this->startRun(array('fresh' => TRUE));
     }
 
     private function startRun(array $options): array

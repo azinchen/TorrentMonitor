@@ -8,7 +8,7 @@ use TorrentMonitor\Tracker\Registry;
 final class Launcher
 {
     // Starts engine.php as a separate process. Returns NULL on success or the reason why it is impossible.
-    //$options: tracker, topic
+    //$options: tracker, topic, fresh (look for a new version now)
     public static function start(array $options = array()): ?string
     {
         if ( ! function_exists('exec'))
@@ -22,6 +22,8 @@ final class Launcher
             $command .= ' '.escapeshellarg('--tracker='.$options['tracker']);
         if ( ! empty($options['topic']))
             $command .= ' --topic='.(int)$options['topic'];
+        if ( ! empty($options['fresh']))
+            $command .= ' --fresh';
         exec($command.' > /dev/null 2>&1 &');
         return NULL;
     }
