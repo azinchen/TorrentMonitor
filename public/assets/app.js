@@ -22,6 +22,9 @@ document.addEventListener('alpine:init', () => {
         pages: PAGES,
         theme: localStorage.getItem('tm-theme') || 'auto',
         advanced: localStorage.getItem('tm-advanced') === '1',  // settings: show the ones that rarely need changing
+        sort: ['new', 'old', 'az', 'za'].includes(localStorage.getItem('tm-sort')) ? localStorage.getItem('tm-sort') : 'new',   // order of the topics list
+        pageSize: ['50', '100', '200', 'all'].includes(localStorage.getItem('tm-page-size')) ? localStorage.getItem('tm-page-size') : '50',   // topics on one page
+        pageNo: 0,              // page of the topics list being shown, from 0
         compact: localStorage.getItem('tm-compact') === '1',   // topics list: one line per topic
         expanded: null,         // topic shown in full while the list is compact
         toasts: [],
@@ -49,6 +52,11 @@ document.addEventListener('alpine:init', () => {
         // ---- startup
         async init() {
             this.applyTheme();
+            // another search, filter, order or page size: the list starts from its first page again
+            for (const what of ['filter.text', 'filter.tracker', 'filter.state', 'sort', 'pageSize'])
+                this.$watch(what, () => { this.pageNo = 0; });
+            this.$watch('sort', value => localStorage.setItem('tm-sort', value));
+            this.$watch('pageSize', value => localStorage.setItem('tm-page-size', value));
             const fromHash = location.hash.slice(1);
             if (PAGES.some(p => p.id === fromHash)) this.page = fromHash;
             window.addEventListener('hashchange', () => {
@@ -183,8 +191,17 @@ document.addEventListener('alpine:init', () => {
         },
 
         // ---- topics
-        get shownTopics() {
+        // the topics that pass the search and the filters, in the chosen order
+        get foundTopics() {
             const text = this.filter.text.trim().toLowerCase();
+            const when = t => t.updatedAtUtc || t.addedAtUtc || t.updatedAt || t.addedAt || '';
+            const byName = (a, b) => (a.name || '').localeCompare(b.name || '', 'ru', { numeric: true, sensitivity: 'base' }) || a.id - b.id;
+            const order = {
+                new: (a, b) => when(b).localeCompare(when(a)) || b.id - a.id,
+                old: (a, b) => when(a).localeCompare(when(b)) || a.id - b.id,
+                az: byName,
+                za: (a, b) => byName(b, a),
+            }[this.sort];
             return this.topics
                 .filter(t => !this.filter.tracker || t.tracker === this.filter.tracker)
                 .filter(t => !text || (t.name + ' ' + t.tracker + ' ' + t.category).toLowerCase().includes(text))
@@ -196,7 +213,27 @@ document.addEventListener('alpine:init', () => {
                         default: return true;
                     }
                 })
-                .sort((a, b) => (b.updatedAtUtc || b.addedAtUtc || b.updatedAt || b.addedAt).localeCompare(a.updatedAtUtc || a.addedAtUtc || a.updatedAt || a.addedAt));
+                .sort(order);
+        },
+        // how many topics one page holds (0 - all of them) and how many pages there are
+        get perPage() { return this.pageSize === 'all' ? 0 : Number(this.pageSize); },
+        get pageCount() { return this.perPage ? Math.max(1, Math.ceil(this.foundTopics.length / this.perPage)) : 1; },
+        // the page being shown: a list that got shorter may no longer have the page that was open
+        get currentPage() { return Math.min(this.pageNo, this.pageCount - 1); },
+        // only the topics of the current page are drawn
+        get shownTopics() {
+            if (!this.perPage) return this.foundTopics;
+            return this.foundTopics.slice(this.currentPage * this.perPage, (this.currentPage + 1) * this.perPage);
+        },
+        // "1–50 из 1 234"
+        get pageText() {
+            const total = this.foundTopics.length;
+            const from = this.currentPage * this.perPage + 1;
+            return from + '–' + Math.min(total, from + this.perPage - 1) + ' из ' + total.toLocaleString('ru');
+        },
+        turnPage(step) {
+            this.pageNo = Math.max(0, Math.min(this.pageCount - 1, this.currentPage + step));
+            document.querySelector('section .filters')?.scrollIntoView({ block: 'nearest' });
         },
         get usedTrackers() { return [...new Set(this.topics.map(t => t.tracker))].sort(); },
         get topicTrackers() { return this.trackers.filter(t => t.kind === 'topic'); },
