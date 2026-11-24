@@ -108,7 +108,7 @@ final class Health
         foreach (Registry::names() as $name)
         {
             //only trackers in use are checked: those with credentials or topics
-            if ( ! $this->used($name))
+            if ( ! self::used($name))
                 continue;
             $names[] = $name;
             $requests['t:'.$name] = Request::get(Registry::get($name)->base().'/')->follow()->tracker($name)->timeout(12);
@@ -150,7 +150,7 @@ final class Health
         }
     }
 
-    private function used(string $name): bool
+    private static function used(string $name): bool
     {
         if (Registry::needsAccount($name) && Registry::ready($name))
             return TRUE;
@@ -178,6 +178,58 @@ final class Health
     }
 
     //tries to log in to the torrent client; NULL - everything is fine, otherwise the error text
+    // Checks the network settings as they are saved: the internet (through the proxy, if one is
+    // set) and whether the Cloudflare solver answers at its address.
+    /** @return array[] array(ok: bool|null, text) */
+    public static function networkCheck(): array
+    {
+        $lines = array();
+        $http = App::http();
+        $proxy = Settings::on('proxy') ? (string)Settings::get('proxyAddress') : '';
+
+        //the internet, by the same addresses a check run uses
+        $urls = \Config::read('connectivity.url');
+        $urls = $urls === NULL ? Runner::CONNECTIVITY : array_filter((array)$urls);
+        if (empty($urls))
+            $urls = Runner::CONNECTIVITY;
+        $requests = array();
+        foreach (array_values($urls) as $url)
+            $requests[] = Request::get($url)->timeout(8)->binary();
+        $online = FALSE;
+        $reason = '';
+        foreach ($http->sendAll($requests) as $response)
+        {
+            if ($response->status != 0)
+                $online = TRUE;
+            else
+                $reason = $response->failureText();
+        }
+        if ($proxy !== '')
+            $lines[] = array($online, $online ? 'Прокси '.$proxy.' работает: интернет через него доступен.'
+                : 'Через прокси '.$proxy.' интернет недоступен'.($reason !== '' ? ': '.$reason : '').'.');
+        else
+            $lines[] = array($online, $online ? 'Подключение к интернету есть.' : 'Нет подключения к интернету'.($reason !== '' ? ': '.$reason : '').'.');
+
+        $solver = (string)Settings::get('flaresolverrUrl');
+        if ($solver === '')
+        {
+            $lines[] = array(NULL, 'Решатель Cloudflare не задан.');
+            return $lines;
+        }
+        //Only whether the solver answers at its address: no page is opened through it. FlareSolverr
+        //names itself and its version at "/", which is shown when it is there.
+        $response = $http->send(Request::get(rtrim($solver, '/').'/')->plain()->timeout(8));
+        if ($response->status == 0)
+            $lines[] = array(FALSE, 'Решатель Cloudflare '.$solver.' не отвечает'.($response->failureText() !== '' ? ': '.$response->failureText() : '').'.');
+        else
+        {
+            $about = json_decode($response->body, TRUE);
+            $name = is_array($about) && ! empty($about['version']) && is_scalar($about['version']) ? ' (версия '.$about['version'].')' : '';
+            $lines[] = array(TRUE, 'Решатель Cloudflare '.$solver.' отвечает'.$name.'.');
+        }
+        return $lines;
+    }
+
     public static function clientProblem(): ?string
     {
         try

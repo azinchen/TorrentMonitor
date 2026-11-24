@@ -350,7 +350,7 @@
         <label class="field field--advanced" x-show="advanced"><span>Права на файлы данных</span>
             <input type="text" x-model="settingsForm.dataFileMode" placeholder="по умолчанию" pattern="0?[67][0-7]{2}" maxlength="4">
             <small>Пусто — файлы доступны только пользователю, от имени которого работает TorrentMonitor. Чтобы их читали другие пользователи сервера, задайте права тремя цифрами, как в <code>chmod</code>: <code>640</code> — чтение для группы, <code>644</code> — чтение для всех. В файлах лежат пароли трекеров.</small></label>
-        <label class="field"><span>Прекращать проверку через</span>
+        <label class="field field--advanced" x-show="advanced"><span>Прекращать проверку через</span>
             <input type="number" min="0" x-model="settingsForm.stopAfterDays" required>
             <small>Дней без обновлений, после которых тема больше не проверяется. 0 — проверять всегда. У темы может быть своё значение.</small></label>
         <div class="actions"><button class="btn btn--primary" :disabled="!!busy">Сохранить</button></div>
@@ -438,7 +438,10 @@
         <label class="field field--advanced" x-show="advanced"><span>User-Agent</span>
             <input type="text" x-model="settingsForm.userAgent" required>
             <small>Так TorrentMonitor представляется трекерам.</small></label>
-        <div class="actions"><button class="btn btn--primary" :disabled="!!busy">Сохранить</button></div>
+        <div class="actions">
+            <button class="btn btn--primary" :disabled="!!busy">Сохранить</button>
+            <button type="button" class="btn" @click="testNetwork()" :disabled="!!busy" x-text="busy == 'network.test' ? 'Проверяю…' : 'Сохранить и проверить подключение'"></button>
+        </div>
     </form>
 
     <div class="card">

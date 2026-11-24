@@ -45,7 +45,13 @@ elseif ($path == '/' || $path == '/index.php')
     header('Cache-Control: no-cache');
     header('X-Frame-Options: DENY');
     header('Referrer-Policy: no-referrer');
-    echo str_replace('{{version}}', rawurlencode(App::version()), (string)file_get_contents(dirname(__DIR__).'/src/Web/page.html'));
+    //The address of the scripts and styles changes whenever the files do, so a browser never runs
+    //an old script with a new page. The version number alone is not enough: a copy installed from
+    //the version in development keeps its number from one change to the next.
+    $changed = 0;
+    foreach ((array)glob(__DIR__.'/assets/{*,vendor/*}', GLOB_BRACE) as $asset)
+        $changed = max($changed, (int)@filemtime($asset));
+    echo str_replace('{{version}}', rawurlencode(App::version().'-'.dechex($changed)), (string)file_get_contents(dirname(__DIR__).'/src/Web/page.html'));
 }
 else
 {
