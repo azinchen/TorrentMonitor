@@ -286,6 +286,9 @@ document.addEventListener('alpine:init', () => {
             return form;
         },
         saveSettings() { return this.act('settings.save', this.settingsForm); },
+        async testNetwork() {
+            if (await this.saveSettings()) await this.call('network.test');
+        },
         async testClient() {
             if (await this.saveSettings()) await this.call('client.test');
         },

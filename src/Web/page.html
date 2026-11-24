@@ -438,7 +438,10 @@
         <label class="field field--advanced" x-show="advanced"><span>User-Agent</span>
             <input type="text" x-model="settingsForm.userAgent" required>
             <small>Так TorrentMonitor представляется трекерам.</small></label>
-        <div class="actions"><button class="btn btn--primary" :disabled="!!busy">Сохранить</button></div>
+        <div class="actions">
+            <button class="btn btn--primary" :disabled="!!busy">Сохранить</button>
+            <button type="button" class="btn" @click="testNetwork()" :disabled="!!busy" x-text="busy == 'network.test' ? 'Проверяю…' : 'Сохранить и проверить подключение'"></button>
+        </div>
     </form>
 
     <div class="card">

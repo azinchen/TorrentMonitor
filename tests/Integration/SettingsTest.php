@@ -84,6 +84,40 @@ final class SettingsTest extends IntegrationTestCase
         $this->assertSame('', AppState::setting('httpConcurrency'));
     }
 
+    public function testNetworkSettingsAreChecked()
+    {
+        // nothing but the internet to check
+        $checked = Env::ui('network.test');
+        $this->assertTrue($checked['json']['ok'], $checked['body']);
+        $this->assertStringContainsString('Подключение к интернету есть.', $checked['json']['message']);
+        $this->assertStringContainsString('Решатель Cloudflare не задан.', $checked['json']['message']);
+
+        // a working solver: a page of a tracker in use is opened through it
+        AppState::setCredentials('rutracker.org', Env::TRACKER_USER, Env::TRACKER_PASS);
+        $this->assertTrue(Env::ui('settings.save', array('flaresolverrUrl' => Env::SOLVER))['json']['ok']);
+        $checked = Env::ui('network.test');
+        $this->assertTrue($checked['json']['ok'], $checked['body']);
+        $this->assertStringContainsString('Решатель Cloudflare '.Env::SOLVER.' работает: открыл https://rutracker.org/', $checked['json']['message']);
+        $this->assertNotEmpty(Env::fakeRequests('/solver/v1'), 'the solver was really asked to open a page');
+
+        // a solver that is there but cannot open the page, and one that is not there
+        Env::ui('settings.save', array('flaresolverrUrl' => Env::FAKE.'/github'));
+        $checked = Env::ui('network.test');
+        $this->assertFalse($checked['json']['ok']);
+        $this->assertStringContainsString('отвечает, но не смог открыть https://rutracker.org/', $checked['json']['message']);
+        Env::ui('settings.save', array('flaresolverrUrl' => 'http://127.0.0.1:9'));
+        $checked = Env::ui('network.test');
+        $this->assertFalse($checked['json']['ok']);
+        $this->assertStringContainsString('Решатель Cloudflare http://127.0.0.1:9 не отвечает.', $checked['json']['message']);
+        $this->assertStringContainsString('Подключение к интернету есть.', $checked['json']['message'], 'what works is reported too');
+
+        // a proxy that does not answer
+        Env::ui('settings.save', array('flaresolverrUrl' => '', 'proxy' => true, 'proxyAddress' => '127.0.0.1:1', 'proxyType' => 'HTTP'));
+        $checked = Env::ui('network.test');
+        $this->assertFalse($checked['json']['ok']);
+        $this->assertStringContainsString('Через прокси 127.0.0.1:1 интернет недоступен', $checked['json']['message']);
+    }
+
     public function testOnlyKnownSettingsAreAccepted()
     {
         $before = AppState::setting('ApiKey');

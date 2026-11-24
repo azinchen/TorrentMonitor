@@ -653,6 +653,27 @@ final class Ui
         return array('message' => 'Подключение к '.Clients::currentName().' работает.');
     }
 
+    //«Сохранить и проверить подключение» of the network settings
+    private function doNetworkTest(): array
+    {
+        @set_time_limit(120);
+        if (session_status() === PHP_SESSION_ACTIVE)
+            session_write_close();
+        App::resetHttp();
+        $failed = array();
+        $passed = array();
+        foreach (Health::networkCheck() as $line)
+        {
+            if ($line[0] === FALSE)
+                $failed[] = $line[1];
+            else
+                $passed[] = $line[1];
+        }
+        if ( ! empty($failed))
+            $this->fail(implode(' ', array_merge($failed, $passed)));
+        return array('message' => implode(' ', $passed));
+    }
+
     // ------------------------------------------------------------------ status
 
     private function doWarningsClear(): array
