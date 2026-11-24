@@ -124,6 +124,7 @@
     <header class="head">
         <h1>Торренты</h1>
         <div class="head__actions">
+            <label class="check check--inline" x-show="topics.length" title="Каждая тема в одну строку"><input type="checkbox" x-model="compact" @change="saveCompact()"> Компактно</label>
             <button class="btn btn--primary" @click="newTopic('topic')">Добавить тему</button>
             <button class="btn" @click="newTopic('series')" x-show="seriesTrackers.length">Добавить сериал</button>
         </div>
@@ -150,27 +151,27 @@
     </div>
     <div class="empty" x-show="topics.length && !shownTopics.length"><p class="muted">Ничего не найдено.</p></div>
 
-    <ul class="list">
+    <ul class="list" :class="{ 'list--compact': compact }">
         <template x-for="t in shownTopics" :key="t.id">
-            <li class="row" :class="{ 'row--dim': t.paused || t.stopped }">
+            <li class="row" :class="{ 'row--dim': t.paused || t.stopped, 'row--compact': compact && expanded !== t.id }">
                 <img class="row__icon" :src="icon(t.tracker)" alt="" width="16" height="16" loading="lazy" @error="$el.style.visibility = 'hidden'">
                 <div class="row__body">
-                    <div class="row__title">
+                    <div class="row__title" :title="compact ? (t.name || t.url) : null">
                         <a x-show="t.url" :href="t.url" target="_blank" rel="noopener" x-text="t.name || t.url"></a>
                         <span x-show="!t.url" x-text="t.name"></span>
                     </div>
                     <div class="row__meta">
                         <span x-text="t.tracker"></span>
-                        <span x-show="t.kind == 'series'" x-text="quality(t.quality) + (t.episode ? ' · ' + t.episode : '')"></span>
-                        <span x-show="t.updatedAt" x-text="'обновлена ' + date(t.updatedAt)"></span>
-                        <span x-show="!t.updatedAt">ещё не скачивалась</span>
+                        <span class="row__keep" x-show="t.kind == 'series'" x-text="quality(t.quality) + (t.episode ? ' · ' + t.episode : '')"></span>
+                        <span class="row__keep" x-show="t.updatedAt" x-text="'обновлена ' + date(t.updatedAt)"></span>
+                        <span class="row__keep" x-show="!t.updatedAt">ещё не скачивалась</span>
                         <span x-show="t.category" x-text="t.category"></span>
                         <span x-show="t.path" x-text="t.path"></span>
                         <span x-show="t.sonarrTitle" x-text="'Sonarr: ' + t.sonarrTitle + (t.sonarrSeasons.length ? ', сезон ' + t.sonarrSeasons.join(', ') : '')"></span>
                     </div>
                     <div class="row__flags">
                         <span class="tag tag--bad" x-show="!t.supported">трекер не поддерживается</span>
-                        <span class="tag tag--bad" x-show="t.error && t.supported">ошибка</span>
+                        <span class="tag tag--bad" x-show="t.error && t.supported" :title="compact ? topicWarnings(t).map(w => w.text).join('\n') : null">ошибка</span>
                         <span class="tag" x-show="t.paused">пауза</span>
                         <span class="tag" x-show="t.stopped && !t.paused" title="Тема давно не обновлялась">проверка прекращена</span>
                         <span class="tag tag--warn" x-show="t.waiting">ждёт torrent-клиент</span>
@@ -179,6 +180,7 @@
                         <div class="row__error" x-text="w.text"></div>
                     </template>
                 </div>
+                <button class="btn btn--small row__more" @click="expanded = expanded === t.id ? null : t.id" :title="expanded === t.id ? 'Свернуть' : 'Показать полностью'" x-text="expanded === t.id ? '▴' : '▾'"></button>
                 <div class="row__actions">
                     <button class="btn btn--small" @click="checkTopic(t)" :disabled="status.running" title="Проверить эту тему сейчас">Проверить</button>
                     <button class="btn btn--small" @click="togglePause(t)" x-text="t.paused ? 'Возобновить' : 'Пауза'"></button>

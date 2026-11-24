@@ -160,6 +160,21 @@ code { font-family: var(--mono); font-size: .9em; background: var(--surface-2); 
 .row__flags .tag { margin-top: .35rem; }
 .row__error { color: var(--bad); font-size: .87rem; margin-top: .25rem; }
 .row__actions { display: flex; gap: .35rem; justify-content: flex-end; flex: none; }
+.row .row__more { display: none; flex: none; }
+.list--compact .row .row__more { display: inline-flex; }
+
+/* compact list of topics: one line per topic */
+.row--compact { padding-top: .35rem; padding-bottom: .35rem; align-items: center; }
+.row--compact .row__icon { margin-top: 0; }
+.row--compact .row__body { display: flex; align-items: center; gap: .75rem; }
+.row--compact .row__title { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; overflow-wrap: normal; }
+.row--compact .row__meta { flex: none; flex-wrap: nowrap; white-space: nowrap; margin-top: 0; }
+.row--compact .row__meta span:not(.row__keep) { display: none; }
+.row--compact .row__flags { flex: none; flex-wrap: nowrap; }
+.row--compact .row__flags .tag { margin-top: 0; }
+.row--compact .row__error { display: none; }
+.check--inline { margin: 0; align-items: center; white-space: nowrap; }
+.check--inline input { margin-top: 0; }
 
 .tag { display: inline-block; padding: .05rem .5rem; border-radius: 999px; font-size: .78rem; background: var(--surface-2); color: var(--muted); white-space: nowrap; }
 .tag--bad { background: var(--bad-soft); color: var(--bad); }
@@ -322,6 +337,9 @@ fieldset { border: 0; border-top: 1px solid var(--border); margin: .75rem 0 0; p
     .main { padding: .75rem .75rem 3rem; }
     .row { flex-wrap: wrap; }
     .row__actions { width: 100%; flex-wrap: wrap; justify-content: flex-start; padding-left: 1.75rem; }
+    /* compact on a narrow screen: the name and the labels only */
+    .row--compact { flex-wrap: nowrap; }
+    .row--compact .row__actions, .row--compact .row__meta { display: none; }
     .field { grid-template-columns: 1fr; }
     .field > small, .field > datalist { grid-column: 1; }
     .tracker__form { padding-left: 1rem; }

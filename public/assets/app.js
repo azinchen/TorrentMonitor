@@ -21,6 +21,8 @@ document.addEventListener('alpine:init', () => {
         page: 'topics',
         pages: PAGES,
         theme: localStorage.getItem('tm-theme') || 'auto',
+        compact: localStorage.getItem('tm-compact') === '1',   // topics list: one line per topic
+        expanded: null,         // topic shown in full while the list is compact
         toasts: [],
 
         // data from the server
@@ -137,6 +139,7 @@ document.addEventListener('alpine:init', () => {
             localStorage.setItem('tm-theme', this.theme);
             this.applyTheme();
         },
+        saveCompact() { localStorage.setItem('tm-compact', this.compact ? '1' : '0'); this.expanded = null; },
         themeTitle() { return { auto: 'Тема: как в системе', light: 'Тема: светлая', dark: 'Тема: тёмная' }[this.theme]; },
 
         open(id) {
