@@ -92,6 +92,8 @@ phpunit_in_app() { "$1" exec -T -e TM_ROOT=/app -e TM_SONARR="${TM_SONARR:-0}" -
 
 cmd_lint() {
     build_images
+    say "release descriptions"
+    "$root/tools/release.sh" --check
     for v in "${versions[@]}"; do
         say "lint, PHP $v"
         docker run --rm -v "$root":/src:ro "tm-tests:php$v" sh -c '

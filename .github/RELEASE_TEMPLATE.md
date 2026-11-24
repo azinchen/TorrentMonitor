@@ -6,6 +6,12 @@ version as in version.txt, no "v"), newest first. tools/release.sh takes that
 section as the description of the GitHub release and refuses to publish
 without it. "tools/release.sh --notes [version]" prints what would be published.
 
+The script also checks what can be checked of the rules below and does not
+publish a description that breaks them: it starts with a summary sentence, has
+the section "Что нужно сделать", every change ends with its pull request or
+commit, and nothing the program cannot show is used. "tools/release.sh --check"
+checks every section; "tests/run.sh lint" (and so "tests/run.sh all") runs it.
+
 Who reads it: mostly a TorrentMonitor user, inside the program - the block
 "Доступна версия" on the Состояние page shows the description. So:
   - Russian, user-facing wording: what changed for the user, not how the code
