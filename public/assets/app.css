@@ -191,6 +191,12 @@ code { font-family: var(--mono); font-size: .9em; background: var(--surface-2); 
 .filters { display: flex; gap: .5rem; flex-wrap: wrap; margin-bottom: .75rem; }
 .filters input { flex: 1; min-width: 12rem; }
 .filters select { width: auto; }
+.card__head select { width: auto; }
+.journal { max-height: 26rem; overflow-y: auto; font-size: .9rem; }
+.journal__line { padding: .3rem 0; border-top: 1px solid var(--border); overflow-wrap: anywhere; }
+.journal__line:first-child { border-top: 0; }
+.journal__time { display: inline-block; min-width: 8.5rem; }
+.small { font-size: .85rem; }
 .pager { display: flex; align-items: center; justify-content: center; gap: 1rem; margin-top: .75rem; }
 
 .inline { display: flex; gap: .5rem; flex-wrap: wrap; margin: 1rem 0; }

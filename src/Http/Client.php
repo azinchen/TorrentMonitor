@@ -25,6 +25,8 @@ final class Client
     private $log;
     // Whether bypassing Cloudflare is allowed (it can be turned off for availability checks)
     public bool $solveChallenges = TRUE;
+    //whether the Cloudflare solver was asked for anything since this object was made
+    public bool $solverUsed = FALSE;
 
     //$options: userAgent, timeout, concurrency (requests to one site at a time), sites (sites asked at a time), solverUrl, proxy => array(enabled, address, type),
     // trackerProxy => array(tracker => array(use, address, type)), log => callable
@@ -173,6 +175,7 @@ final class Client
         foreach ($targets as $target)
         {
             $this->log('Cloudflare: '.$host.' запрашивает проверку, обращаюсь к решателю ('.$target.')');
+            $this->solverUsed = TRUE;
             $solution = $this->solver->request('GET', $target, $ownCookie, '', $solverProxy);
             if ($solution === NULL)
                 continue;

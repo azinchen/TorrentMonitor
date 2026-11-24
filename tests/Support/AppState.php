@@ -109,6 +109,16 @@ class AppState
         return array_map(function ($w) { return $w['where'].':'.$w['reason']; }, self::warnings());
     }
 
+    // the journal of events, oldest first: array of 'kind: text'
+    public static function journal($kind = null)
+    {
+        $lines = array();
+        foreach (explode("\n", trim((string)@file_get_contents(getenv('TM_DATA_DIR').'/journal.log'))) as $line)
+            if (preg_match('/^\[[^\]]+\] (\w+): (.*)$/u', $line, $m) && ($kind === null || $m[1] == $kind))
+                $lines[] = $kind === null ? $m[1].': '.$m[2] : $m[2];
+        return $lines;
+    }
+
     // the whole state file
     public static function state()
     {

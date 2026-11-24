@@ -18,6 +18,11 @@
 // interface (Настройки, «Показать расширенные») and the interface wins when it is set there.
 //Config::write('curl.concurrency', 5);
 
+// Where the output of check runs started from the interface or the API goes. Nowhere by default:
+// the log of the last run and the journal of events are in the data directory. In a container,
+// the output of the container makes these runs show in "docker logs".
+//Config::write('log.output', '/proc/1/fd/1');
+
 // Address used to check the internet connection before trackers are polled.
 // An empty string turns the check off.
 //Config::write('connectivity.url', 'https://example.org/');

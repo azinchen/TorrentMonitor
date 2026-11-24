@@ -36,6 +36,21 @@ final class QBittorrent extends HttpClientBase
         return $response;
     }
 
+    public function about(): array
+    {
+        $version = ltrim(trim($this->call(Request::get($this->address.'/api/v2/app/version'))->body), 'vV');
+        if ( ! preg_match('/^[0-9][0-9A-Za-z.\-+]*$/', $version))
+            $version = '';
+        $details = array();
+        $build = $this->call(Request::get($this->address.'/api/v2/app/buildInfo'))->json();
+        if (is_array($build) && ! empty($build['libtorrent']))
+            $details[] = 'libtorrent '.$build['libtorrent'];
+        $api = trim($this->call(Request::get($this->address.'/api/v2/app/webapiVersion'))->body);
+        if (preg_match('/^[0-9.]+$/', $api))
+            $details[] = 'web API '.$api;
+        return array('version' => $version, 'details' => implode(', ', $details));
+    }
+
     public function add(string $file, array $options): string
     {
         $torrent = self::read($file);

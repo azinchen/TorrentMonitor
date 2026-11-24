@@ -4,6 +4,7 @@
 //  --topic=12               check only the topic with this number
 //  --dry-run                show the updates found without downloading or changing anything
 //  --fresh                  look for a new version of TorrentMonitor now, not from the answer kept for six hours
+//  --by=manual|api          who started the run (set by the interface and the API): the log and the journal say it
 require_once __DIR__.'/src/bootstrap.php';
 
 use TorrentMonitor\App;
@@ -19,7 +20,7 @@ if ($cli)
             $options['dryRun'] = TRUE;
         elseif ($argument == '--fresh')
             $options['fresh'] = TRUE;
-        elseif (preg_match('/^--(tracker|topic)=(.+)$/', $argument, $m))
+        elseif (preg_match('/^--(tracker|topic|by)=(.+)$/', $argument, $m))
             $options[$m[1]] = $m[2];
         else
         {

@@ -121,6 +121,7 @@ final class Updater
     private static function fail($text)
     {
         self::say($text);
+        \TorrentMonitor\Data\Journal::add('update', 'Обновление не выполнено: '.$text);
         Problems::report('system', 'update_fail');
         return FALSE;
     }
@@ -218,6 +219,9 @@ final class Updater
         Warnings::clear('system');
         State::setUpdateNotified(FALSE);
         State::setChannelChanged(FALSE);
+        $channels = array('stable' => 'стабильные версии', 'beta' => 'бета-версии', 'dev' => 'версия в разработке');
+        \TorrentMonitor\Data\Journal::add('update', 'Установлена версия '.$release['version'].' (была '.$current.'), '.$channels[Release::channel()]
+            .', '.(self::$isCLI ? 'автоматически' : 'вручную'));
 
         if (self::$isCLI)
             Notifications::version($msg.\TorrentMonitor\Engine\Runner::about($release));

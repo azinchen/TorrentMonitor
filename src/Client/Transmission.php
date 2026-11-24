@@ -35,6 +35,22 @@ final class Transmission extends HttpClientBase
         throw new ClientException('connect_fail');
     }
 
+    public function about(): array
+    {
+        $data = $this->rpc('session-get', array('fields' => array('version', 'rpc-version')));
+        $version = isset($data['arguments']['version']) ? (string)$data['arguments']['version'] : '';
+        //"4.1.4 (a6d907d9ea)": the version and the commit it was built from
+        $details = array();
+        if (preg_match('/^(\S+)\s+\((\w+)\)$/', $version, $m))
+        {
+            $version = $m[1];
+            $details[] = 'сборка '.$m[2];
+        }
+        if (isset($data['arguments']['rpc-version']))
+            $details[] = 'RPC '.$data['arguments']['rpc-version'];
+        return array('version' => $version, 'details' => implode(', ', $details));
+    }
+
     public function add(string $file, array $options): string
     {
         $arguments = array('metainfo' => base64_encode(self::read($file)), 'paused' => FALSE);

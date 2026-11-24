@@ -36,6 +36,22 @@ final class Deluge extends HttpClientBase
         $this->connected = TRUE;
     }
 
+    public function about(): array
+    {
+        $this->connect();
+        $version = '';
+        //the web interface knows the version of the daemon it is connected to: array(id, state, version)
+        $hosts = $this->rpc('web.get_hosts');
+        if ( ! empty($hosts[0][0]))
+        {
+            $status = $this->rpc('web.get_host_status', array($hosts[0][0]));
+            if (is_array($status) && isset($status[2]) && is_string($status[2]))
+                $version = $status[2];
+        }
+        $libtorrent = $this->rpc('core.get_libtorrent_version');
+        return array('version' => $version, 'details' => is_string($libtorrent) && $libtorrent !== '' ? 'libtorrent '.$libtorrent : '');
+    }
+
     public function add(string $file, array $options): string
     {
         $torrent = self::read($file);

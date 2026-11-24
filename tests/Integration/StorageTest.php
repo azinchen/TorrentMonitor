@@ -86,7 +86,7 @@ final class StorageTest extends IntegrationTestCase
         exec('cd /app && php engine.php > /tmp/engine.out 2>&1 &');
         for ($t = 713; $t < 716; $t++)
             Env::api('POST', 'torrents', array('json' => array('url' => self::TOPIC.$t)));
-        Env::waitFor(function () { return strpos((string)@file_get_contents('/tmp/engine.out'), 'Удаление старых torrent-файлов') !== false; }, 'engine to finish');
+        Env::waitFor(function () { return strpos((string)@file_get_contents('/tmp/engine.out'), 'Готово за') !== false; }, 'engine to finish');
 
         $topics = AppState::topics();
         $this->assertCount(6, $topics);

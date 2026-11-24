@@ -25,12 +25,13 @@ document.addEventListener('alpine:init', () => {
         sort: ['new', 'old', 'az', 'za'].includes(localStorage.getItem('tm-sort')) ? localStorage.getItem('tm-sort') : 'new',   // order of the topics list
         pageSize: ['50', '100', '200', 'all'].includes(localStorage.getItem('tm-page-size')) ? localStorage.getItem('tm-page-size') : '50',   // topics on one page
         pageNo: 0,              // page of the topics list being shown, from 0
+        journalKind: '',        // kind of events the journal shows ('' - all)
         compact: localStorage.getItem('tm-compact') === '1',   // topics list: one line per topic
         expanded: null,         // topic shown in full while the list is compact
         toasts: [],
 
         // data from the server
-        topics: [], users: [], trackers: [], settings: {}, warnings: [], categories: [], sonarrTitles: [], clients: [], services: [], timezones: [],
+        topics: [], users: [], trackers: [], settings: {}, warnings: [], categories: [], sonarrTitles: [], clients: [], services: [], timezones: [], journal: [],
         status: { version: '', lastRun: '', running: false, client: null, update: null, authRequired: true, wiki: '' },
 
         // forms
@@ -86,7 +87,7 @@ document.addEventListener('alpine:init', () => {
 
         // distributes the server response into fields
         apply(data) {
-            for (const key of ['topics', 'users', 'trackers', 'warnings', 'categories', 'sonarrTitles', 'clients', 'services', 'timezones', 'status']) {
+            for (const key of ['topics', 'users', 'trackers', 'warnings', 'categories', 'sonarrTitles', 'clients', 'services', 'timezones', 'journal', 'status']) {
                 if (data[key] !== undefined) this[key] = data[key];
             }
             if (data.settings !== undefined) {
@@ -409,6 +410,26 @@ document.addEventListener('alpine:init', () => {
                 const t = new Date(Date.UTC(+y, mo - 1, +d, +h, +mi, +s) - offset * 1000);
                 return '[' + t.getFullYear() + '-' + pad(t.getMonth() + 1) + '-' + pad(t.getDate()) + ' ' + pad(t.getHours()) + ':' + pad(t.getMinutes()) + ':' + pad(t.getSeconds()) + ']';
             });
+        },
+        // ---- journal of events
+        journalKinds: [
+            { id: 'run', title: 'Проверки' }, { id: 'update', title: 'Обновления' }, { id: 'settings', title: 'Настройки' },
+            { id: 'tracker', title: 'Трекеры' }, { id: 'topic', title: 'Темы' }, { id: 'access', title: 'Вход' },
+            { id: 'service', title: 'Клиент и решатель' }, { id: 'data', title: 'Данные' },
+        ],
+        journalTitle(kind) { return (this.journalKinds.find(k => k.id === kind) || { title: kind }).title; },
+        get shownJournal() { return this.journal.filter(e => !this.journalKind || e.kind === this.journalKind).slice(0, 100); },
+        // what TorrentMonitor runs with, to the clipboard: for a bug report
+        async copyAbout() {
+            const data = await this.call('about', {}, { silent: true });
+            if (!data) return;
+            try {
+                await navigator.clipboard.writeText(data.text);
+                this.toast('Сведения скопированы.');
+            } catch (e) {
+                // no access to the clipboard (a page opened without https): the text is shown to be copied by hand
+                window.prompt('Скопируйте сведения:', data.text);
+            }
         },
         async checkHealth() {
             const data = await this.call('health', {}, { silent: true });

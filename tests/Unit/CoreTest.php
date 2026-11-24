@@ -498,6 +498,28 @@ final class CoreTest extends TestCase
         $this->assertSame(array('a1', 'a2', 'a3'), \TorrentMonitor\Http\Client::startable($queue, $site, array(), 0, 3, 1));
     }
 
+    public function testJournalTextOfChangedSettings()
+    {
+        $text = function ($before, $after) { return \TorrentMonitor\Data\Journal::settingsText($before, $after); };
+        $this->assertSame('', $text(array('rss' => '1'), array('rss' => '1')));
+        $this->assertSame('RSS-лента: выключено', $text(array('rss' => '1'), array('rss' => '0')));
+        $this->assertSame('torrent-клиент: Transmission → qBittorrent; пароль клиента изменён',
+            $text(array('torrentClient' => 'Transmission', 'torrentPassword' => 'old'), array('torrentClient' => 'qBittorrent', 'torrentPassword' => 'new')));
+        $this->assertSame('решатель Cloudflare: пусто → http://byparr:8191', $text(array(), array('flaresolverrUrl' => 'http://byparr:8191')));
+        $this->assertSame('адрес прокси удалён', $text(array('proxyAddress' => 'user:pass@host:1'), array('proxyAddress' => '')));
+        // settings the journal has no name for (the password hash, the API key) are never written
+        $this->assertSame('', $text(array('password' => 'a', 'ApiKey' => 'b'), array('password' => 'c', 'ApiKey' => 'd')));
+    }
+
+    public function testAddressWithoutItsLogin()
+    {
+        $clean = function ($address) { return \TorrentMonitor\Engine\About::withoutLogin($address); };
+        $this->assertSame('http://host:8080/path', $clean('http://user:pass@host:8080/path'));
+        $this->assertSame('host:1080', $clean('user:pass@host:1080'));
+        $this->assertSame('socks5://10.0.0.1:9050', $clean('socks5://10.0.0.1:9050'));
+        $this->assertSame('http://qbittorrent:8080', $clean('http://qbittorrent:8080'));
+    }
+
     private static function sorted(array $values): array
     {
         sort($values);

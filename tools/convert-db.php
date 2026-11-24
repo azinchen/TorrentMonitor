@@ -454,6 +454,11 @@ foreach ($files as $name => $data)
 }
 
 say('');
+//the first line of the journal of events of the new installation
+$line = '['.date('Y-m-d H:i:s').'] data: Данные версии 3.x перенесены: тем '.count($topics).', трекеров с учётными данными '.count($trackers)."\n";
+if (@file_put_contents($dataDir.'/journal.log', $line, FILE_APPEND) !== FALSE)
+    @chmod($dataDir.'/journal.log', 0600);
+
 say('Готово. Записаны config.json, torrents.json и state.json.');
 say('Что дальше:');
 say('  1. Убедитесь, что веб-сервер и пользователь, от которого запускается engine.php,');

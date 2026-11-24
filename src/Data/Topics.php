@@ -81,6 +81,7 @@ final class Topics
             $id = $data['nextId']++;
             $data['topics'][] = array('id' => $id) + array_merge(self::blank(), array_intersect_key($fields, self::blank()));
         });
+        Journal::topic('Тема добавлена', $fields);
         return $id;
     }
 
@@ -135,15 +136,20 @@ final class Topics
     public static function delete($id): bool
     {
         $found = FALSE;
-        Files::torrents()->update(function (&$data) use ($id, &$found) {
+        $gone = array();
+        Files::torrents()->update(function (&$data) use ($id, &$found, &$gone) {
             $i = self::index($data['topics'], $id);
             if ($i === NULL)
                 return FALSE;
+            $gone = $data['topics'][$i];
             array_splice($data['topics'], $i, 1);
             return $found = TRUE;
         });
         if ($found)
+        {
             Pending::remove($id);
+            Journal::topic('Тема удалена', $gone);
+        }
         return $found;
     }
 

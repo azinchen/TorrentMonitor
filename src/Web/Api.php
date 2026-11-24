@@ -39,6 +39,7 @@ final class Api
             $resource = isset($segments[0]) ? $segments[0] : '';
             $id = isset($segments[1]) && $segments[1] !== '' ? (int)$segments[1] : NULL;
 
+            \TorrentMonitor\Data\Journal::$by = $resource == 'sonarr' ? 'Sonarr' : 'API';
             if ($resource == 'sonarr' && $method == 'POST')
                 self::sonarr();
             elseif ($resource == 'torrents' && $method == 'GET' && $id !== NULL)
@@ -238,7 +239,7 @@ final class Api
     {
         if (Lock::busy())
             self::respond(TRUE, 'Проверка уже выполняется.', NULL, 202);
-        $problem = Launcher::start(self::body());
+        $problem = Launcher::start(array('by' => 'api') + self::body());
         if ($problem !== NULL)
             self::respond(FALSE, $problem, NULL, 500);
         self::respond(TRUE, 'Проверка запущена.', NULL, 202);
