@@ -152,6 +152,10 @@ final class Files
             'trackerTimezone'      => 'Europe/Moscow',
             'userAgent'            => 'Mozilla/5.0 (X11; Linux x86_64; rv:133.0) Gecko/20100101 Firefox/133.0',
             'httpTimeout'          => '15',
+            // requests one tracker gets at the same time; empty - curl.concurrency of config.php, else 10
+            'httpConcurrency'      => '',
+            // trackers asked at the same time
+            'httpSites'            => '3',
             'flaresolverrUrl'      => '',
             'proxy'                => '0',
             'proxyAddress'         => '127.0.0.1:9050',

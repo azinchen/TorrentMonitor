@@ -213,46 +213,147 @@ final class Runner
             }
         }
 
-        // The pages of all topics are loaded in parallel
-        $responses = App::http()->sendAll($requests);
-
-        foreach ($ready as $id => $topic)
+        // The pages are loaded in parallel, a part of the topics at a time: however many topics there
+        // are, only the pages of one part are held in memory. What the run finds is saved once per
+        // part (sooner if handling a part takes long), not topic by topic: every save rewrites the whole file.
+        $this->savedAt = microtime(TRUE);
+        try
         {
-            $name = $topic['tracker'];
-            $this->say(self::label($topic));
-            try
+            foreach ($this->parts($ready) as $part)
             {
-                $found = Registry::get($name)->check($topic, $responses[$id]);
-                $fields = array('error' => FALSE);
-                foreach ($found as $release)
+                $responses = App::http()->sendAll(array_intersect_key($requests, $part));
+                foreach ($part as $id => $topic)
                 {
-                    if ($this->dryRun)
-                    {
-                        $this->say('Найдено обновление: '.$release->message.' ('.(\TorrentMonitor\Time::both($release->date, $name) ?: $release->dateText).')');
-                        continue;
-                    }
-                    $changes = Delivery::deliver(array_merge($topic, $fields), $release, $this->out);
-                    if ($changes === NULL)
-                    {
-                        $this->problem($name, 'save_file_fail', $topic);
-                        $fields['error'] = TRUE;
-                        break;
-                    }
-                    $fields = array_merge($fields, $changes);
+                    $this->checkTopic($topic, $responses[$id]);
+                    unset($responses[$id]);
+                    $this->save();
                 }
-                if ( ! $this->dryRun)
-                    Topics::update($id, $fields);
-            }
-            catch (TrackerException $e)
-            {
-                $this->problem($name, $e->getMessage(), $topic);
-            }
-            catch (\Throwable $e)
-            {
-                $this->say('Ошибка ('.$name.'): '.$e->getMessage());
-                $this->problem($name, 'engine_error', $topic);
+                //nothing waits unsaved while the next pages are being loaded
+                $this->save(TRUE);
             }
         }
+        finally
+        {
+            $this->save(TRUE);
+        }
+    }
+
+    //how many topics are loaded, and then saved, at a time
+    const PART = 100;
+    //within a part, what is found is saved when it has waited this many seconds
+    const SAVE_SECONDS = 3;
+
+    /** @var array[] topic id => fields to save */
+    private array $changes = array();
+    /** @var array[] errors of topics to record: array(source, code, topic) */
+    private array $failures = array();
+    private float $savedAt = 0;
+
+    // Splits the topics (id => topic) into parts loaded together. A part takes topics of every
+    // tracker in turn: trackers are asked at the same time, each within its own limit of
+    // simultaneous requests, so a part of one tracker only would wait for that one site.
+    // The series of one tracker share a feed, which is requested once for all of them: they are
+    // taken together and stay in one part.
+    private function parts(array $topics): array
+    {
+        $queues = array();
+        foreach ($topics as $id => $topic)
+            $queues[$topic['tracker']][$id] = $topic;
+
+        $parts = array();
+        $part = array();
+        while ( ! empty($queues))
+        {
+            foreach (array_keys($queues) as $tracker)
+            {
+                $take = Registry::kind($tracker) == 'series' ? count($queues[$tracker]) : 1;
+                foreach (array_slice($queues[$tracker], 0, $take, TRUE) as $id => $topic)
+                {
+                    $part[$id] = $topic;
+                    unset($queues[$tracker][$id]);
+                }
+                if (empty($queues[$tracker]))
+                    unset($queues[$tracker]);
+                if (count($part) >= self::PART)
+                {
+                    $parts[] = $part;
+                    $part = array();
+                }
+            }
+        }
+        if ( ! empty($part))
+            $parts[] = $part;
+        return $parts;
+    }
+
+    private function checkTopic(array $topic, $response): void
+    {
+        $id = $topic['id'];
+        $name = $topic['tracker'];
+        $this->say(self::label($topic));
+        try
+        {
+            $found = Registry::get($name)->check($topic, $response);
+            $fields = array('error' => FALSE);
+            foreach ($found as $release)
+            {
+                if ($this->dryRun)
+                {
+                    $this->say('Найдено обновление: '.$release->message.' ('.(\TorrentMonitor\Time::both($release->date, $name) ?: $release->dateText).')');
+                    continue;
+                }
+                $changes = Delivery::deliver(array_merge($topic, $fields), $release, $this->out);
+                if ($changes === NULL)
+                {
+                    $this->topicProblem($name, 'save_file_fail', $topic);
+                    $fields['error'] = TRUE;
+                    break;
+                }
+                $fields = array_merge($fields, $changes);
+            }
+            if ( ! $this->dryRun)
+                $this->changes[$id] = $fields;
+        }
+        catch (TrackerException $e)
+        {
+            $this->topicProblem($name, $e->getMessage(), $topic);
+        }
+        catch (\Throwable $e)
+        {
+            $this->say('Ошибка ('.$name.'): '.$e->getMessage());
+            $this->topicProblem($name, 'engine_error', $topic);
+        }
+    }
+
+    //an error of one topic: recorded and marked on the topic with the next save
+    private function topicProblem(string $source, string $code, array $topic): void
+    {
+        $this->say($source.': '.\TorrentMonitor\Messages::text($code));
+        if ($this->dryRun)
+            return;
+        $this->failures[] = array($source, $code, $topic);
+        $this->changes[$topic['id']] = array('error' => TRUE) + (isset($this->changes[$topic['id']]) ? $this->changes[$topic['id']] : array());
+    }
+
+    // Writes what was collected, when it has waited long enough; $now - in any case.
+    // A run that is cut off loses at most that: those topics are checked again by the next run.
+    private function save(bool $now = FALSE): void
+    {
+        if (empty($this->changes) && empty($this->failures))
+        {
+            $this->savedAt = microtime(TRUE);
+            return;
+        }
+        if ( ! $now && microtime(TRUE) - $this->savedAt < self::SAVE_SECONDS)
+            return;
+        $changes = $this->changes;
+        $failures = $this->failures;
+        $this->changes = array();
+        $this->failures = array();
+        $this->savedAt = microtime(TRUE);
+        Topics::updateMany($changes);
+        if ( ! empty($failures))
+            Problems::reportTopics($failures);
     }
 
     // How the topic is named in the log

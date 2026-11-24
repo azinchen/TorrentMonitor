@@ -95,7 +95,9 @@ final class App
             self::$http = new Client(array(
                 'userAgent'    => $settings['userAgent'],
                 'timeout'      => $settings['httpTimeout'],
-                'concurrency'  => \Config::read('curl.concurrency'),
+                //the setting of the interface; without it the former setting of config.php
+                'concurrency'  => $settings['httpConcurrency'] !== '' ? $settings['httpConcurrency'] : \Config::read('curl.concurrency'),
+                'sites'        => $settings['httpSites'],
                 'solverUrl'    => $settings['flaresolverrUrl'],
                 'proxy'        => array('enabled' => ! empty($settings['proxy']), 'address' => $settings['proxyAddress'], 'type' => $settings['proxyType']),
                 'trackerProxy' => Accounts::proxies(),

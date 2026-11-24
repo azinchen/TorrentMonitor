@@ -14,6 +14,7 @@ final class Client
     private string $userAgent;
     private int $timeout;
     private int $concurrency;
+    private int $sites;
     private ?Solver $solver;
     private ?ClearanceStore $clearance;
     /** @var array{enabled:bool,address:string,type:string} */
@@ -25,13 +26,14 @@ final class Client
     // Whether bypassing Cloudflare is allowed (it can be turned off for availability checks)
     public bool $solveChallenges = TRUE;
 
-    //$options: userAgent, timeout, concurrency, solverUrl, proxy => array(enabled, address, type),
+    //$options: userAgent, timeout, concurrency (requests to one site at a time), sites (sites asked at a time), solverUrl, proxy => array(enabled, address, type),
     // trackerProxy => array(tracker => array(use, address, type)), log => callable
     public function __construct(array $options = array(), ?ClearanceStore $clearance = NULL)
     {
         $this->userAgent = ! empty($options['userAgent']) ? (string)$options['userAgent'] : 'Mozilla/5.0 (X11; Linux x86_64; rv:133.0) Gecko/20100101 Firefox/133.0';
         $this->timeout = ! empty($options['timeout']) ? max(1, (int)$options['timeout']) : 15;
         $this->concurrency = ! empty($options['concurrency']) ? max(1, (int)$options['concurrency']) : 10;
+        $this->sites = ! empty($options['sites']) ? max(1, (int)$options['sites']) : self::SITES;
         $this->solver = ! empty($options['solverUrl']) ? new Solver((string)$options['solverUrl']) : NULL;
         $this->clearance = $clearance;
         $this->proxy = (isset($options['proxy']) ? (array)$options['proxy'] : array()) + array('enabled' => FALSE, 'address' => '', 'type' => '');
@@ -229,6 +231,28 @@ final class Client
      * @param array<int|string,Request> $requests
      * @return array<int|string,Response>
      */
+    //how many sites are asked at the same time by default, each up to the limit of simultaneous requests
+    const SITES = 3;
+
+    // Which of the waiting requests may start now. $queue - their keys in order, $site - key => site,
+    // $busy - site => requests running, $active - requests running in all, $limit - per site,
+    // $sites - how many sites' worth of requests may run in all.
+    public static function startable(array $queue, array $site, array $busy, int $active, int $limit, int $sites = self::SITES): array
+    {
+        $start = array();
+        foreach ($queue as $key)
+        {
+            if ($active + count($start) >= $limit * $sites)
+                break;
+            $running = isset($busy[$site[$key]]) ? $busy[$site[$key]] : 0;
+            if ($running >= $limit)
+                continue;
+            $busy[$site[$key]] = $running + 1;
+            $start[] = $key;
+        }
+        return $start;
+    }
+
     private function transfer(array $requests): array
     {
         $responses = array();
@@ -241,10 +265,19 @@ final class Client
         $active = array();
         $multi = curl_multi_init();
 
-        $start = function () use (&$queue, &$active, &$handles, &$headers, &$started, &$sent, $requests, $multi) {
-            while ( ! empty($queue) && count($active) < $this->concurrency)
+        // The limit of simultaneous requests is counted per site: several trackers are asked at the
+        // same time, and none of them sees more requests at once than the limit. All sites together
+        // get at most "sites" times the limit.
+        $site = array();
+        foreach ($requests as $key => $request)
+            $site[$key] = $request->tracker !== NULL ? $request->tracker : $request->host();
+        $busy = array();
+
+        $start = function () use (&$queue, &$active, &$handles, &$headers, &$started, &$sent, &$busy, $site, $requests, $multi) {
+            foreach (self::startable($queue, $site, $busy, count($active), $this->concurrency, $this->sites) as $key)
             {
-                $key = array_shift($queue);
+                unset($queue[array_search($key, $queue, TRUE)]);
+                $busy[$site[$key]] = (isset($busy[$site[$key]]) ? $busy[$site[$key]] : 0) + 1;
                 $headers[$key] = '';
                 $handles[$key] = $this->handle($requests[$key], $headers[$key], $sent[$key]);
                 $started[$key] = microtime(TRUE);
@@ -267,6 +300,7 @@ final class Client
                 $ch = $info['handle'];
                 $key = $active[spl_object_id($ch)];
                 unset($active[spl_object_id($ch)]);
+                $busy[$site[$key]]--;
 
                 $response = new Response();
                 $response->status = (int)curl_getinfo($ch, CURLINFO_RESPONSE_CODE);

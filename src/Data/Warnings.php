@@ -53,6 +53,32 @@ final class Warnings
         return $first;
     }
 
+    // Adds several errors in one write: each array(source, code, topic id or NULL).
+    // Returns the sources that had no errors before: they get a notification.
+    public static function addMany(array $items): array
+    {
+        $first = array();
+        if (empty($items))
+            return $first;
+        Files::state()->update(function (&$data) use ($items, &$first) {
+            $known = array();
+            foreach ($data['warnings'] as $w)
+                $known[$w['source']] = TRUE;
+            foreach ($items as $item)
+            {
+                list($source, $code, $topicId) = $item;
+                if ( ! isset($known[$source]))
+                {
+                    $known[$source] = TRUE;
+                    $first[] = $source;
+                }
+                $data['warnings'][] = array('id' => $data['nextWarningId']++, 'time' => date('Y-m-d H:i:s'), 'source' => $source,
+                    'code' => $code, 'topicId' => $topicId === NULL ? NULL : (int)$topicId);
+            }
+        });
+        return $first;
+    }
+
     public static function clear(string $source): void
     {
         Files::state()->update(function (&$data) use ($source) {
