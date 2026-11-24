@@ -14,6 +14,8 @@
     --bad: #c0392b;
     --bad-soft: #fbeae8;
     --warn: #9a6700;
+    /* names of advanced settings: orange-red, as Sonarr marks its advanced settings */
+    --advanced: #d9480f;
     --warn-soft: #fff4d6;
     --shadow: 0 1px 2px rgba(20, 30, 45, .06), 0 4px 16px rgba(20, 30, 45, .06);
     --radius: 8px;
@@ -36,6 +38,7 @@
     --bad: #f0796c;
     --bad-soft: #3a2220;
     --warn: #e0b040;
+    --advanced: #ff8a50;
     --warn-soft: #3a3017;
     --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 4px 16px rgba(0, 0, 0, .25);
     color-scheme: dark;
@@ -175,7 +178,7 @@ code { font-family: var(--mono); font-size: .9em; background: var(--surface-2); 
 .row--compact .row__error { display: none; }
 .check--inline { margin: 0; align-items: center; white-space: nowrap; }
 /* a setting that rarely needs changing: shown when «Показать расширенные» is on */
-.field.field--advanced > span { color: var(--warn); }
+.field.field--advanced > span { color: var(--advanced); }
 .check--inline input { margin-top: 0; }
 
 .tag { display: inline-block; padding: .05rem .5rem; border-radius: 999px; font-size: .78rem; background: var(--surface-2); color: var(--muted); white-space: nowrap; }

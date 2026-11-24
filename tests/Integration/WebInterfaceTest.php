@@ -287,4 +287,22 @@ final class WebInterfaceTest extends IntegrationTestCase
         $this->assertSame(404, Env::ui('Overview')['status']);
         $this->assertSame(405, Http::get(Env::APP.'/ui/overview')['status']);
     }
+
+    // A browser keeps scripts for a long time. Their address has to change when the files change,
+    // also when the version number does not (a copy installed from the version in development).
+    public function testAddressOfTheScriptsChangesWithTheFiles()
+    {
+        $address = function () {
+            preg_match('~assets/app\.js\?v=([^"]+)~', Http::get(Env::APP.'/')['body'], $m);
+            return isset($m[1]) ? $m[1] : null;
+        };
+        $before = $address();
+        $this->assertNotNull($before);
+        $this->assertStringStartsWith(rawurlencode(AppState::version()).'-', $before);
+        $this->assertSame($before, $address(), 'the same files: the same address');
+
+        touch('/app/public/assets/app.js', time() + 100);
+        clearstatcache();
+        $this->assertNotSame($before, $address(), 'a changed file with the same version number');
+    }
 }
