@@ -95,7 +95,7 @@ final class Lostfilm extends SeriesTracker
             throw new TrackerException('quality_not_found');
 
         $torrent = $this->torrent(Request::get($m[1][0])->tracker($this->name));
-        list($date, $dateText) = self::feedDate((string)$item->pubDate);
+        list($date, $dateText) = $this->feedDate((string)$item->pubDate);
         $file = str_replace(' ', '.', $topic['name']).'.S'.$se[1].'E'.$se[2].'.'.$quality[2];
         $release = new Found($torrent, $date, $dateText, $file, self::message($topic['name'], $quality[2], (int)$se[1], (int)$se[2]));
         $release->episode = 'S'.$se[1].'E'.$se[2];

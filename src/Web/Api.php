@@ -15,6 +15,7 @@ use TorrentMonitor\Messages;
 use TorrentMonitor\Notify\Notifications;
 use TorrentMonitor\Storage\Migrations;
 use TorrentMonitor\Storage\StorageException;
+use TorrentMonitor\Time;
 use TorrentMonitor\Tracker\Registry;
 
 //HTTP API: /api/torrents, /api/errors, /api/run, /api/sonarr. Described in wiki/API.md.
@@ -129,7 +130,9 @@ final class Api
         return array(
             'id' => (int)$t['id'], 'tracker' => $t['tracker'], 'name' => $t['name'], 'topicId' => $t['topicId'],
             'url' => $t['topicId'] !== '' && Registry::has($t['tracker']) ? Registry::get($t['tracker'])->topicUrl($t['topicId']) : '',
-            'quality' => $t['quality'], 'episode' => $t['episode'], 'updatedAt' => $t['updatedAt'], 'autoRename' => (bool)$t['autoRename'],
+            'quality' => $t['quality'], 'episode' => $t['episode'], 'updatedAt' => $t['updatedAt'],
+            //updatedAt is the clock of the tracker; the same moment in UTC
+            'updatedAtUtc' => Time::trackerUtc((string)$t['updatedAt'], (string)$t['tracker']), 'autoRename' => (bool)$t['autoRename'],
             'path' => $t['path'], 'category' => $t['category'], 'script' => $t['script'], 'hash' => $t['hash'],
             'paused' => (bool)$t['paused'], 'error' => (bool)$t['error'], 'closed' => (bool)$t['closed'],
             'stopAfterDays' => $t['stopAfterDays'], 'addedAt' => $t['addedAt'], 'lastActivityAt' => $t['lastActivityAt'],

@@ -56,13 +56,14 @@ abstract class SeriesTracker extends Tracker
         return $season > (int)$m[1] || ($season == (int)$m[1] && $episode > (int)$m[2]);
     }
 
-    // date from RSS (RFC 822) in local time: array('Y-m-d H:i:s', 'd Mon Y H:i') with a Russian month
-    protected static function feedDate(string $pubDate): array
+    // date from RSS (RFC 822) on the tracker's clock: array('Y-m-d H:i:s', 'd Mon Y H:i') with a Russian month.
+    // The feed names its own time zone; a date without one is taken as the tracker's clock.
+    protected function feedDate(string $pubDate): array
     {
-        $time = strtotime($pubDate);
-        if ($time === FALSE)
-            $time = time();
-        return array(date('Y-m-d H:i:s', $time), date('d', $time).' '.self::monthName(date('n', $time)).' '.date('Y H:i', $time));
+        $zone = $this->zone();
+        $time = \TorrentMonitor\Time::read($pubDate, $zone) ?: \TorrentMonitor\Time::at($zone);
+        $time = $time->setTimezone($zone);
+        return array($time->format('Y-m-d H:i:s'), $time->format('d').' '.self::monthName($time->format('n')).' '.$time->format('Y H:i'));
     }
 
     // series update message

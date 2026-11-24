@@ -31,6 +31,44 @@ final class SettingsTest extends IntegrationTestCase
         $this->assertTrue($response['json']['settings']['hasTorrentPassword']);
     }
 
+    public function testTrackerTimeZoneIsSavedAndUsedForTheTimesShown()
+    {
+        // the default: trackers show Moscow time
+        $this->assertSame('Europe/Moscow', AppState::setting('trackerTimezone'));
+        AppState::setCredentials('rutracker.org', Env::TRACKER_USER, Env::TRACKER_PASS);
+        $created = Env::api('POST', 'torrents', array('json' => array('url' => 'https://rutracker.org/forum/viewtopic.php?t=501')));
+        $this->assertSame(201, $created['status'], $created['body']);
+        $id = AppState::topics()[0]['id'];
+        \TorrentMonitor\Data\Topics::update($id, array('updatedAt' => '2026-11-23 14:23:00'));
+
+        $topic = Env::ui('overview')['json']['topics'][0];
+        $this->assertSame('2026-11-23 14:23:00', $topic['updatedAt'], 'the stored date is the clock of the tracker, unchanged');
+        $this->assertSame('2026-11-23T11:23:00Z', $topic['updatedAtUtc']);
+        $this->assertSame('МСК', $topic['zone']);
+        $this->assertSame('2026-11-23T11:23:00Z', Env::api('GET', 'torrents/'.$id)['json']['data']['updatedAtUtc']);
+
+        // another zone for all trackers
+        $this->assertTrue(Env::ui('settings.save', array('trackerTimezone' => 'Europe/Kaliningrad'))['json']['ok']);
+        $this->assertSame('2026-11-23T12:23:00Z', Env::ui('overview')['json']['topics'][0]['updatedAtUtc']);
+
+        // a zone of its own for one tracker wins
+        $saved = Env::ui('tracker.save', array('name' => 'rutracker.org', 'login' => Env::TRACKER_USER, 'timezone' => 'Asia/Yekaterinburg'));
+        $this->assertTrue($saved['json']['ok'], $saved['body']);
+        $topic = Env::ui('overview')['json']['topics'][0];
+        $this->assertSame(array('2026-11-23T09:23:00Z', 'UTC+5'), array($topic['updatedAtUtc'], $topic['zone']));
+        $tracker = current(array_filter($saved['json']['trackers'], function ($t) { return $t['name'] == 'rutracker.org'; }));
+        $this->assertSame('Asia/Yekaterinburg', $tracker['timezone']);
+
+        // back to the general setting: nothing is left in the tracker's record
+        Env::ui('tracker.save', array('name' => 'rutracker.org', 'login' => Env::TRACKER_USER, 'timezone' => ''));
+        $this->assertSame('2026-11-23T12:23:00Z', Env::ui('overview')['json']['topics'][0]['updatedAtUtc']);
+
+        // unknown zones are refused
+        $this->assertFalse(Env::ui('settings.save', array('trackerTimezone' => 'Mars/Olympus'))['json']['ok']);
+        $this->assertFalse(Env::ui('tracker.save', array('name' => 'rutracker.org', 'login' => Env::TRACKER_USER, 'timezone' => 'Mars/Olympus'))['json']['ok']);
+        $this->assertSame('Europe/Kaliningrad', AppState::setting('trackerTimezone'));
+    }
+
     public function testOnlyKnownSettingsAreAccepted()
     {
         $before = AppState::setting('ApiKey');

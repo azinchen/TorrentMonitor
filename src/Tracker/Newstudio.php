@@ -87,7 +87,7 @@ final class Newstudio extends SeriesTracker
                     throw $e;
                 break;
             }
-            list($date, $dateText) = self::date((string)$item->pubDate);
+            list($date, $dateText) = $this->feedDate((string)$item->pubDate);
             $code = sprintf('S%02dE%02d', $season, $episode);
             $file = str_replace(' ', '.', $topic['name']).'.'.$code.'.'.$quality[1];
             $release = new Found($torrent, $date, $dateText, $file, self::message($topic['name'], $quality[1], $season, $episode));
@@ -105,15 +105,5 @@ final class Newstudio extends SeriesTracker
         if ( ! preg_match('/download\.php\?id=(\d{2,6})/', $page->body, $id))
             throw new TrackerException('torrent_file_fail');
         return $this->torrent($this->post('/download.php?id='.$id[1])->follow());
-    }
-
-    // date from the feed as is, without time zone conversion: array('Y-m-d H:i:s', 'd Mon Y H:i') with a Russian month
-    private static function date(string $pubDate): array
-    {
-        if ( ! preg_match('/(\d{1,2})\s+(\w{3})\s+(\d{4})\s+(\d{2}:\d{2}):(\d{2})/', $pubDate, $m) || self::monthNumber($m[2]) === NULL)
-            return self::feedDate($pubDate);
-        $month = self::monthNumber($m[2]);
-        $day = sprintf('%02d', $m[1]);
-        return array($m[3].'-'.$month.'-'.$day.' '.$m[4].':'.$m[5], $day.' '.self::monthName($month).' '.$m[3].' '.$m[4]);
     }
 }

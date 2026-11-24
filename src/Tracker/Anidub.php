@@ -54,7 +54,11 @@ final class Anidub extends ForumTracker
             return NULL;
         //"Сегодня, 10:15", "Вчера, 23:00"
         if (strpos($text, 'Сегодня') !== FALSE || strpos($text, 'Вчера') !== FALSE)
-            return array(date('Y-m-d', $pieces[0] == 'Вчера' ? strtotime('-1 day') : time()).' '.$pieces[1].':00', $text);
+        {
+            //days of the tracker's clock, not of the server's
+            $today = \TorrentMonitor\Time::at($this->zone());
+            return array(($pieces[0] == 'Вчера' ? $today->modify('-1 day') : $today)->format('Y-m-d').' '.$pieces[1].':00', $text);
+        }
         //"5-11-2026, 10:15"
         $day = explode('-', $pieces[0]);
         if (count($day) != 3)

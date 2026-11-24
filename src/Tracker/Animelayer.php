@@ -61,7 +61,7 @@ final class Animelayer extends ForumTracker
         $month = self::monthNumber($pieces[1]);
         if ($month === NULL || ! preg_match('/(\d{1,2}):(\d{2})/', $text, $time))
             return NULL;
-        $year = count($pieces) == 4 ? date('Y') : $pieces[2];
+        $year = count($pieces) == 4 ? \TorrentMonitor\Time::at($this->zone())->format('Y') : $pieces[2];
         $day = strlen($pieces[0]) == 1 ? '0'.$pieces[0] : $pieces[0];
         $hour = strlen($time[1]) == 1 ? '0'.$time[1] : $time[1];
         return array(
