@@ -134,7 +134,7 @@ final class Updater
         // Release information is always requested anew, not from the cache
         $release = Release::latest(TRUE);
         $current = Release::currentVersion();
-        self::say('Текущая версия системы: '.$current);
+        self::say('Текущая версия системы: '.App::versionLabel());
 
         if ( ! is_array($release))
         {
@@ -146,8 +146,12 @@ final class Updater
         if ( ! Release::isNewer($release))
         {
             self::say('Обновление не требуется.');
+            //nothing to install on the newly chosen channel: the change of the channel is complete
+            State::setChannelChanged(FALSE);
             return TRUE;
         }
+        if (Release::isDowngrade($release))
+            self::say('Выбран другой канал обновлений: устанавливается его версия, она не выше текущей.');
 
         if ( ! empty($release['notes']))
             self::say($release['notes']);
@@ -183,6 +187,14 @@ final class Updater
             return self::fail('Архив выпуска не содержит файлов системы.');
         }
 
+        $version = array('system' => $release['version'], 'database' => $release['version']);
+        //the dev channel has no number of its own: the number is the one in the archive, the commit tells the copies apart
+        if ( ! empty($release['commit']))
+        {
+            $shipped = json_decode((string)@file_get_contents($source.'/version.txt'), TRUE);
+            $number = isset($shipped['system']) ? (string)$shipped['system'] : $current;
+            $version = array('system' => $number, 'database' => $number, 'commit' => $release['commit']);
+        }
         $failed = self::copyTree($source, $root);
         if (empty($failed))
             self::removeStale($source, $root);
@@ -195,7 +207,6 @@ final class Updater
             return self::fail('Обновление до версии: '.$release['version'].' не выполнено.');
         }
 
-        $version = array('system' => $release['version'], 'database' => $release['version']);
         if (file_put_contents($root.'/version.txt', json_encode($version)) === FALSE)
             return self::fail('Не удалось записать version.txt.');
 
@@ -206,6 +217,7 @@ final class Updater
         self::say($msg);
         Warnings::clear('system');
         State::setUpdateNotified(FALSE);
+        State::setChannelChanged(FALSE);
 
         if (self::$isCLI)
             Notifications::version($msg.( ! empty($release['notes']) ? "\n\n".$release['notes'] : ''));

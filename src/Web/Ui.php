@@ -35,7 +35,7 @@ final class Ui
     const SETTINGS = array('serverAddress', 'auth', 'rss', 'debug', 'autoUpdate', 'userAgent', 'httpTimeout', 'flaresolverrUrl',
         'proxy', 'proxyAddress', 'proxyType', 'useTorrent', 'torrentClient', 'torrentAddress', 'torrentLogin', 'pathToDownload',
         'qbitCategory', 'deleteDistribution', 'deleteOldFiles', 'deleteFilesOnRemove', 'stopAfterDays', 'removeOnSeriesDelete', 'sonarrReplaceTopic', 'sonarrReplaceTorrent',
-        'send', 'sendUpdate', 'sendWarning', 'trackerTimezone');
+        'send', 'sendUpdate', 'sendWarning', 'trackerTimezone', 'updateChannel');
 
     private array $in = array();
 
@@ -235,9 +235,9 @@ final class Ui
             'services' => array_values(array_unique(array_column(Settings::notificationServices(), 'service'))),
             'timezones' => Time::names(),
             'status' => array(
-                'version' => App::version(), 'lastRun' => State::lastRun(), 'lastRunUtc' => Time::serverUtc((string)State::lastRun()), 'running' => Lock::busy(), 'client' => Clients::currentName(),
+                'version' => App::versionLabel(), 'lastRun' => State::lastRun(), 'lastRunUtc' => Time::serverUtc((string)State::lastRun()), 'running' => Lock::busy(), 'client' => Clients::currentName(),
                 'authRequired' => Auth::required(), 'wiki' => Release::wikiUrl(),
-                'update' => Release::isNewer($release) ? array('version' => $release['version'], 'notes' => $release['notes'], 'url' => $release['url']) : NULL,
+                'update' => Release::isNewer($release) ? array('version' => $release['version'], 'notes' => $release['notes'], 'url' => $release['url'], 'downgrade' => Release::isDowngrade($release)) : NULL,
             ),
         );
     }
@@ -543,6 +543,8 @@ final class Ui
         foreach (array('httpTimeout' => 1, 'stopAfterDays' => 0) as $key => $min)
             if (isset($values[$key]))
                 $values[$key] = (string)max($min, (int)$values[$key]);
+        if (isset($values['updateChannel']) && ! in_array($values['updateChannel'], array('stable', 'beta', 'dev'), TRUE))
+            $this->fail('Неизвестный канал обновлений.');
         if (isset($values['trackerTimezone']) && ! Time::valid($values['trackerTimezone']))
             $this->fail('Неизвестный часовой пояс: '.$values['trackerTimezone']);
         if (isset($values['torrentClient']) && $values['torrentClient'] !== '' && ! isset(Clients::CLASSES[$values['torrentClient']]))
@@ -566,9 +568,24 @@ final class Ui
             if ($id !== '')
                 Settings::setNotificationAddress($id, $this->str('notify'.$what.'Address'));
         }
+        $channel = Release::channel();
         Settings::setMany($values);
         App::resetHttp();
-        return array('message' => 'Настройки сохранены.') + $this->doOverview();
+
+        //another update channel: its newest version is installed even if it is lower than the installed one.
+        //Switching automatic updates off is not a request to go back to the regular releases.
+        $message = 'Настройки сохранены.';
+        if (Release::channel() != $channel)
+        {
+            State::setChannelChanged(Settings::on('autoUpdate'));
+            State::setUpdateNotified(FALSE);
+            $release = Release::latest(TRUE);
+            if (Release::isDowngrade($release))
+                $message .= ' Канал обновлений изменён: будет установлена версия '.$release['version'].', она не выше текущей '.App::versionLabel().'.';
+            elseif (Release::isNewer($release))
+                $message .= ' Канал обновлений изменён: будет установлена версия '.$release['version'].'.';
+        }
+        return array('message' => $message) + $this->doOverview();
     }
 
     //notification service number by name and kind ('' - not selected)

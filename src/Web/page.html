@@ -115,7 +115,7 @@
 </div>
 
 <div class="banner" x-show="status.update && page != 'status'">
-    Доступна версия <b x-text="status.update && status.update.version"></b>.
+    <span x-text="status.update && status.update.downgrade ? 'Будет установлена версия' : 'Доступна версия'"></span> <b x-text="status.update && status.update.version"></b>.
     <a href="#status" @click.prevent="open('status')">Подробнее</a>
 </div>
 
@@ -329,6 +329,14 @@
             <small>Используется в ссылках RSS-ленты и на torrent-файлы (для Synology Download Station и TorrServer).</small></label>
         <label class="check"><input type="checkbox" x-model="settingsForm.rss"> RSS-лента скачанных torrent-файлов по адресу <code>/rss</code></label>
         <label class="check"><input type="checkbox" x-model="settingsForm.autoUpdate"> Устанавливать обновления TorrentMonitor автоматически</label>
+        <label class="field" x-show="settingsForm.autoUpdate"><span>Какие версии</span>
+            <select x-model="settingsForm.updateChannel">
+                <option value="stable">Стабильные версии</option>
+                <option value="beta">Бета-версии</option>
+                <option value="dev">Версия в разработке (последние изменения)</option>
+            </select>
+            <small>Бета-версии: устанавливается самая новая версия, бета или стабильная. Версия в разработке: текущее состояние репозитория, после каждого изменения.
+                При смене выбора устанавливается последняя версия нового выбора, даже если она ниже установленной.</small></label>
         <label class="check"><input type="checkbox" x-model="settingsForm.debug"> Подробный журнал проверки (все запросы к трекерам)</label>
         <label class="field"><span>Часовой пояс трекеров</span>
             <select x-model="settingsForm.trackerTimezone">
@@ -469,7 +477,8 @@
     <header class="head"><h1>Состояние</h1></header>
 
     <div class="card card--accent" x-show="status.update">
-        <h2>Доступна версия <span x-text="status.update && status.update.version"></span></h2>
+        <h2><span x-text="status.update && status.update.downgrade ? 'Будет установлена версия' : 'Доступна версия'"></span> <span x-text="status.update && status.update.version"></span></h2>
+        <p class="muted" x-show="status.update && status.update.downgrade">Выбран другой канал обновлений. Эта версия не выше установленной; данные остаются как есть.</p>
         <pre class="notes" x-show="status.update && status.update.notes" x-text="status.update && status.update.notes"></pre>
         <div class="actions">
             <button class="btn btn--primary" @click="installUpdate()" :disabled="!!busy" x-text="busy == 'update.install' ? 'Устанавливаю…' : 'Установить'"></button>

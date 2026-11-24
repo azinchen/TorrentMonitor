@@ -110,6 +110,8 @@ final class Files
             'debug'                => '0',
             'debugFor'             => '',
             'autoUpdate'           => '0',
+            // what automatic updates install: stable, beta or dev
+            'updateChannel'        => 'stable',
             // time zone the trackers show their dates in; a tracker may have its own
             'trackerTimezone'      => 'Europe/Moscow',
             'userAgent'            => 'Mozilla/5.0 (X11; Linux x86_64; rv:133.0) Gecko/20100101 Firefox/133.0',
@@ -171,6 +173,8 @@ final class Files
     {
         return array(
             'updateNotified' => FALSE,
+            // the update channel was changed, its version is not installed yet
+            'channelChanged' => FALSE,
             // "Remember me" logins: sha256 of the token => expiry time (unix)
             'logins'         => array(),
             'lastRun'        => '',

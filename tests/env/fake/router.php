@@ -1,7 +1,7 @@
 <?php
 // Fake internet for the test stack. One PHP built-in server answers for:
 //   - rutracker.org (reached over TLS through nginx in this container)
-//   - GitHub Releases API           /github/repos/<owner>/<repo>/releases/latest
+//   - GitHub API                    /github/repos/<owner>/<repo>/releases[/latest], /commits/<branch>, /compare, /zipball
 //   - a FlareSolverr/Byparr solver  /solver/v1
 //   - test control                  /__control/reset | set | state | requests
 // Behaviour is driven by a JSON state file that tests change through /__control/set.
@@ -20,6 +20,9 @@ function default_state()
             'mode'    => '404',          // 404 = no releases, ok = release below, 500 = GitHub down
             'version' => '9.9.9',
             'notes'   => "Что нового:\n- пункт <b>один</b>\n- пункт два",
+            'beta'    => '',             // version of a pre-release ('' = there is none)
+            'commit'  => '',             // newest commit of the main branch ('' = the branch cannot be read)
+            'base'    => '',             // version number inside the archive of that commit ('' = same as 'version')
         ),
         'rutracker' => array(
             'login'      => 'tm-user',
@@ -241,37 +244,32 @@ if ($path == '/torznab/download')
     return;
 }
 
-// GitHub Releases API
-if (preg_match('#^/github/repos/[^/]+/[^/]+/releases/latest$#', $path))
+// GitHub API: releases, and the main branch for the "dev" update channel
+function gh_release($version, $notes, $prerelease)
 {
-    $gh = $state['github'];
-    if ($gh['mode'] == '404')
-        return send_json(array('message' => 'Not Found'), 404);
-    if ($gh['mode'] == '500')
-        return send(500, 'Server Error');
     $base = 'http://'.$_SERVER['HTTP_HOST'].'/github';
-    return send_json(array(
-        'tag_name'    => 'v'.$gh['version'],
-        'html_url'    => $base.'/releases/tag/v'.$gh['version'],
-        'body'        => str_replace("\n", "\r\n", $gh['notes']),
+    return array(
+        'tag_name'    => 'v'.$version,
+        'prerelease'  => $prerelease,
+        'draft'       => false,
+        'html_url'    => $base.'/releases/tag/v'.$version,
+        'body'        => str_replace("\n", "\r\n", $notes),
         'zipball_url' => $base.'/zipball',
         'assets'      => array(array(
-            'name'                 => 'TorrentMonitor-'.$gh['version'].'.zip',
-            'browser_download_url' => $base.'/release.zip',
+            'name'                 => 'TorrentMonitor-'.$version.'.zip',
+            'browser_download_url' => $base.'/release.zip?version='.rawurlencode($version),
         )),
-    ));
+    );
 }
 
-// release archive: the code under test with another version number and one extra file
-if ($path == '/github/release.zip')
+// an archive of the code under test with another version number and one extra file
+function gh_archive($version, $prefix)
 {
-    $version = $state['github']['version'];
-    $file = STATE_DIR.'/release-'.$version.'.zip';
+    $file = STATE_DIR.'/release-'.md5($version.$prefix).'.zip';
     @unlink($file);
     $zip = new ZipArchive;
     $zip->open($file, ZipArchive::CREATE);
-    $prefix = 'TorrentMonitor-'.$version.'/';
-    $skip = array('.git', '.github', '.claude', 'tests', 'tools', 'wiki', 'dist', 'config.php', 'data');
+    $skip = array('.git', '.github', '.claude', 'tests', 'wiki', 'dist', 'config.php', 'data');
     $iterator = new RecursiveIteratorIterator(new RecursiveCallbackFilterIterator(
         new RecursiveDirectoryIterator('/src', FilesystemIterator::SKIP_DOTS),
         function ($current) use ($skip) {
@@ -290,7 +288,49 @@ if ($path == '/github/release.zip')
     $zip->close();
     header('Content-Type: application/zip');
     readfile($file);
-    return;
+}
+
+if (preg_match('#^/github/repos/[^/]+/[^/]+/releases(/latest)?$#', $path, $m))
+{
+    $gh = $state['github'];
+    if ($gh['mode'] == '500')
+        return send(500, 'Server Error');
+    $regular = $gh['mode'] == '404' ? null : gh_release($gh['version'], $gh['notes'], false);
+    if ( ! empty($m[1]))
+        return $regular === null ? send_json(array('message' => 'Not Found'), 404) : send_json($regular);
+    // the list, pre-releases included, newest first as GitHub gives it
+    $list = array();
+    if ($gh['beta'] !== '')
+        $list[] = gh_release($gh['beta'], 'Бета-версия.', true);
+    if ($regular !== null)
+        $list[] = $regular;
+    return send_json($list);
+}
+
+if (preg_match('#^/github/repos/[^/]+/[^/]+/commits/[^/]+$#', $path))
+{
+    $gh = $state['github'];
+    if ($gh['mode'] == '500' || $gh['commit'] === '')
+        return send(500, 'Server Error');
+    return send_json(array('sha' => $gh['commit'], 'html_url' => 'http://'.$_SERVER['HTTP_HOST'].'/github/commit/'.$gh['commit'],
+        'commit' => array('message' => "Последнее изменение\n\nподробности")));
+}
+
+if (preg_match('#^/github/repos/[^/]+/[^/]+/compare/([0-9a-f]+)\.\.\.([0-9a-f]+)$#', $path, $m))
+    return send_json(array('commits' => array(
+        array('sha' => 'c1', 'commit' => array('message' => "Первое изменение после ".substr($m[1], 0, 7))),
+        array('sha' => $m[2], 'commit' => array('message' => "Последнее изменение\n\nподробности")),
+    )));
+
+// archive of a commit: GitHub puts the files into a folder named after the repository and the commit
+if (preg_match('#^/github/repos/[^/]+/[^/]+/zipball/([0-9a-f]+)$#', $path, $m))
+    return gh_archive($state['github']['base'] !== '' ? $state['github']['base'] : $state['github']['version'], 'owner-repo-'.substr($m[1], 0, 7).'/');
+
+// archive of a release
+if ($path == '/github/release.zip')
+{
+    $version = isset($_GET['version']) && $_GET['version'] !== '' ? (string)$_GET['version'] : $state['github']['version'];
+    return gh_archive($version, 'TorrentMonitor-'.$version.'/');
 }
 
 // FlareSolverr / Byparr API: "solves" the challenge of the fake tracker
