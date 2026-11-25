@@ -213,7 +213,7 @@ final class Ui
             $account = Accounts::get($name);
             $proxy = isset($proxies[$name]) ? $proxies[$name] : array();
             $trackers[] = array(
-                'name' => $name, 'kind' => Registry::kind($name), 'needsAccount' => Registry::needsAccount($name), 'watchesUsers' => Registry::watchesUsers($name),
+                'name' => $name, 'kind' => Registry::kind($name), 'needsAccount' => Registry::needsAccount($name), 'accountOptional' => Registry::accountOptional($name), 'watchesUsers' => Registry::watchesUsers($name),
                 'ready' => Registry::ready($name), 'login' => $account['login'], 'hasPassword' => $account['password'] !== '', 'passkey' => $account['passkey'],
                 'usesPasskey' => FALSE, 'address' => $account['address'], 'timezone' => Accounts::timezone($name), 'defaultAddress' => Registry::get($name)->base(),
                 'hasCookie' => Accounts::cookie($name) !== '',
@@ -541,6 +541,8 @@ final class Ui
         {
             $this->fail('Ошибка: '.$e->getMessage());
         }
+        if (Registry::accountOptional($name) && ! Registry::hasAccount($name))
+            return array('message' => $name.' проверяется без входа: учётные данные не заданы.') + $this->doOverview();
         return array('message' => Registry::needsAccount($name) ? 'Вход на '.$name.' выполнен.' : $name.' не требует входа.') + $this->doOverview();
     }
 

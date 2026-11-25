@@ -286,6 +286,8 @@
                                 <small>Ключ из ссылки на RSS-ленту в профиле на трекере.</small></label>
                         </div>
                         <p class="muted" x-show="!t.needsAccount">Этот трекер работает без входа.</p>
+                        <p class="muted" x-show="t.accountOptional">Учётная запись необязательна: без неё трекер проверяется без входа, как гость.
+                            С ней скачанное учитывается в вашем рейтинге на трекере.</p>
 
                         <label class="field"><span>Адрес</span>
                             <input type="text" x-model="trackerForm.address" :placeholder="t.defaultAddress">

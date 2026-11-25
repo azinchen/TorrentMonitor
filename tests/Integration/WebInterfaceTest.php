@@ -208,6 +208,18 @@ final class WebInterfaceTest extends IntegrationTestCase
         $this->assertFalse(Env::ui('tracker.save', array('name' => 'rutracker.org', 'login' => 'x', 'address' => 'not a host'))['json']['ok']);
         $this->assertFalse(Env::ui('tracker.save', array('name' => 'unknown.example'))['json']['ok']);
         $this->assertTrue(Env::ui('tracker.test', array('name' => 'rutor.is'))['json']['ok'], 'a tracker without accounts has nothing to check');
+
+        // a tracker whose account is optional is ready without one and is read as a guest
+        $nnm = null;
+        foreach (Env::ui('overview')['json']['trackers'] as $t)
+            if ($t['name'] == 'nnmclub.to')
+                $nnm = $t;
+        $this->assertTrue($nnm['ready']);
+        $this->assertTrue($nnm['needsAccount'], 'the account can still be set');
+        $this->assertTrue($nnm['accountOptional']);
+        $guest = Env::ui('tracker.test', array('name' => 'nnmclub.to'));
+        $this->assertTrue($guest['json']['ok'], $guest['body']);
+        $this->assertSame('nnmclub.to проверяется без входа: учётные данные не заданы.', $guest['json']['message']);
     }
 
     public function testCheckIsStartedFromTheInterfaceAndItsLogIsShown()

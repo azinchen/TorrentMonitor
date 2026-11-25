@@ -62,10 +62,22 @@ final class Registry
         return isset(self::TRACKERS[$name]) && constant(self::TRACKERS[$name][0].'::NEEDS_ACCOUNT');
     }
 
+    // whether the tracker takes an account but also works without one, as a guest
+    public static function accountOptional(string $name): bool
+    {
+        return isset(self::TRACKERS[$name]) && constant(self::TRACKERS[$name][0].'::ACCOUNT_OPTIONAL');
+    }
+
+    // whether an account (or a session cookie) is set for the tracker
+    public static function hasAccount(string $name): bool
+    {
+        return Accounts::filled($name) || Accounts::cookie($name) !== '';
+    }
+
     // whether the tracker can be used: credentials (or a session cookie) are set or not needed
     public static function ready(string $name): bool
     {
-        return self::has($name) && ( ! self::needsAccount($name) || Accounts::filled($name) || Accounts::cookie($name) !== '');
+        return self::has($name) && ( ! self::needsAccount($name) || self::accountOptional($name) || self::hasAccount($name));
     }
 
     // whether the tracker can list a user's topics

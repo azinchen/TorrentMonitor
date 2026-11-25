@@ -21,6 +21,8 @@ abstract class Tracker
     const CHARSET = NULL;
     // whether a login and password are needed
     const NEEDS_ACCOUNT = TRUE;
+    // the tracker also works for a guest: without a login it is checked without signing in
+    const ACCOUNT_OPTIONAL = FALSE;
 
     protected string $name;
     protected Client $http;
@@ -85,6 +87,9 @@ abstract class Tracker
             $saved = Accounts::cookie($this->name);
             if ($saved !== '' && $this->sessionAlive($saved))
                 $this->session = $saved;
+            elseif (static::ACCOUNT_OPTIONAL && ! Accounts::filled($this->name))
+                //no account: the tracker is read as a guest
+                $this->session = '';
             elseif ( ! Accounts::filled($this->name))
                 throw new TrackerException($saved !== '' ? ($this->blocked ? 'cloudflare' : ($this->failure ?: 'credential_wrong')) : 'credential_miss');
             else
