@@ -1,5 +1,10 @@
 .DS_Store
 
+# local settings of editors and coding assistants
+/.claude/
+/.idea/
+/.vscode/
+
 # local configuration and data
 /config.php
 /data/
@@ -7,6 +12,7 @@
 /logs/
 /tmp/
 /update.zip
+/tmp_update/
 
 # release archives built by tools/release.sh
 /dist/
