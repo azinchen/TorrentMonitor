@@ -50,7 +50,7 @@ final class State implements ClearanceStore
         $title = $key == 'client' ? 'Torrent-клиент' : 'Решатель Cloudflare';
         $text = function (array $s) { return trim($s['name'].' '.$s['version']).($s['details'] !== '' ? ' ('.$s['details'].')' : ''); };
         if ($before === NULL || $before['name'] != $name || $before['address'] != $address)
-            Journal::add('service', $title.': '.$text($now).', '.$address);
+            Journal::add('service', $title.': '.$text($now));
         elseif ($before['version'] != $version || $before['details'] != $details)
             Journal::add('service', $title.': '.$text($before).' → '.$text($now));
     }
@@ -64,6 +64,38 @@ final class State implements ClearanceStore
             unset($data['services'][$key]);
             return TRUE;
         });
+    }
+
+    // Notices that the program files are of another version than at the previous start, and says so
+    // in the journal: an update the program did not install itself - a new Docker image, files
+    // replaced by hand. With $quiet that line is left out (the updater writes its own). Either way the
+    // torrent client and the Cloudflare solver the new version starts with are named after it.
+    public static function sawVersion(bool $quiet = FALSE): void
+    {
+        $now = \TorrentMonitor\App::versionLabel();
+        //an installation that is not set up yet has no files, and looking at it must not create one
+        if ( ! Files::config()->exists())
+            return;
+        $state = Files::state()->read();
+        if (isset($state['program']) && $state['program'] === $now)
+            return;
+        $before = '';
+        Files::state()->update(function (&$data) use ($now, &$before) {
+            $before = isset($data['program']) ? (string)$data['program'] : '';
+            if ($before === $now)
+                return FALSE;
+            $data['program'] = $now;
+            return TRUE;
+        });
+        //the first start of a version that remembers its number has nothing to compare with
+        if ($before === '' || $before === $now)
+            return;
+        if ( ! $quiet)
+            Journal::add('update', 'Версия программы изменилась: '.$before.' → '.$now
+                .' (файлы заменены не самим TorrentMonitor: новый образ Docker или установка вручную)');
+        //what the new version works with, as it was last seen: nothing is asked over the network here
+        foreach (\TorrentMonitor\Engine\About::services() as $line)
+            Journal::add('service', $line);
     }
 
     // The update channel was changed and its version is not installed yet: until then a lower

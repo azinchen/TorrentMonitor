@@ -24,6 +24,8 @@ final class Request
     public bool $binary = FALSE;
     // Do not bypass Cloudflare and do not use a proxy (requests to torrent clients, notifications)
     public bool $plain = FALSE;
+    // The address carries a key (notification services): the log names only the site
+    public bool $secret = FALSE;
 
     private function __construct(string $method, string $url)
     {
@@ -76,6 +78,7 @@ final class Request
     public function tracker(?string $tracker): self { $this->tracker = $tracker; return $this; }
     public function binary(bool $binary = TRUE): self { $this->binary = $binary; return $this; }
     public function plain(bool $plain = TRUE): self { $this->plain = $plain; return $this; }
+    public function secret(bool $secret = TRUE): self { $this->secret = $secret; return $this; }
 
     public function host(): string
     {

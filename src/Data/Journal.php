@@ -27,7 +27,7 @@ final class Journal
         'serverAddress' => 'адрес TorrentMonitor', 'auth' => 'защита паролем', 'rss' => 'RSS-лента', 'debug' => 'подробный журнал проверки',
         'autoUpdate' => 'автоматические обновления', 'updateChannel' => 'версии для установки', 'userAgent' => 'User-Agent',
         'httpTimeout' => 'время ожидания ответа', 'httpConcurrency' => 'запросов к одному трекеру', 'httpSites' => 'трекеров одновременно',
-        'flaresolverrUrl' => 'решатель Cloudflare', 'proxy' => 'прокси', 'proxyAddress' => 'адрес прокси', 'proxyType' => 'тип прокси',
+        'flaresolverrUrl' => 'адрес решателя Cloudflare', 'proxy' => 'прокси', 'proxyAddress' => 'адрес прокси', 'proxyType' => 'тип прокси',
         'useTorrent' => 'передача в torrent-клиент', 'torrentClient' => 'torrent-клиент', 'torrentAddress' => 'адрес клиента',
         'torrentLogin' => 'логин клиента', 'torrentPassword' => 'пароль клиента', 'pathToDownload' => 'каталог загрузки', 'qbitCategory' => 'категория',
         'deleteDistribution' => 'удаление раздачи предыдущей серии', 'deleteOldFiles' => 'удаление файлов предыдущей серии',
@@ -41,8 +41,9 @@ final class Journal
     //settings that are on or off
     const SWITCHES = array('auth', 'rss', 'debug', 'autoUpdate', 'proxy', 'useTorrent', 'deleteDistribution', 'deleteOldFiles', 'deleteFilesOnRemove',
         'removeOnSeriesDelete', 'sonarrReplaceTopic', 'sonarrReplaceTorrent', 'send', 'sendUpdate', 'sendWarning');
-    //settings whose value is not written: a password, or an address that may carry one
-    const HIDDEN = array('torrentPassword', 'torrentLogin', 'proxyAddress', 'sendUpdateService', 'sendWarningService');
+    //settings whose value is not written: a password, or an address - it is private
+    const HIDDEN = array('torrentPassword', 'torrentLogin', 'proxyAddress', 'sendUpdateService', 'sendWarningService',
+        'serverAddress', 'torrentAddress', 'flaresolverrUrl');
 
     // What changed between two sets of settings, as text: "torrent-клиент: Transmission → qBittorrent;
     // пароль клиента изменён". '' when nothing did.

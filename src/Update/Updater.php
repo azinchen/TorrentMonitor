@@ -222,6 +222,7 @@ final class Updater
         $channels = array('stable' => 'стабильные версии', 'beta' => 'бета-версии', 'dev' => 'версия в разработке');
         \TorrentMonitor\Data\Journal::add('update', 'Установлена версия '.$release['version'].' (была '.$current.'), '.$channels[Release::channel()]
             .', '.(self::$isCLI ? 'автоматически' : 'вручную'));
+        State::sawVersion(TRUE);
 
         if (self::$isCLI)
             Notifications::version($msg.\TorrentMonitor\Engine\Runner::about($release));

@@ -29,7 +29,7 @@ final class Services
 
     public static function post(Request $request): void
     {
-        $response = App::http()->send($request->plain()->timeout(30));
+        $response = App::http()->send($request->plain()->secret()->timeout(30));
         $reason = self::refusal($response->status, $response->body, $response->failureText());
         //a message to several addresses (Telegram chats) is delivered only if every one was accepted
         if ($reason !== '')
