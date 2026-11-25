@@ -73,6 +73,48 @@ final class LoggingTest extends IntegrationTestCase
         $this->assertSame('', Env::ui('run.log')['json']['log']);
     }
 
+    public function testDetailedLogsOfTheLastRunsAreKept()
+    {
+        $this->loginToTracker();
+        Env::setTopic(807, 'Тема', '21-Ноя-26 10:00', 1);
+        $this->trackTopic(807);
+        $this->assertTrue(Env::ui('settings.save', array('debug' => true, 'debugKeep' => '2'))['json']['ok']);
+        $dir = getenv('TM_DATA_DIR');
+
+        Env::runEngine();
+        $first = (string)file_get_contents($dir.'/engine.log');
+        // the log opens with what TorrentMonitor runs with
+        $this->assertMatchesRegularExpression('/^\[[^\]]+\] TorrentMonitor '.preg_quote(AppState::version(), '/').', PHP /', $first);
+        $this->assertStringContainsString('Torrent-клиент: ', $first);
+        $this->assertStringContainsString('Решатель Cloudflare: ', $first);
+        $this->assertFileDoesNotExist($dir.'/engine.1.log');
+
+        sleep(1);
+        Env::runEngine();
+        $this->assertSame($first, (string)file_get_contents($dir.'/engine.1.log'), 'the log of the run before is kept');
+        Env::runEngine();
+        $this->assertFileExists($dir.'/engine.1.log');
+        $this->assertFileDoesNotExist($dir.'/engine.2.log', 'no more logs than the setting says');
+
+        // the interface lists them, the newest first, and shows the one it is asked for
+        $shown = Env::ui('run.log', array('n' => 1))['json'];
+        $this->assertSame(array(0, 1), array_column($shown['runs'], 'n'));
+        $this->assertSame(1, $shown['n']);
+        $this->assertSame((string)file_get_contents($dir.'/engine.1.log'), $shown['log']);
+        $this->assertGreaterThan(0, $shown['runs'][1]['size']);
+        $this->assertMatchesRegularExpression('/^\d{4}-\d\d-\d\d \d\d:\d\d:\d\d$/', $shown['runs'][1]['time']);
+
+        // switched off: the next run removes them all
+        Env::ui('settings.save', array('debug' => false));
+        Env::runEngine();
+        $this->assertSame(array(), glob($dir.'/engine*.log'));
+        $this->assertSame(array(), Env::ui('run.log')['json']['runs']);
+
+        // the setting stays within its bounds
+        Env::ui('settings.save', array('debugKeep' => '5000'));
+        $this->assertSame('100', AppState::setting('debugKeep'));
+    }
+
     public function testErrorsOfARunAreInItsResultAndInTheJournal()
     {
         $this->loginToTracker();

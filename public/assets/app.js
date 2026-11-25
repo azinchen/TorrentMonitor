@@ -49,6 +49,9 @@ document.addEventListener('alpine:init', () => {
         health: null,
         runLog: '',
         runLogOpen: false,      // the log of the last run is unfolded
+        runLogs: [],            // the detailed logs kept: [{n, time, timeUtc, size}], the newest first
+        runLogN: 0,             // which of them is shown (0 - the last run)
+        runLogCut: false,       // only the end of it is shown
         logTimer: null,
 
         // ---- startup
@@ -390,7 +393,8 @@ document.addEventListener('alpine:init', () => {
             this.logTimer = setInterval(async () => {
                 const data = await this.call('run.log', {}, { silent: true });
                 if (!data) return;
-                this.runLog = this.logLocal(data.log, data.offset);
+                this.runLogN = 0;
+                this.showLog(data);
                 if (!data.running) {
                     clearInterval(this.logTimer);
                     this.status.running = false;
@@ -400,8 +404,27 @@ document.addEventListener('alpine:init', () => {
             }, 1500);
         },
         async loadLog() {
-            const data = await this.call('run.log', {}, { silent: true });
-            if (data) this.runLog = this.logLocal(data.log, data.offset);
+            const data = await this.call('run.log', { n: this.runLogN }, { silent: true });
+            if (data) this.showLog(data);
+        },
+        showLog(data) {
+            this.runLogs = data.runs || [];
+            //the log that was shown may have been rotated away
+            if (!this.runLogs.some(r => r.n === this.runLogN)) this.runLogN = 0;
+            this.runLogCut = !!data.cut;
+            this.runLog = this.logLocal(data.log, data.offset);
+        },
+        kb(bytes) { return bytes >= 1048576 ? (bytes / 1048576).toFixed(1) + ' МБ' : Math.max(1, Math.round(bytes / 1024)) + ' КБ'; },
+        // saves the whole log that is shown as a file: the page itself shows only its end when it is long
+        async saveLog() {
+            const data = await this.call('run.log', { n: this.runLogN, full: true }, { silent: true });
+            if (!data) return;
+            const run = this.runLogs.find(r => r.n === this.runLogN);
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(new Blob([data.log], { type: 'text/plain;charset=utf-8' }));
+            link.download = 'torrentmonitor-' + (run ? run.time.replace(/[: ]/g, '-') : 'log') + '.log';
+            link.click();
+            URL.revokeObjectURL(link.href);
         },
         // The log is stamped on the clock of the server ("[2026-11-24 00:04:42] ..."): the stamps are
         // shown on the clock of this browser. $offset - seconds the server's clock is ahead of UTC.

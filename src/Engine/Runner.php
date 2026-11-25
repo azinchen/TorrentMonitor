@@ -90,9 +90,40 @@ final class Runner
             $this->say($line);
     }
 
-    public static function logFile(): string
+    // The detailed log of a run: 0 - the last one (engine.log), 1 - the one before it (engine.1.log) ...
+    public static function logFile(int $n = 0): string
     {
-        return \TorrentMonitor\Storage\Files::dir().'/engine.log';
+        return \TorrentMonitor\Storage\Files::dir().'/engine'.($n > 0 ? '.'.$n : '').'.log';
+    }
+
+    //how many detailed logs are kept
+    public static function logsKept(): int
+    {
+        return min(100, max(1, (int)\TorrentMonitor\Data\Settings::get('debugKeep') ?: 10));
+    }
+
+    /** @return int[] the logs there are, the newest first: their numbers for logFile() */
+    public static function logs(): array
+    {
+        $found = array();
+        foreach ((array)glob(\TorrentMonitor\Storage\Files::dir().'/engine*.log') as $file)
+            if (preg_match('~/engine(?:\.(\d+))?\.log$~', (string)$file, $m))
+                $found[] = isset($m[1]) ? (int)$m[1] : 0;
+        sort($found);
+        return $found;
+    }
+
+    // Makes room for the log of a new run: every log moves one number up, those beyond $keep are removed.
+    // $keep = 0 removes them all.
+    public static function rotateLogs(int $keep): void
+    {
+        foreach (array_reverse(self::logs()) as $n)
+        {
+            if ($n + 1 >= $keep)
+                @unlink(self::logFile($n));
+            else
+                @rename(self::logFile($n), self::logFile($n + 1));
+        }
     }
 
     public function run(): bool
@@ -117,12 +148,14 @@ final class Runner
         Problems::remember();
         if ($this->debug)
         {
+            //the logs of the runs before stay, each in its own file
+            self::rotateLogs(self::logsKept());
             $log = @fopen(self::logFile(), 'w');
             $this->log = $log === FALSE ? NULL : $log;
         }
-        //a log left by an earlier detailed run would describe a run that is not the last one any more
-        elseif ( ! $this->dryRun && is_file(self::logFile()))
-            @unlink(self::logFile());
+        //logs left by earlier detailed runs would describe runs that are not the last ones any more
+        elseif ( ! $this->dryRun)
+            self::rotateLogs(0);
         // Delivery and script messages also go to the log
         $direct = $this->out;
         $this->out = function ($line) use ($direct) {
