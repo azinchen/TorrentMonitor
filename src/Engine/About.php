@@ -40,15 +40,22 @@ final class About
         return $lines;
     }
 
-    /** @return string[] the torrent client and the Cloudflare solver, one line each */
+    /** @return string[] the torrent clients and the Cloudflare solver, one line each */
     public static function services(): array
     {
-        $name = Clients::currentName();
+        $lines = array();
+        if ( ! Clients::enabled())
+            $lines[] = 'Torrent-клиент: не используется';
+        else
+        {
+            $default = Clients::fallback();
+            foreach (Clients::all() as $client)
+                $lines[] = 'Torrent-клиент «'.$client['name'].'»'.(count(Clients::all()) > 1 && (int)$client['id'] === (int)$default['id'] ? ' (основной)' : '')
+                    .': '.self::seen('client:'.$client['id'], $client['type'], (string)$client['address']);
+        }
         $solver = (string)Settings::get('flaresolverrUrl');
-        return array(
-            'Torrent-клиент: '.($name === NULL ? 'не используется' : self::seen('client', $name, (string)Settings::get('torrentAddress'))),
-            'Решатель Cloudflare: '.($solver === '' ? 'не задан' : self::seen('solver', '', $solver)),
-        );
+        $lines[] = 'Решатель Cloudflare: '.($solver === '' ? 'не задан' : self::seen('solver', '', $solver));
+        return $lines;
     }
 
     // A service as it was last seen, or just its name when it never was (or another one is set now).
@@ -73,15 +80,13 @@ final class About
 
     // Asks the torrent client what it is and remembers the answer. Called where TorrentMonitor
     // is talking to the client anyway. Never fails: a client that does not tell is not an error.
-    public static function seeClient(): void
+    public static function seeClient(array $client): void
     {
-        $name = Clients::currentName();
-        if ($name === NULL)
-            return;
         try
         {
-            $about = Clients::current()->about();
-            State::sawService('client', $name, (string)$about['version'], (string)$about['details'], self::withoutLogin((string)Settings::get('torrentAddress')));
+            $about = Clients::open($client)->about();
+            State::sawService('client:'.$client['id'], $client['type'], (string)$about['version'], (string)$about['details'],
+                self::withoutLogin((string)$client['address']), 'Torrent-клиент «'.$client['name'].'»');
         }
         catch (\Throwable $e)
         {

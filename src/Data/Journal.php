@@ -29,8 +29,7 @@ final class Journal
         'autoUpdate' => 'автоматические обновления', 'updateChannel' => 'версии для установки', 'userAgent' => 'User-Agent',
         'httpTimeout' => 'время ожидания ответа', 'httpConcurrency' => 'запросов к одному трекеру', 'httpSites' => 'трекеров одновременно',
         'flaresolverrUrl' => 'адрес решателя Cloudflare', 'proxy' => 'прокси', 'proxyAddress' => 'адрес прокси', 'proxyType' => 'тип прокси',
-        'useTorrent' => 'передача в torrent-клиент', 'torrentClient' => 'torrent-клиент', 'torrentAddress' => 'адрес клиента',
-        'torrentLogin' => 'логин клиента', 'torrentPassword' => 'пароль клиента', 'pathToDownload' => 'каталог загрузки', 'qbitCategory' => 'категория',
+        'useTorrent' => 'передача в torrent-клиент', 
         'deleteDistribution' => 'удаление раздачи предыдущей серии', 'deleteOldFiles' => 'удаление файлов предыдущей серии',
         'deleteFilesOnRemove' => 'удаление файлов вместе с темой', 'stopAfterDays' => 'прекращать проверку через',
         'removeOnSeriesDelete' => 'удаление тем при удалении сериала в Sonarr', 'sonarrReplaceTopic' => 'замена темы сезона из Sonarr',
@@ -43,10 +42,10 @@ final class Journal
     const SWITCHES = array('auth', 'rss', 'debug', 'autoUpdate', 'proxy', 'useTorrent', 'deleteDistribution', 'deleteOldFiles', 'deleteFilesOnRemove',
         'removeOnSeriesDelete', 'sonarrReplaceTopic', 'sonarrReplaceTorrent', 'send', 'sendUpdate', 'sendWarning');
     //settings whose value is not written: a password, a login, an address that carries a key
-    const HIDDEN = array('torrentPassword', 'torrentLogin', 'sendUpdateService', 'sendWarningService');
+    const HIDDEN = array('sendUpdateService', 'sendWarningService');
     //settings whose value is private: written inside a mark (see Privacy), to be hidden when the log is shown to others
-    const ADDRESSES = array('serverAddress', 'torrentAddress', 'flaresolverrUrl', 'proxyAddress');
-    const FOLDERS = array('pathToDownload');
+    const ADDRESSES = array('serverAddress', 'flaresolverrUrl', 'proxyAddress');
+    const FOLDERS = array();
 
     // What changed between two sets of settings, as text: "torrent-клиент: Transmission → qBittorrent;
     // пароль клиента изменён". '' when nothing did.

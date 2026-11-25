@@ -18,7 +18,7 @@ final class TransmissionTest extends IntegrationTestCase
         $this->assertNoWarnings();
 
         // the page of topics is told what the client is doing with the torrent
-        $status = Env::ui('client.status')['json'];
+        $status = Env::ui('client.status', array('id' => 1))['json'];
         $this->assertTrue($status['supported'] && $status['answered'], json_encode($status));
         $torrent = $status['torrents'][(string)$id];
         $this->assertContains($torrent['state'], array('downloading', 'seeding', 'stopped', 'queued', 'checking', 'error'), json_encode($torrent));

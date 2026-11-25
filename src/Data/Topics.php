@@ -36,7 +36,7 @@ final class Topics
     // fields added after the topic was saved get their default values
     private static function complete(array $topic): array
     {
-        return $topic + array('sonarrSeasons' => array(), 'sonarrTitle' => '');
+        return $topic + array('sonarrSeasons' => array(), 'sonarrTitle' => '', 'client' => NULL);
     }
 
     public static function get($id): ?array
@@ -91,6 +91,8 @@ final class Topics
             'tracker' => '', 'name' => '', 'topicId' => '', 'quality' => 'sd', 'episode' => '', 'updatedAt' => '',
             'autoRename' => FALSE, 'hash' => '', 'path' => '', 'category' => '', 'script' => '', 'paused' => FALSE,
             'error' => FALSE, 'closed' => FALSE, 'stopAfterDays' => NULL, 'sonarrSeries' => NULL, 'sonarrTitle' => '', 'sonarrSeasons' => array(),
+            // id of the torrent client the topic is passed to (see Client\Clients); NULL - the default one
+            'client' => NULL,
             'addedAt' => self::now(), 'lastActivityAt' => '',
         );
     }

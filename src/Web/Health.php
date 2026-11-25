@@ -166,24 +166,29 @@ final class Health
 
     private function client(): void
     {
-        $g = 'Torrent-клиент';
-        $name = Clients::currentName();
-        if ($name === NULL)
+        $g = 'Torrent-клиенты';
+        if ( ! Clients::enabled())
         {
-            $this->add($g, NULL, 'Передача в torrent-клиент выключена: torrent-файлы только сохраняются.');
+            $this->add($g, NULL, Settings::on('useTorrent') ? 'Ни одного torrent-клиента не задано: torrent-файлы только сохраняются.'
+                : 'Передача в torrent-клиент выключена: torrent-файлы только сохраняются.');
             return;
         }
-        $problem = self::clientProblem();
-        if ($problem === NULL)
-            \TorrentMonitor\Engine\About::seeClient();
-        $this->add($g, $problem === NULL, $problem === NULL ? $name.' по адресу '.Settings::get('torrentAddress').' отвечает, вход выполнен.'
-            : $name.' по адресу '.Settings::get('torrentAddress').': '.$problem);
-        if ($name == 'SynologyDS' || $name == 'TorrServer')
-            $this->add($g, Settings::get('serverAddress') !== '' ? NULL : FALSE, 'Этот клиент получает ссылку на torrent-файл: адрес TorrentMonitor ('
-                .(Settings::get('serverAddress') ?: 'не задан').') должен быть доступен с него.');
+        $default = Clients::fallback();
+        $links = FALSE;
+        foreach (Clients::all() as $client)
+        {
+            $problem = self::clientProblem($client);
+            if ($problem === NULL)
+                \TorrentMonitor\Engine\About::seeClient($client);
+            $title = '«'.$client['name'].'» ('.$client['type'].', '.$client['address'].')'.(count(Clients::all()) > 1 && (int)$client['id'] === (int)$default['id'] ? ', основной' : '');
+            $this->add($g, $problem === NULL, $problem === NULL ? $title.' отвечает, вход выполнен.' : $title.': '.$problem);
+            $links = $links || $client['type'] == 'SynologyDS' || $client['type'] == 'TorrServer';
+        }
+        if ($links)
+            $this->add($g, Settings::get('serverAddress') !== '' ? NULL : FALSE, 'Synology Download Station и TorrServer получают ссылку на torrent-файл: адрес TorrentMonitor ('
+                .Settings::get('serverAddress').') должен открываться с сервера клиента.');
     }
 
-    //tries to log in to the torrent client; NULL - everything is fine, otherwise the error text
     // Checks the network settings as they are saved: the internet (through the proxy, if one is
     // set) and whether the Cloudflare solver answers at its address.
     /** @return array[] array(ok: bool|null, text) */
@@ -232,15 +237,13 @@ final class Health
         return $lines;
     }
 
-    public static function clientProblem(): ?string
+    // Why the client cannot be used, in words; NULL when it answers and takes the login
+    public static function clientProblem(array $client): ?string
     {
         try
         {
-            $client = Clients::current();
-            if ($client === NULL)
-                return 'клиент не выбран.';
             //request for details of a nonexistent torrent: succeeds only with the right address and password
-            $client->info(str_repeat('0', 40));
+            Clients::open($client)->info(str_repeat('0', 40));
             return NULL;
         }
         catch (\TorrentMonitor\Client\ClientException $e)

@@ -11,9 +11,10 @@ use TorrentMonitor\Data\Users;
 use TorrentMonitor\Data\Warnings;
 
 Settings::setMany(array(
-    'auth' => '0', 'serverAddress' => 'http://tm.local/', 'ApiKey' => 'demo', 'useTorrent' => '1', 'torrentClient' => 'qBittorrent',
-    'torrentAddress' => 'http://qbittorrent:8080', 'torrentLogin' => 'tm', 'torrentPassword' => 'tm-test-pass', 'pathToDownload' => '/downloads/',
+    'auth' => '0', 'serverAddress' => 'http://tm.local/', 'ApiKey' => 'demo', 'useTorrent' => '1',
 ));
+\TorrentMonitor\Client\Clients::save(array('name' => 'qBittorrent', 'type' => 'qBittorrent', 'address' => 'http://qbittorrent:8080', 'login' => 'tm',
+    'password' => 'tm-test-pass', 'path' => '/downloads/'));
 foreach (array('rutracker.org', 'kinozal.me', 'lostfilm.tv', 'nnmclub.to') as $tracker)
     Accounts::set($tracker, array('login' => 'demo', 'password' => 'demo'));
 

@@ -41,7 +41,8 @@ final class Runner
     const NAMED = 10;
     //the topic being checked, not written to the log yet: it is written when something happens to it
     private ?string $label = NULL;
-    private bool $clientSeen = FALSE;
+    //clients this run has already asked what they are: id => TRUE
+    private array $clientsSeen = array();
     private bool $offline = FALSE;
 
     // $options: tracker - check only this tracker; topic - only the topic with this id;
@@ -416,10 +417,11 @@ final class Runner
                 {
                     $this->count['client']++;
                     //the client has just been talked to: a good moment to note what it is
-                    if ( ! $this->clientSeen)
+                    $record = \TorrentMonitor\Client\Clients::forTopic($topic);
+                    if ($record !== NULL && ! isset($this->clientsSeen[$record['id']]))
                     {
-                        $this->clientSeen = TRUE;
-                        About::seeClient();
+                        $this->clientsSeen[$record['id']] = TRUE;
+                        About::seeClient($record);
                     }
                 }
                 $fields = array_merge($fields, $changes);
@@ -507,7 +509,7 @@ final class Runner
         {
             $result = 'Проверено тем: '.$c['checked'].' — обновлено '.$c['updated'].', без изменений '.max(0, $c['checked'] - $c['updated'] - $c['failed'])
                 .', с ошибками '.$c['failed'].'.';
-            if (\TorrentMonitor\Client\Clients::currentName() !== NULL)
+            if (\TorrentMonitor\Client\Clients::enabled())
                 $result .= ' Передано в torrent-клиент: '.$c['client'].'.';
             if ($c['paused'] + $c['stopped'] > 0)
                 $result .= ' Пропущено: на паузе '.$c['paused'].', проверка прекращена '.$c['stopped'].'.';
@@ -587,7 +589,7 @@ final class Runner
                         throw new TrackerException('save_file_fail');
                     $message = $item['title'].' добавлена для скачивания.';
                     $topic = array('id' => 0, 'tracker' => $name, 'topicId' => $item['topicId'], 'hash' => '', 'path' => '', 'category' => '', 'script' => '');
-                    if (\TorrentMonitor\Client\Clients::currentName() !== NULL)
+                    if (\TorrentMonitor\Client\Clients::enabled())
                         $message .= Delivery::toClient($topic, $item['title'], $file, date('d M Y H:i')) !== NULL
                             ? ' И добавлена в torrent-клиент.' : ' Но не добавлена в torrent-клиент и сохранена.';
                     Notifications::update($name, $message, date('d M Y H:i'), $tracker->topicUrl($item['topicId']));

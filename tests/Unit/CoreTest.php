@@ -511,13 +511,13 @@ final class CoreTest extends TestCase
         $text = function ($before, $after) { return \TorrentMonitor\Data\Journal::settingsText($before, $after); };
         $this->assertSame('', $text(array('rss' => '1'), array('rss' => '1')));
         $this->assertSame('RSS-лента: выключено', $text(array('rss' => '1'), array('rss' => '0')));
-        $this->assertSame('torrent-клиент: Transmission → qBittorrent; пароль клиента изменён',
-            $text(array('torrentClient' => 'Transmission', 'torrentPassword' => 'old'), array('torrentClient' => 'qBittorrent', 'torrentPassword' => 'new')));
-        // addresses of the user's services and folders are private: written inside marks, without a login
+        $this->assertSame('время ожидания ответа: 15 → 20; передача в torrent-клиент: включено', $text(array('useTorrent' => '0', 'httpTimeout' => '15'), array('useTorrent' => '1', 'httpTimeout' => '20')));
+        // addresses of the user's services are private: written inside marks, without a login
         $this->assertSame('адрес решателя Cloudflare: пусто → {{a:http://byparr:8191}}', $text(array(), array('flaresolverrUrl' => 'http://byparr:8191')));
-        $this->assertSame('адрес TorrentMonitor: {{a:http://x/}} → {{a:http://y/}}; адрес клиента: {{a:a:1}} → {{a:b:2}}', $text(array('torrentAddress' => 'a:1', 'serverAddress' => 'http://x/'), array('torrentAddress' => 'b:2', 'serverAddress' => 'http://y/')));
+        $this->assertSame('адрес TorrentMonitor: {{a:http://x/}} → {{a:http://y/}}', $text(array('serverAddress' => 'http://x/'), array('serverAddress' => 'http://y/')));
         $this->assertSame('адрес прокси: {{a:host:1}} → пусто', $text(array('proxyAddress' => 'user:pass@host:1'), array('proxyAddress' => '')));
-        $this->assertSame('каталог загрузки: пусто → {{d:/downloads}}', $text(array(), array('pathToDownload' => '/downloads')));
+        // the torrent clients are not settings any more: what changes in them is journalled by Clients
+        $this->assertSame('', $text(array('torrentClient' => 'Transmission'), array('torrentClient' => 'qBittorrent')));
         // settings the journal has no name for (the password hash, the API key) are never written
         $this->assertSame('', $text(array('password' => 'a', 'ApiKey' => 'b'), array('password' => 'c', 'ApiKey' => 'd')));
     }

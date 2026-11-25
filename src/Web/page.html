@@ -140,8 +140,9 @@
         </div>
     </header>
 
-    <p class="clientdown" x-show="clientStatus.loaded && clientStatus.supported && !clientStatus.answered && topics.length">
-        <span x-text="clientStatus.error"></span> <a href="#settings" @click.prevent="open('settings')">Настройки torrent-клиента</a></p>
+    <template x-for="d in clientsDown" :key="d.id">
+        <p class="clientdown" x-show="topics.length"><span x-text="d.error"></span> <a href="#settings" @click.prevent="open('settings')">Настройки torrent-клиентов</a></p>
+    </template>
 
     <div class="filters" x-show="topics.length > 5">
         <input type="search" x-model="filter.text" placeholder="Поиск по названию">
@@ -163,7 +164,7 @@
             <option value="added">По дате добавления</option>
             <option value="tracker">По трекеру</option>
             <option value="errors">Сначала с ошибками</option>
-            <option value="client" x-show="clientStatus.supported" x-text="clientStatus.answered || !clientStatus.loaded ? 'По состоянию в клиенте' : 'По состоянию в клиенте (клиент не отвечает)'"></option>
+            <option value="client" x-show="clients.some(c => c.statuses)" x-text="!clientsDown.length ? 'По состоянию в клиенте' : 'По состоянию в клиенте (клиент не отвечает)'"></option>
         </select>
         <select x-model="pageSize" x-show="topics.length > 50" title="Сколько тем показывать на одной странице">
             <option value="50">по 50</option>
@@ -205,11 +206,12 @@
                         <span class="tag" x-show="t.paused">пауза</span>
                         <span class="tag" x-show="t.stopped && !t.paused" title="Тема давно не обновлялась">проверка прекращена</span>
                         <span class="tag tag--warn" x-show="t.waiting">ждёт torrent-клиент</span>
+                        <span class="tag" x-show="clients.length > 1 && t.clientName" :title="'Torrent-клиент темы' + (t.client === null ? ': основной' : '')" x-text="t.clientName"></span>
                         <template x-if="clientTag(t)">
                             <span class="tag tag--client" :class="clientTag(t).kind ? 'tag--' + clientTag(t).kind : ''" :title="clientTag(t).title"
                                 x-text="compact && expanded !== t.id ? clientTag(t).short : clientTag(t).text"></span>
                         </template>
-                        <template x-if="compact && expanded !== t.id && clientStatus.answered && !clientTag(t)">
+                        <template x-if="compact && expanded !== t.id && clientsAnswered && !clientTag(t)">
                             <span class="tag tag--client tag--none"></span>
                         </template>
                     </div>
@@ -413,38 +415,69 @@
         <div class="actions"><button class="btn btn--primary" :disabled="!!busy">Сохранить</button></div>
     </form>
 
-    <form class="card" @submit.prevent="saveSettings()">
-        <h2>Torrent-клиент</h2>
-        <label class="check"><input type="checkbox" x-model="settingsForm.useTorrent"> Передавать скачанные torrent-файлы в torrent-клиент</label>
-        <div x-show="settingsForm.useTorrent">
-            <label class="field"><span>Клиент</span>
-                <select x-model="settingsForm.torrentClient" :required="settingsForm.useTorrent">
-                    <option value="" disabled>Выберите клиент</option>
-                    <template x-for="c in clients" :key="c"><option x-text="c" :selected="c == settingsForm.torrentClient"></option></template>
+    <div class="card">
+        <h2>Torrent-клиенты</h2>
+        <form @submit.prevent="saveSettings()">
+            <label class="check"><input type="checkbox" x-model="settingsForm.useTorrent" @change="saveSettings()"> Передавать скачанные torrent-файлы в torrent-клиент</label>
+        </form>
+        <p class="muted" x-show="!clients.length">Клиентов пока нет: torrent-файлы только сохраняются. Добавьте клиент — их может быть сколько угодно, в том числе
+            одного вида на разных серверах.</p>
+        <p class="muted small" x-show="clients.length > 1">Основной клиент получает темы, у которых клиент не выбран, темы из REST API и из Sonarr.
+            У темы клиент выбирается в её форме.</p>
+
+        <div class="trackers">
+            <template x-for="c in clients" :key="c.id">
+                <div class="tracker" :class="openClient === c.id ? 'tracker--open' : ''">
+                    <button type="button" class="tracker__head" @click="openClient === c.id ? openClient = null : editClient(c)">
+                        <span class="tracker__name" x-text="c.name"></span>
+                        <span class="muted" x-text="c.type + ' · ' + c.address + (c.topics ? ' · тем: ' + c.topics : '')"></span>
+                        <span class="tag tag--good" x-show="c.default && clients.length > 1">основной</span>
+                    </button>
+                </div>
+            </template>
+        </div>
+
+        <form class="tracker__form" x-show="openClient !== null" @submit.prevent="saveClient(false)">
+            <h3 x-text="openClient === 0 ? 'Новый torrent-клиент' : 'Клиент «' + (clientForm.was || '') + '»'"></h3>
+            <label class="field"><span>Вид</span>
+                <select x-model="clientForm.type" @change="clientTypeChanged()" required>
+                    <template x-for="t in clientTypes" :key="t"><option x-text="t" :selected="t == clientForm.type"></option></template>
                 </select></label>
+            <label class="field"><span>Название</span>
+                <input type="text" x-model="clientForm.name" required maxlength="60" @input="clientForm.named = true">
+                <small>Как клиент называется в списке тем, в журнале, в REST API и в адресе webhook Sonarr. Названия не повторяются.</small></label>
             <label class="field"><span>Адрес клиента</span>
-                <input type="text" x-model="settingsForm.torrentAddress" placeholder="http://192.168.1.10:8080" :required="settingsForm.useTorrent"></label>
-            <label class="field" x-show="settingsForm.torrentClient != 'Deluge'"><span>Логин</span>
-                <input type="text" x-model="settingsForm.torrentLogin" autocomplete="off"></label>
+                <input type="text" x-model="clientForm.address" placeholder="http://192.168.1.10:8080" required></label>
+            <label class="field" x-show="clientForm.type != 'Deluge'"><span>Логин</span>
+                <input type="text" x-model="clientForm.login" autocomplete="off"></label>
             <label class="field"><span>Пароль</span>
-                <input type="password" x-model="settingsForm.torrentPassword" autocomplete="new-password"
-                    :placeholder="settings.hasTorrentPassword ? 'сохранён — оставьте пустым, чтобы не менять' : ''"></label>
-            <label class="check" x-show="settings.hasTorrentPassword"><input type="checkbox" x-model="settingsForm.clearTorrentPassword"> Удалить сохранённый пароль</label>
+                <input type="password" x-model="clientForm.password" autocomplete="new-password"
+                    :placeholder="clientForm.hasPassword ? 'сохранён — оставьте пустым, чтобы не менять' : ''"></label>
+            <label class="check" x-show="clientForm.hasPassword"><input type="checkbox" x-model="clientForm.clearPassword"> Удалить сохранённый пароль</label>
             <label class="field"><span>Каталог загрузки</span>
-                <input type="text" x-model="settingsForm.pathToDownload" placeholder="каталог клиента по умолчанию">
-                <small>Путь так, как его видит torrent-клиент. У темы может быть свой каталог.</small></label>
-            <label class="field" x-show="settingsForm.torrentClient == 'qBittorrent'"><span>Категория</span>
-                <input type="text" x-model="settingsForm.qbitCategory">
+                <input type="text" x-model="clientForm.path" placeholder="каталог клиента по умолчанию">
+                <small>Путь так, как его видит этот клиент. У темы может быть свой каталог.</small></label>
+            <label class="field" x-show="clientForm.type == 'qBittorrent'"><span>Категория</span>
+                <input type="text" x-model="clientForm.category">
                 <small>Категория qBittorrent для новых раздач. У темы может быть своя.</small></label>
+            <label class="check" x-show="clients.length > (openClient === 0 ? 0 : 1) && !clientForm.default"><input type="checkbox" x-model="clientForm.makeDefault"> Сделать основным</label>
+            <div class="actions">
+                <button class="btn btn--primary" :disabled="!!busy">Сохранить</button>
+                <button type="button" class="btn" @click="saveClient(true)" :disabled="!!busy">Сохранить и проверить подключение</button>
+                <button type="button" class="btn btn--danger" x-show="openClient !== 0" @click="deleteClient()" :disabled="!!busy">Удалить клиент</button>
+                <button type="button" class="btn" @click="openClient = null">Отмена</button>
+            </div>
+        </form>
+        <p x-show="openClient === null"><button type="button" class="btn" @click="newClient()">Добавить клиент</button></p>
+
+        <form @submit.prevent="saveSettings()" x-show="settingsForm.useTorrent">
+            <h3>Для всех клиентов</h3>
             <label class="check"><input type="checkbox" x-model="settingsForm.deleteDistribution"> Сериалы: при выходе новой серии удалять из клиента раздачу предыдущей</label>
             <label class="check" x-show="settingsForm.deleteDistribution"><input type="checkbox" x-model="settingsForm.deleteOldFiles"> …вместе со скачанными файлами предыдущей серии</label>
             <label class="check"><input type="checkbox" x-model="settingsForm.deleteFilesOnRemove"> При удалении темы вместе с раздачей по умолчанию удалять и скачанные файлы</label>
-        </div>
-        <div class="actions">
-            <button class="btn btn--primary" :disabled="!!busy">Сохранить</button>
-            <button type="button" class="btn" x-show="settingsForm.useTorrent" @click="testClient()" :disabled="!!busy">Сохранить и проверить подключение</button>
-        </div>
-    </form>
+            <div class="actions"><button class="btn btn--primary" :disabled="!!busy">Сохранить</button></div>
+        </form>
+    </div>
 
     <form class="card" @submit.prevent="saveSettings()">
         <h2>Уведомления</h2>
@@ -650,10 +683,20 @@
 
         <button type="button" class="link" @click="topicForm.more = !topicForm.more" x-text="topicForm.more ? 'Скрыть дополнительные настройки' : 'Дополнительные настройки'"></button>
         <div x-show="topicForm.more">
+            <label class="field" x-show="clients.length > 1"><span>Torrent-клиент</span>
+                <select x-model="topicForm.client">
+                    <option value="" x-text="'Основной' + (defaultClient ? ' (' + defaultClient.name + ')' : '')"></option>
+                    <template x-for="c in clients" :key="c.id"><option :value="String(c.id)" x-text="c.name" :selected="String(c.id) === topicForm.client"></option></template>
+                </select></label>
+            <div x-show="topicMoves">
+                <p class="muted small">Тема уже передана другому клиенту. Раздача будет передана новому из сохранённого torrent-файла.</p>
+                <label class="check"><input type="checkbox" x-model="topicForm.moveRemove"> Удалить раздачу из прежнего клиента</label>
+                <label class="check" x-show="topicForm.moveRemove"><input type="checkbox" x-model="topicForm.moveDeleteData"> …вместе со скачанными файлами</label>
+            </div>
             <label class="field"><span>Каталог загрузки</span>
-                <input type="text" x-model="topicForm.path" :placeholder="settings.pathToDownload || 'как в настройках'"></label>
+                <input type="text" x-model="topicForm.path" :placeholder="(topicClient && topicClient.path) || 'как у клиента'"></label>
             <label class="field"><span>Категория</span>
-                <input type="text" x-model="topicForm.category" list="categories" :placeholder="settings.qbitCategory || ''">
+                <input type="text" x-model="topicForm.category" list="categories" :placeholder="(topicClient && topicClient.category) || ''">
                 <datalist id="categories"><template x-for="c in categories" :key="c"><option :value="c"></option></template></datalist>
                 <small>Категория в qBittorrent.</small></label>
             <label class="field"><span>Скрипт</span>

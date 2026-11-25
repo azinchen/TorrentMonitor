@@ -275,13 +275,8 @@ final class Files
             'proxy'                => '0',
             'proxyAddress'         => '127.0.0.1:9050',
             'proxyType'            => '',
+            // whether torrent files are passed to torrent clients at all (the clients are a section of their own)
             'useTorrent'           => '0',
-            'torrentClient'        => '',
-            'torrentAddress'       => '127.0.0.1:9091',
-            'torrentLogin'         => '',
-            'torrentPassword'      => '',
-            'pathToDownload'       => '',
-            'qbitCategory'         => '',
             'deleteDistribution'   => '0',
             'deleteOldFiles'       => '0',
             'deleteFilesOnRemove'  => '0',
@@ -307,6 +302,11 @@ final class Files
             'settings'      => self::settingsDefaults(),
             // tracker => array('login' => ..., 'password' => ..., 'passkey' => ..., 'address' => ...)
             'trackers'      => array(),
+            // Torrent clients (see Client\Clients): array('id', 'name', 'type', 'address', 'login', 'password', 'path', 'category')
+            'clients'       => array(),
+            'nextClientId'  => 1,
+            // id of the client that serves what names none; NULL - the first one
+            'defaultClient' => NULL,
             // Notification service number (see Notify\Services) => address or key
             'notifications' => array(),
             // tracker => array('use' => 'yes'|'no', 'address' => 'host:port', 'type' => 'SOCKS5'|'HTTP')

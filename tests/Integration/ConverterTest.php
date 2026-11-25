@@ -126,7 +126,13 @@ final class ConverterTest extends IntegrationTestCase
         $config = $this->converted('config.json');
         $this->assertSame(1, $config['version']);
         $this->assertSame('http://app/', $config['settings']['serverAddress']);
-        $this->assertSame(Env::CLIENT_PASS, $config['settings']['torrentPassword'], 'client password is decrypted');
+        // the one torrent client of the old version is the first client of the list, and the default one
+        $this->assertSame(array('id' => 1, 'name' => 'qBittorrent', 'type' => 'qBittorrent', 'address' => Env::QBT, 'login' => Env::CLIENT_USER,
+            'password' => Env::CLIENT_PASS, 'path' => '/downloads/qbt/', 'category' => ''), $config['clients'][0], 'client password is decrypted');
+        $this->assertSame(1, $config['defaultClient']);
+        $this->assertArrayNotHasKey('torrentPassword', $config['settings']);
+        $this->assertArrayNotHasKey('torrentClient', $config['settings']);
+        $this->assertStringContainsString('torrent-клиентов: 1 (qBittorrent)', $report);
         $this->assertSame('http://solver:8191', $config['settings']['flaresolverrUrl'], 'of two rows with one key, the filled one wins');
         $this->assertStringContainsString('"flaresolverrUrl" записана в базе несколько раз', $report);
         $this->assertArrayNotHasKey('cf_userAgent', $config['settings']);
@@ -254,7 +260,7 @@ final class ConverterTest extends IntegrationTestCase
         $report = $this->convert('--type=sqlite --db=/tmp/legacy.sqlite --key='.str_repeat('ab', 32).' --data='.escapeshellarg($this->out).' --config=/tmp/no-settings.php');
 
         $this->assertStringContainsString('Не удалось расшифровать', $report);
-        $this->assertSame('', $this->converted('config.json')['settings']['torrentPassword']);
+        $this->assertSame('', $this->converted('config.json')['clients'][0]['password']);
     }
 
     public function testDryRunWritesNothingAndExistingDataIsProtected()

@@ -305,20 +305,20 @@ final class StorageTest extends IntegrationTestCase
         AppState::useQbittorrent(array('torrentPassword' => 'Saved-Client-Pass'));
 
         Env::ui('tracker.save', array('name' => 'rutracker.org', 'login' => 'new-login', 'password' => ''));
-        Env::ui('settings.save', array('useTorrent' => true, 'torrentClient' => 'qBittorrent', 'torrentAddress' => Env::QBT, 'torrentLogin' => 'tm', 'torrentPassword' => ''));
+        Env::ui('client.save', array('id' => 1, 'name' => 'qBittorrent', 'type' => 'qBittorrent', 'address' => Env::QBT, 'login' => 'tm', 'password' => ''));
 
         $config = json_decode(AppState::file('config.json'), true);
         $this->assertSame(array('login' => 'new-login', 'password' => 'Saved-Pass', 'passkey' => '', 'address' => ''), $config['trackers']['rutracker.org']);
-        $this->assertSame('Saved-Client-Pass', $config['settings']['torrentPassword']);
+        $this->assertSame('Saved-Client-Pass', $config['clients'][0]['password']);
 
         Env::ui('tracker.save', array('name' => 'rutracker.org', 'login' => 'new-login', 'password' => 'Changed-Pass'));
         $this->assertSame('Changed-Pass', json_decode(AppState::file('config.json'), true)['trackers']['rutracker.org']['password']);
 
         // a saved password can be removed on purpose
-        Env::ui('settings.save', array('clearTorrentPassword' => true));
+        Env::ui('client.save', array('id' => 1, 'name' => 'qBittorrent', 'type' => 'qBittorrent', 'address' => Env::QBT, 'login' => 'tm', 'clearPassword' => true));
         Env::ui('tracker.save', array('name' => 'rutracker.org', 'login' => 'new-login', 'clearPassword' => true));
         $config = json_decode(AppState::file('config.json'), true);
-        $this->assertSame('', $config['settings']['torrentPassword']);
+        $this->assertSame('', $config['clients'][0]['password']);
         $this->assertSame('', $config['trackers']['rutracker.org']['password']);
     }
 

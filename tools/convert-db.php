@@ -425,6 +425,26 @@ if (is_file($xmlFile) && function_exists('simplexml_load_file'))
 
 // ---- result -------------------------------------------------------------------
 
+// Versions before 4 had one torrent client, in the settings. It becomes the first client of the
+// list (see Client\Clients), and so the default one; its settings leave the settings section.
+$clients = array();
+$clientTypes = array('qBittorrent', 'Transmission', 'Deluge', 'SynologyDS', 'TorrServer');
+$clientType = isset($settings['torrentClient']) ? (string)$settings['torrentClient'] : '';
+if (in_array($clientType, $clientTypes, TRUE) && isset($settings['torrentAddress']) && trim((string)$settings['torrentAddress']) !== '')
+{
+    $path = isset($settings['pathToDownload']) ? trim((string)$settings['pathToDownload']) : '';
+    if ($path !== '' && ! preg_match('~[/\\\\]$~', $path))
+        $path .= '/';
+    $clients[] = array('id' => 1, 'name' => $clientType == 'SynologyDS' ? 'Synology' : $clientType, 'type' => $clientType,
+        'address' => rtrim(trim((string)$settings['torrentAddress']), '/'), 'login' => isset($settings['torrentLogin']) ? (string)$settings['torrentLogin'] : '',
+        'password' => isset($settings['torrentPassword']) ? (string)$settings['torrentPassword'] : '', 'path' => $path,
+        'category' => isset($settings['qbitCategory']) ? (string)$settings['qbitCategory'] : '');
+}
+elseif ($clientType !== '' && ! in_array($clientType, $clientTypes, TRUE))
+    $notes['client'] = 'torrent-клиент "'.$clientType.'" версия 4 не знает: задайте клиент заново в настройках';
+foreach (array('torrentClient', 'torrentAddress', 'torrentLogin', 'torrentPassword', 'pathToDownload', 'qbitCategory') as $key)
+    unset($settings[$key]);
+
 $maxId = function ($list) {
     $max = 0;
     foreach ($list as $item)
@@ -436,6 +456,9 @@ $files = array(
     'config.json' => array(
         'version'       => FORMAT_VERSION,
         'settings'      => $settings,
+        'clients'       => $clients,
+        'nextClientId'  => count($clients) + 1,
+        'defaultClient' => $clients ? 1 : NULL,
         'trackers'      => $trackers,
         'notifications' => $notifications,
         'trackerProxy'  => $trackerProxy,
@@ -469,6 +492,7 @@ say('');
 say('Будет перенесено:');
 say('  настроек: '.(count($settings) + count($stateSettings)));
 say('  трекеров с учётными данными: '.count($trackers).', сохранённых cookies: '.count($cookies));
+say('  torrent-клиентов: '.count($clients).($clients ? ' ('.$clients[0]['type'].')' : ''));
 say('  адресов уведомлений: '.count($notifications));
 say('  тем: '.count($topics));
 say('  отслеживаемых пользователей: '.count($users).', найденных у них тем: '.count($buffer));

@@ -35,8 +35,8 @@ final class Ui
 
     //settings changed on the «Настройки» (Settings) page (passwords and the API key have separate actions)
     const SETTINGS = array('serverAddress', 'auth', 'rss', 'debug', 'autoUpdate', 'userAgent', 'httpTimeout', 'flaresolverrUrl',
-        'proxy', 'proxyAddress', 'proxyType', 'useTorrent', 'torrentClient', 'torrentAddress', 'torrentLogin', 'pathToDownload',
-        'qbitCategory', 'deleteDistribution', 'deleteOldFiles', 'deleteFilesOnRemove', 'stopAfterDays', 'removeOnSeriesDelete', 'sonarrReplaceTopic', 'sonarrReplaceTorrent',
+        'proxy', 'proxyAddress', 'proxyType', 'useTorrent',
+        'deleteDistribution', 'deleteOldFiles', 'deleteFilesOnRemove', 'stopAfterDays', 'removeOnSeriesDelete', 'sonarrReplaceTopic', 'sonarrReplaceTorrent',
         'send', 'sendUpdate', 'sendWarning', 'trackerTimezone', 'updateChannel', 'dataFileMode', 'httpConcurrency', 'httpSites', 'journalSize', 'debugKeep');
 
     private array $in = array();
@@ -165,11 +165,18 @@ final class Ui
 
         $values = array('auth' => $protect ? '1' : '0', 'ApiKey' => bin2hex(random_bytes(32)),
             'serverAddress' => rtrim($this->str('serverAddress', self::guessAddress()), '/').'/');
-        if ($this->str('torrentClient') !== '' && isset(Clients::CLASSES[$this->str('torrentClient')]))
-            $values += array('useTorrent' => '1', 'torrentClient' => $this->str('torrentClient'), 'torrentAddress' => rtrim($this->str('torrentAddress'), '/'),
-                'torrentLogin' => $this->str('torrentLogin'), 'torrentPassword' => (string)(isset($this->in['torrentPassword']) ? $this->in['torrentPassword'] : ''),
-                'pathToDownload' => $this->str('pathToDownload'));
+        //the torrent client, if one is named: the first of the list and so the default one
+        $client = NULL;
+        if ($this->str('torrentClient') !== '' && isset(Clients::CLASSES[$this->str('torrentClient')]) && $this->str('torrentAddress') !== '')
+        {
+            $values['useTorrent'] = '1';
+            $client = array('name' => Clients::suggestName($this->str('torrentClient')), 'type' => $this->str('torrentClient'), 'address' => $this->str('torrentAddress'),
+                'login' => $this->str('torrentLogin'), 'password' => (string)(isset($this->in['torrentPassword']) ? $this->in['torrentPassword'] : ''),
+                'path' => $this->str('pathToDownload'));
+        }
         Settings::setMany($values);
+        if ($client !== NULL)
+            Clients::save($client);
         if ($protect)
         {
             Auth::setPassword($password);
@@ -191,6 +198,10 @@ final class Ui
                 'text' => Messages::text($w['code']), 'topic' => $w['topicId']);
 
         $topics = array();
+        //how many topics each torrent client gets: id => number
+        $used = array();
+        //how many topics name each client as their own (the rest follow the default one)
+        $named = array();
         $pending = Pending::all();
         foreach (Topics::all() as $t)
         {
@@ -208,8 +219,27 @@ final class Ui
                 'stopped' => Topics::expired($t, $stopAfter), 'waiting' => isset($pending[(string)$t['id']]),
                 'addedAt' => $t['addedAt'], 'lastActivityAt' => $t['lastActivityAt'], 'supported' => $known,
                 'sonarrTitle' => $t['sonarrTitle'], 'sonarrSeasons' => array_values((array)$t['sonarrSeasons']),
+                //client - the topic's own torrent client (NULL - the default one); clientId, clientName - the one it is passed to
+                'client' => $t['client'] !== NULL && Clients::get($t['client']) !== NULL ? (int)$t['client'] : NULL,
+                'clientId' => ($client = Clients::forTopic($t)) !== NULL ? (int)$client['id'] : NULL, 'clientName' => $client !== NULL ? $client['name'] : '',
             );
+            if ($client !== NULL)
+                $used[$client['id']] = (isset($used[$client['id']]) ? $used[$client['id']] : 0) + 1;
+            if ($t['client'] !== NULL)
+                $named[(int)$t['client']] = (isset($named[(int)$t['client']]) ? $named[(int)$t['client']] : 0) + 1;
         }
+
+        //the torrent clients, without their passwords
+        $default = Clients::fallback();
+        $clientList = array();
+        foreach (Clients::all() as $c)
+            $clientList[] = array('id' => (int)$c['id'], 'name' => $c['name'], 'type' => $c['type'], 'address' => $c['address'], 'login' => $c['login'],
+                'hasPassword' => $c['password'] !== '', 'path' => $c['path'], 'category' => $c['category'],
+                'default' => $default !== NULL && (int)$default['id'] === (int)$c['id'],
+                //how many topics are passed to it, with torrents passing switched on
+                'topics' => isset($used[$c['id']]) ? $used[$c['id']] : 0, 'own' => isset($named[(int)$c['id']]) ? $named[(int)$c['id']] : 0,
+                //whether the client can tell what it is doing with its torrents
+                'statuses' => ! in_array($c['type'], array('SynologyDS', 'TorrServer'), TRUE));
 
         $users = array();
         foreach (Users::all() as $u)
@@ -242,7 +272,6 @@ final class Ui
         }
 
         $shown = array_intersect_key($settings, array_flip(self::SETTINGS));
-        $shown['hasTorrentPassword'] = $settings['torrentPassword'] !== '';
         $shown['hasApiKey'] = $settings['ApiKey'] !== '';
         foreach (array('Update' => 'notification', 'Warning' => 'warning') as $what => $type)
         {
@@ -255,11 +284,11 @@ final class Ui
 
         return array(
             'topics' => $topics, 'users' => $users, 'trackers' => $trackers, 'settings' => $shown, 'warnings' => $warnings,
-            'categories' => Topics::categories(), 'sonarrTitles' => Topics::sonarrTitles(), 'clients' => array_keys(Clients::CLASSES),
+            'categories' => Topics::categories(), 'sonarrTitles' => Topics::sonarrTitles(), 'clientTypes' => array_keys(Clients::CLASSES), 'clients' => $clientList,
             'services' => array_values(array_unique(array_column(Settings::notificationServices(), 'service'))),
             'timezones' => Time::names(),
             'status' => array(
-                'version' => App::versionLabel(), 'lastRun' => State::lastRun(), 'lastRunUtc' => Time::serverUtc((string)State::lastRun()), 'lastRunSummary' => State::lastRunSummary(), 'running' => Lock::busy(), 'client' => Clients::currentName(),
+                'version' => App::versionLabel(), 'lastRun' => State::lastRun(), 'lastRunUtc' => Time::serverUtc((string)State::lastRun()), 'lastRunSummary' => State::lastRunSummary(), 'running' => Lock::busy(), 'client' => Clients::enabled() ? Clients::fallback()['name'] : NULL,
                 'authRequired' => Auth::required(), 'wiki' => Release::wikiUrl(),
                 'update' => Release::isNewer($release) ? array('version' => $release['version'], 'notes' => $release['notes'], 'url' => $release['url'], 'downgrade' => Release::isDowngrade($release)) : NULL,
             ),
@@ -276,6 +305,17 @@ final class Ui
             $fields['path'] .= '/';
         $days = isset($this->in['stopAfterDays']) ? $this->in['stopAfterDays'] : NULL;
         $fields['stopAfterDays'] = ($days === NULL || $days === '') ? NULL : max(0, (int)$days);
+        //the torrent client: sent by the form of a topic; empty - the default one
+        if (array_key_exists('client', $this->in))
+        {
+            $client = $this->in['client'];
+            if ($client === NULL || $client === '')
+                $fields['client'] = NULL;
+            elseif (Clients::get($client) === NULL)
+                $this->fail('Такого torrent-клиента нет.');
+            else
+                $fields['client'] = (int)$client;
+        }
         return $fields;
     }
 
@@ -375,8 +415,36 @@ final class Ui
         //"download again": on the next check the torrent will be treated as new
         if ($this->flag('reset'))
             $fields = array('updatedAt' => '', 'episode' => '', 'error' => FALSE) + $fields;
+
+        // The topic goes to another torrent client. Its torrent is taken out of the former client
+        // only if the form says so (like on deleting a topic), and is passed to the new one from the
+        // torrent file TorrentMonitor has saved; without that file the topic waits for its next update.
+        $from = Clients::forTopic($topic);
+        $to = array_key_exists('client', $fields) ? Clients::forTopic(array('client' => $fields['client'])) : $from;
+        $moved = $from !== NULL && $to !== NULL && (int)$from['id'] !== (int)$to['id'];
+        $note = '';
+        if ($moved && $topic['hash'] !== '')
+        {
+            $removed = $this->flag('moveRemove') && Delivery::removeFromClient($topic['hash'], $this->flag('moveDeleteData'), $topic);
+            $fields['hash'] = '';
+            $note = $removed ? ' Раздача удалена из «'.$from['name'].'».' : '';
+        }
         Topics::update($topic['id'], $fields);
-        return array('message' => 'Сохранено.') + $this->doOverview();
+        if ($moved)
+        {
+            $now = Topics::get($topic['id']);
+            $file = Delivery::fileName($now['tracker'], $now['topicId'] !== '' ? $now['topicId'] : $now['name']);
+            $hash = $topic['hash'] !== '' && is_file(App::torrentsDir().'/'.$file) ? Delivery::toClient($now, $now['name'], $file, (string)$now['updatedAt']) : NULL;
+            if ($hash !== NULL)
+            {
+                Topics::update($topic['id'], array('hash' => $hash));
+                $note .= ' Раздача передана в «'.$to['name'].'».';
+            }
+            elseif ($topic['hash'] !== '')
+                $note .= ' В «'.$to['name'].'» раздача попадёт со следующим обновлением темы.';
+            Journal::add('topic', 'Тема «'.($now['name'] !== '' ? $now['name'] : $now['topicId']).'» перенесена (интерфейс): «'.$from['name'].'» → «'.$to['name'].'».'.$note);
+        }
+        return array('message' => 'Сохранено.'.$note) + $this->doOverview();
     }
 
     private function doTopicPause(): array
@@ -392,7 +460,7 @@ final class Ui
         if ($topic === NULL)
             $this->fail('Тема не найдена.');
         $removed = $this->flag('removeFromClient') && $topic['hash'] !== ''
-            && Delivery::removeFromClient($topic['hash'], isset($this->in['deleteData']) ? $this->flag('deleteData') : NULL);
+            && Delivery::removeFromClient($topic['hash'], isset($this->in['deleteData']) ? $this->flag('deleteData') : NULL, $topic);
         Topics::delete($topic['id']);
         return array('message' => $removed ? 'Тема удалена, раздача удалена из torrent-клиента.' : 'Тема удалена.') + $this->doOverview();
     }
@@ -583,10 +651,6 @@ final class Ui
         }
         if (isset($values['serverAddress']) && $values['serverAddress'] !== '')
             $values['serverAddress'] = rtrim($values['serverAddress'], '/').'/';
-        if (isset($values['torrentAddress']))
-            $values['torrentAddress'] = rtrim($values['torrentAddress'], '/');
-        if (isset($values['pathToDownload']) && $values['pathToDownload'] !== '' && ! preg_match('~[/\\\\]$~', $values['pathToDownload']))
-            $values['pathToDownload'] .= '/';
         foreach (array('httpTimeout' => 1, 'stopAfterDays' => 0) as $key => $min)
             if (isset($values[$key]))
                 $values[$key] = (string)max($min, (int)$values[$key]);
@@ -605,17 +669,8 @@ final class Ui
             $this->fail('Неизвестный канал обновлений.');
         if (isset($values['trackerTimezone']) && ! Time::valid($values['trackerTimezone']))
             $this->fail('Неизвестный часовой пояс: '.$values['trackerTimezone']);
-        if (isset($values['torrentClient']) && $values['torrentClient'] !== '' && ! isset(Clients::CLASSES[$values['torrentClient']]))
-            $this->fail('Неизвестный torrent-клиент.');
         if (isset($values['auth']) && $values['auth'] == '1' && (string)Settings::get('password') === '')
             $this->fail('Сначала задайте пароль.');
-
-        //the client's saved password is not sent to the browser: an empty field means "do not change"
-        $password = isset($this->in['torrentPassword']) ? (string)$this->in['torrentPassword'] : '';
-        if ($password !== '')
-            $values['torrentPassword'] = $password;
-        elseif ($this->flag('clearTorrentPassword'))
-            $values['torrentPassword'] = '';
 
         foreach (array('Update' => 'notification', 'Warning' => 'warning') as $what => $type)
         {
@@ -636,9 +691,7 @@ final class Ui
             Files::setMode($values['dataFileMode']);
         App::resetHttp();
         Journal::settings($before, Settings::all());
-        //what was known about a client or a solver does not describe another one
-        if (Clients::currentName() === NULL)
-            State::forgetService('client');
+        //what was known about a solver does not describe another one
         if ((string)Settings::get('flaresolverrUrl') === '')
             State::forgetService('solver');
 
@@ -740,20 +793,26 @@ final class Ui
         return array('message' => implode(' ', $lines));
     }
 
-    // What the torrent client says about the torrents of the topics: for the page of topics.
+    // What one torrent client says about the torrents of the topics passed to it: for the page of
+    // topics, which asks every client in a request of its own, all at once.
     // supported - the client can tell; answered - it did; torrents - topic id => its torrent
     // (state "missing": the topic was passed to the client, and the client no longer has it).
     // A client that does not answer is not an event of the journal: this is asked whenever the page is opened.
     private function doClientStatus(): array
     {
-        $name = Clients::currentName();
-        $result = array('client' => $name, 'supported' => FALSE, 'answered' => FALSE, 'error' => '', 'time' => date('Y-m-d H:i:s'),
+        //the requests of one page are answered one after another while the session is held
+        if (session_status() === PHP_SESSION_ACTIVE)
+            session_write_close();
+        $record = Clients::enabled() ? Clients::get(isset($this->in['id']) ? $this->in['id'] : NULL) : NULL;
+        $result = array('id' => $record !== NULL ? (int)$record['id'] : NULL, 'client' => $record !== NULL ? $record['name'] : NULL,
+            'supported' => FALSE, 'answered' => FALSE, 'error' => '', 'time' => date('Y-m-d H:i:s'),
             'timeUtc' => Time::serverUtc(date('Y-m-d H:i:s')), 'torrents' => new \stdClass());
-        if ($name === NULL)
+        if ($record === NULL)
             return $result;
+        $name = $record['name'];
         try
         {
-            $client = Clients::current();
+            $client = Clients::open($record);
             if ($client instanceof \TorrentMonitor\Client\HttpClientBase)
                 $client->hurry(6);
             $statuses = $client->statuses();
@@ -761,7 +820,7 @@ final class Ui
         catch (\TorrentMonitor\Client\ClientException $e)
         {
             return array('supported' => TRUE, 'error' => $e->getMessage() == 'log_passwd'
-                ? $name.' не принимает логин или пароль: состояние раздач неизвестно.' : $name.' не отвечает: состояние раздач неизвестно.') + $result;
+                ? '«'.$name.'» не принимает логин или пароль: состояние раздач неизвестно.' : '«'.$name.'» не отвечает: состояние раздач неизвестно.') + $result;
         }
         if ($statuses === NULL)
             return $result;
@@ -769,10 +828,86 @@ final class Ui
         foreach (Topics::all() as $topic)
         {
             $hash = strtolower((string)$topic['hash']);
-            if ($hash !== '')
+            $own = Clients::forTopic($topic);
+            if ($hash !== '' && $own !== NULL && (int)$own['id'] === (int)$record['id'])
                 $torrents[(string)$topic['id']] = isset($statuses[$hash]) ? $statuses[$hash] : array('state' => 'missing');
         }
         return array('supported' => TRUE, 'answered' => TRUE, 'torrents' => empty($torrents) ? new \stdClass() : $torrents) + $result;
+    }
+
+    // ---------------------------------------------------------------- torrent clients
+
+    //adds a torrent client or changes one; with "check" the connection is tried right away
+    private function doClientSave(): array
+    {
+        $id = isset($this->in['id']) && $this->in['id'] !== '' && $this->in['id'] !== NULL ? (int)$this->in['id'] : NULL;
+        $fields = array('name' => $this->str('name'), 'type' => $this->str('type'), 'address' => $this->str('address'), 'login' => $this->str('login'),
+            'path' => $this->str('path'), 'category' => $this->str('category'));
+        //the saved password is not sent to the browser: an empty field means "do not change"
+        $password = isset($this->in['password']) ? (string)$this->in['password'] : '';
+        if ($password !== '' || $id === NULL)
+            $fields['password'] = $password;
+        elseif ($this->flag('clearPassword'))
+            $fields['password'] = '';
+        $before = $id !== NULL ? Clients::get($id) : NULL;
+        $saved = Clients::save($fields, $id);
+        if (is_string($saved))
+            $this->fail($saved);
+        //what the client said about itself does not describe another one
+        $after = Clients::get($saved);
+        if ($before !== NULL && ($before['address'] !== $after['address'] || $before['type'] !== $after['type']))
+            State::forgetService('client:'.$saved);
+        if ($this->flag('default'))
+            Clients::setDefault($saved);
+        App::resetHttp();
+        $message = $id === NULL ? 'Torrent-клиент «'.$after['name'].'» добавлен.' : 'Сохранено.';
+        if ($this->flag('check'))
+        {
+            $problem = Health::clientProblem($after);
+            if ($problem !== NULL)
+                return array('message' => $message.' Но подключиться не удалось: '.$problem, 'failed' => TRUE, 'saved' => $saved) + $this->doOverview();
+            About::seeClient($after);
+            $seen = State::service('client:'.$saved);
+            $message .= ' Подключение к '.$after['type'].($seen !== NULL && $seen['version'] !== '' ? ' '.$seen['version'] : '').' работает.';
+        }
+        return array('message' => $message, 'saved' => $saved) + $this->doOverview();
+    }
+
+    private function doClientDefault(): array
+    {
+        if ( ! Clients::setDefault(isset($this->in['id']) ? $this->in['id'] : NULL))
+            $this->fail('Такого torrent-клиента нет.');
+        return array('message' => 'Основной torrent-клиент изменён.') + $this->doOverview();
+    }
+
+    // Removes a torrent client. Topics that name it are given to another one first (moveTo), or
+    // the removal is refused: a topic must not lose its client behind the user's back.
+    private function doClientDelete(): array
+    {
+        $client = Clients::get(isset($this->in['id']) ? $this->in['id'] : NULL);
+        if ($client === NULL)
+            $this->fail('Такого torrent-клиента нет.');
+        $own = array();
+        foreach (Topics::all() as $topic)
+            if ($topic['client'] !== NULL && (int)$topic['client'] === (int)$client['id'])
+                $own[] = $topic['id'];
+        //topics that follow the default client follow the next default one
+        $moveTo = isset($this->in['moveTo']) && $this->in['moveTo'] !== '' ? Clients::get($this->in['moveTo']) : NULL;
+        if ( ! empty($own) && ($moveTo === NULL || (int)$moveTo['id'] === (int)$client['id']))
+            $this->fail('К этому клиенту привязаны темы: '.count($own).'. Выберите клиент, которому их передать.', 409);
+        if ( ! empty($own))
+        {
+            $changes = array();
+            foreach ($own as $id)
+                $changes[$id] = array('client' => (int)$moveTo['id']);
+            Topics::updateMany($changes);
+            Journal::add('topic', 'Темы клиента «'.$client['name'].'» переданы клиенту «'.$moveTo['name'].'» (интерфейс): '.count($own));
+        }
+        Clients::delete($client['id']);
+        State::forgetService('client:'.$client['id']);
+        Warnings::clear($client['name']);
+        App::resetHttp();
+        return array('message' => 'Torrent-клиент «'.$client['name'].'» удалён.') + $this->doOverview();
     }
 
     // The copies of the data files that can be brought back: for the «Состояние» page
@@ -798,18 +933,19 @@ final class Ui
         return array('message' => 'Файл '.$file.' возвращён из копии. Прежний сохранён как '.$file.'.replaced.', 'reload' => TRUE);
     }
 
-    //checks the connection to the torrent client with the saved settings
+    //checks the connection to a saved torrent client
     private function doClientTest(): array
     {
-        if (Clients::currentName() === NULL)
-            $this->fail('Передача в torrent-клиент выключена. Включите её и сохраните настройки.');
-        $problem = Health::clientProblem();
+        $client = Clients::get(isset($this->in['id']) ? $this->in['id'] : NULL);
+        if ($client === NULL)
+            $this->fail('Такого torrent-клиента нет.');
+        $problem = Health::clientProblem($client);
         if ($problem !== NULL)
             $this->fail($problem);
         //the client has just answered: what it says about itself is remembered for the log
-        About::seeClient();
-        $seen = State::service('client');
-        return array('message' => 'Подключение к '.Clients::currentName().($seen !== NULL && $seen['version'] !== '' ? ' '.$seen['version'] : '').' работает.');
+        About::seeClient($client);
+        $seen = State::service('client:'.$client['id']);
+        return array('message' => 'Подключение к '.$client['type'].($seen !== NULL && $seen['version'] !== '' ? ' '.$seen['version'] : '').' работает.') + $this->doOverview();
     }
 
     //«Скопировать сведения»: what TorrentMonitor runs with, as text for a bug report
@@ -927,9 +1063,11 @@ final class Ui
 
         //values that lines written before the marks existed may name: the page hides those too
         $known = array();
-        foreach (array('torrentAddress', 'flaresolverrUrl', 'proxyAddress', 'serverAddress') as $key)
+        foreach (array('flaresolverrUrl', 'proxyAddress', 'serverAddress') as $key)
             if ((string)Settings::get($key) !== '')
                 $known[] = array('a', About::withoutLogin((string)Settings::get($key)));
+        foreach (Clients::all() as $client)
+            $known[] = array('a', About::withoutLogin((string)$client['address']));
         return array('lines' => $lines, 'cut' => $cut, 'detailed' => ! empty($detail), 'known' => $known,
             //the lines are stamped on the server's clock: with its offset from UTC the page shows them on the browser's
             'offset' => (int)date('Z'), 'running' => Lock::busy());
