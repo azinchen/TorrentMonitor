@@ -7,9 +7,10 @@ section as the description of the GitHub release and refuses to publish
 without it. "tools/release.sh --notes [version]" prints what would be published.
 
 The script also checks what can be checked of the rules below and does not
-publish a description that breaks them: it starts with a summary sentence, has
-the section "Что нужно сделать", every change ends with its pull request or
-commit, and nothing the program cannot show is used. "tools/release.sh --check"
+publish a description that breaks them: it starts with a summary sentence,
+every change ends with its pull request or commit, the section "Что нужно
+сделать" is not there just to say "nothing", and nothing the program cannot
+show is used. "tools/release.sh --check"
 checks every section; "tests/run.sh lint" (and so "tests/run.sh all") runs it.
 
 Who reads it: mostly a TorrentMonitor user, inside the program - the block
@@ -28,12 +29,19 @@ Who reads it: mostly a TorrentMonitor user, inside the program - the block
 
 What a release describes: the changes since the previous release, a beta
 included - a copy that skips versions is shown the descriptions of all of them.
-The final version of a series (4.0.0 after 4.0.0-betaN) is read by people who
-never saw the betas: its section describes everything since the previous
-stable version and replaces the beta sections in CHANGELOG.md.
+A release candidate and the final version of a series (4.0.0-rc.1, then 4.0.0,
+after 4.0.0-betaN) are read by people who never saw the betas: their section
+describes everything since the previous stable version, as the program is now,
+not beta by beta. The section of the final version replaces the sections of
+its betas and candidates in CHANGELOG.md.
 
-Sections, in this order. "Что нужно сделать" is always there; the others are
-left out when empty. The script adds the "Все изменения" line itself.
+Names of pre-releases: the number is set off by a dot - 4.0.0-rc.1, 4.1.0-beta.1.
+GitHub orders releases of one day by the rules of semantic versioning, where
+"beta9" is above "beta11" (they are compared as text) and "beta.9" is below
+"beta.11" (as numbers). The betas of 4.0.0 were named without the dot.
+
+Sections, in this order. Every one of them is left out when empty: "Что нужно
+сделать" too - when the user has nothing to do, the description does not say so. The script adds the "Все изменения" line itself.
 -->
 
 One or two sentences: what this version is about. It is all a notification
@@ -42,8 +50,8 @@ says about the release, so it has to make sense alone. No heading above it.
 ### ⬆️ Что нужно сделать
 
 <!-- Anything the user must do or check after the update: a changed default,
-a removed setting, a step to run by hand. Otherwise one line:
-"Ничего: настройки и данные остаются как есть." -->
+a removed setting, a step to run by hand. When there is nothing of the kind,
+leave the whole section out, heading included. -->
 
 ### ✨ Новое
 

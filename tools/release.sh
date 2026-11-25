@@ -72,10 +72,13 @@ problems() {
         /^#/ {
             close_item()
             if ($0 !~ /^### /) say("only ### headings are allowed inside a description: " $0)
+            if (todo && !todo_lines) say("the section \"Что нужно сделать\" is empty: leave it out when there is nothing to do")
             todo = ($0 ~ /Что нужно сделать/)
-            if (todo) has_todo = 1
+            todo_lines = 0
             next
         }
+        todo && /^Ничего/ { say("the section \"Что нужно сделать\" says there is nothing to do: leave it out"); todo_lines++; next }
+        todo { todo_lines++ }
         /^- / { close_item(); item = $0; next }
         /^ +[-*] / { say("nested lists are not shown by the program: " $0); next }
         /^  [^ ]/ && item != "" { item = item " " substr($0, 3); next }
@@ -87,7 +90,7 @@ problems() {
         END {
             close_item()
             if (!started) say("the description is empty")
-            else if (!has_todo) say("no section \"Что нужно сделать\"")
+            if (todo && !todo_lines) say("the section \"Что нужно сделать\" is empty: leave it out when there is nothing to do")
         }'
 }
 
@@ -158,7 +161,7 @@ if remote=$(gh api "repos/$repo/commits/$tag" --jq .sha 2> /dev/null); then
     target=()
 fi
 
-# a version with a suffix (4.0.0-beta1) is a pre-release: GitHub does not report it as the latest
+# a version with a suffix (4.0.0-rc.1) is a pre-release: GitHub does not report it as the latest
 # release, so installed copies are not offered it as an update
 flags=()
 [[ "$version" == *-* ]] && flags+=(--prerelease)
