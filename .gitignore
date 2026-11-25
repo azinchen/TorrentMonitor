@@ -1,9 +1,7 @@
 .DS_Store
 
-# local settings of editors and coding assistants
+# local settings of the coding assistant
 /.claude/
-/.idea/
-/.vscode/
 
 # local configuration and data
 /config.php
