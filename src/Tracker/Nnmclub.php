@@ -93,7 +93,24 @@ final class Nnmclub extends ForumTracker
     public function topicIdFromUrl(string $url): ?string
     {
         parse_str((string)parse_url($url, PHP_URL_QUERY), $query);
-        return isset($query['t']) && ctype_digit((string)$query['t']) ? (string)$query['t'] : NULL;
+        if (isset($query['t']) && ctype_digit((string)$query['t']))
+            return (string)$query['t'];
+        // The comment of a torrent file from this tracker (what Sonarr's webhook goes by) names the
+        // post, viewtopic.php?p=..., not the topic: the page of the post says which topic it is in.
+        if ( ! isset($query['p']) || ! ctype_digit((string)$query['p']))
+            return NULL;
+        try
+        {
+            $page = $this->send($this->get('/forum/viewtopic.php?p='.$query['p']))->body;
+        }
+        catch (\Throwable $e)
+        {
+            return NULL;
+        }
+        if (preg_match('/class="maintitle"\s+href="viewtopic\.php\?t=(\d+)/', $page, $m)
+            || preg_match('/posting\.php\?mode=reply&(?:amp;)?t=(\d+)/', $page, $m))
+            return $m[1];
+        return NULL;
     }
 
     public function userTopics(string $user): ?array

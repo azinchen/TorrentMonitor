@@ -111,6 +111,17 @@ abstract class Tracker
         $this->loggedIn = TRUE;
     }
 
+    // Opens the main page of the site: the check of a tracker that is used without signing in.
+    // TrackerException with an error code when the site does not answer or cannot be read.
+    public function reach(): void
+    {
+        $response = $this->send($this->get('/'));
+        if ($response->challenged)
+            throw new TrackerException('cloudflare');
+        if ($response->status == 0 || $response->status >= 500)
+            throw new TrackerException($this->failure ?: 'cant_get_forum_page');
+    }
+
     // request for the page the topic is checked by; NULL if no page is needed
     abstract public function request(array $topic): ?Request;
 
