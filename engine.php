@@ -48,6 +48,15 @@ if ($problem !== NULL)
     return;
 }
 
-$ok = (new Runner($say, $options))->run();
+try
+{
+    $ok = (new Runner($say, $options))->run();
+}
+catch (\Throwable $e)
+{
+    //a check that dies without a word would leave the schedule silently doing nothing
+    $say(App::unexpected($e, 'проверка'));
+    $ok = FALSE;
+}
 if ($cli)
     exit($ok ? 0 : 1);

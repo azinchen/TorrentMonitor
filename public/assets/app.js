@@ -17,6 +17,9 @@ document.addEventListener('alpine:init', () => {
         loading: true,          // first load
         busy: '',               // the action currently running (to disable buttons)
         fatal: '',              // the server cannot work (corrupted data, etc.)
+        restore: null,          // the damaged data file that can be brought back from a copy: { file, time, copies }
+        restoreCopy: '',        // which copy of it is chosen ('' - the newest)
+        dataCopies: [],         // the copies of the data files, for the page «Состояние»: { file, copy, time, timeUtc, topics }
         csrf: '',
         mode: 'app',            // setup | login | app
         page: 'topics',
@@ -108,6 +111,29 @@ document.addEventListener('alpine:init', () => {
             }
         },
 
+        // how a copy of a data file is named for the user
+        copyTitle(c) { return this.local(c.timeUtc || '', c.time) + (c.topics !== null && c.topics !== undefined ? ' · тем: ' + c.topics : '') + (c.copy === 'bak' ? ' · перед последним сохранением' : ''); },
+        // brings a damaged data file back from a copy the program keeps, then starts the page again
+        async restoreData() {
+            const chosen = (this.restore.copies || []).find(c => c.copy === this.restoreCopy) || (this.restore.copies || [])[0] || this.restore;
+            if (!confirm('Вернуть ' + this.restore.file + ' из копии от ' + this.local('', chosen.time) + '? Изменения, сделанные после неё, будут потеряны. Повреждённый файл сохранится как ' + this.restore.file + '.broken.')) return;
+            const response = await fetch('ui/data.restore', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ copy: chosen.copy || '' }), credentials: 'same-origin' });
+            let data = null;
+            try { data = await response.json(); } catch (e) { /* not JSON */ }
+            if (data && data.ok) location.reload();
+            else this.fatal = (data && data.message ? data.message + ' ' : '') + this.fatal;
+        },
+        async loadDataCopies() {
+            const data = await this.call('data.copies', {}, { silent: true });
+            if (data) this.dataCopies = data.copies || [];
+        },
+        // brings a healthy data file back to what it was: a mistake noticed later
+        async restoreCopyOf(c) {
+            if (!confirm('Вернуть ' + c.file + ' к состоянию на ' + this.local(c.timeUtc, c.time) + '? Всё, что изменено после, будет потеряно. Нынешний файл сохранится как ' + c.file + '.replaced.')) return;
+            const data = await this.call('data.restore', { file: c.file, copy: c.copy });
+            if (data) setTimeout(() => location.reload(), 1200);
+        },
+
         // ---- server requests
         async call(action, body = {}, options = {}) {
             if (!options.silent) this.busy = action;
@@ -121,7 +147,9 @@ document.addEventListener('alpine:init', () => {
                 let data = null;
                 try { data = await response.json(); } catch (e) { /* not JSON: server error */ }
                 if (response.status === 401) { this.mode = 'login'; return null; }
-                if (response.status === 503 && data) { this.fatal = data.message; return null; }
+                if (response.status === 503 && data) { this.fatal = data.message; this.restore = data.restore || null; return null; }
+                //the page cannot start without its first answer: said in full, not in a passing note
+                if (action === 'boot' && (!data || !data.ok)) { this.fatal = data && data.message ? data.message : 'Сервер ответил ошибкой (' + response.status + '). Подробности — в журнале ошибок PHP.'; return null; }
                 if (!data) { this.toast('Сервер ответил ошибкой (' + response.status + ').', true); return null; }
                 if (!data.ok) { this.toast(data.message, true); return null; }
                 if (data.message && !options.quiet) this.toast(data.message);
@@ -165,6 +193,7 @@ document.addEventListener('alpine:init', () => {
             this.page = id;
             if (location.hash.slice(1) !== id) history.replaceState(null, '', '#' + id);
             if (id === 'status' && !this.health) this.checkHealth();
+            if (id === 'status') this.loadDataCopies();
             if (id === 'log') this.loadLog(true);
             if (id === 'topics') this.loadClientStatus();
         },

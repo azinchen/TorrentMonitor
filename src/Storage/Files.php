@@ -60,7 +60,7 @@ final class Files
     public static function setMode(string $text): void
     {
         self::$mode = self::validMode($text) ? octdec($text) : NULL;
-        foreach (array_merge((array)glob(self::dir().'/*.json'), (array)glob(self::dir().'/*.json.bak'), (array)glob(self::dir().'/*.log')) as $file)
+        foreach (array_merge((array)glob(self::dir().'/*.json'), (array)glob(self::dir().'/*.json.bak'), (array)glob(self::dir().'/*.json.bak.*'), (array)glob(self::dir().'/*.log')) as $file)
             self::protect($file);
     }
 
@@ -101,32 +101,144 @@ final class Files
     // Reads all data files; StorageException if any of them is corrupted or inaccessible
     public static function check(): void
     {
+        //The settings are gone and the topics are not: that is not a new installation. Treating it
+        //as one would offer the first setup, with a new password, to whoever opens the address.
+        if ( ! self::config()->exists() && self::torrents()->exists())
+            throw new StorageException('Файл настроек отсутствует: '.self::config()->file().', хотя файл тем есть'
+                .(is_file(self::config()->file().'.bak') ? '. Предыдущая версия файла сохранена рядом: config.json.bak'
+                    : '. Верните его из резервной копии; чтобы начать заново, удалите и torrents.json'));
         self::config()->read();
         self::torrents()->read();
         self::state()->read();
+        //a damaged state file was put aside and started anew: said once, in the journal
+        if (self::state()->recovered !== NULL)
+        {
+            $aside = self::state()->recovered;
+            self::state()->recovered = NULL;
+            \TorrentMonitor\Data\Journal::add('data', 'Файл state.json был повреждён и начат заново: сохранённые сессии трекеров, отметки ошибок '
+                .'и найденные темы пользователей сброшены. Прежний файл сохранён как '.$aside);
+        }
+    }
+
+    //the files that are copied before every save, and what checks a copy of each
+    const COPIED = array('config.json' => 'config', 'torrents.json' => 'torrents');
+
+    // The copies of a data file the program can read, the newest first: each array('file' =>
+    // 'torrents.json', 'copy' => 'bak' | 'bak.1' | 'bak.2', 'time' => when it was made ('Y-m-d H:i:s'),
+    // 'topics' => the number of topics in it (NULL for the settings)).
+    /** @return array[] */
+    public static function copies(string $name): array
+    {
+        if ( ! isset(self::COPIED[$name]))
+            return array();
+        $found = array();
+        foreach (JsonStore::COPIES as $copy)
+        {
+            $file = self::dir().'/'.$name.'.'.$copy;
+            $data = is_file($file) ? json_decode((string)@file_get_contents($file), TRUE) : NULL;
+            if ( ! is_array($data) || ! isset($data['version']) || ! is_int($data['version']))
+                continue;
+            //a copy in an earlier format is migrated when it is read: only its shape is looked at here
+            $current = $name == 'torrents.json' ? self::TORRENTS_VERSION : self::CONFIG_VERSION;
+            if ($data['version'] >= $current)
+            {
+                try
+                {
+                    call_user_func(array(Repair::class, self::COPIED[$name]), $data);
+                }
+                catch (Damaged $e)
+                {
+                    continue;
+                }
+            }
+            $list = isset($data['topics']) ? $data['topics'] : (isset($data['torrents']) ? $data['torrents'] : NULL);
+            $found[] = array('file' => $name, 'copy' => $copy, 'time' => date('Y-m-d H:i:s', (int)@filemtime($file)),
+                'topics' => $name == 'torrents.json' && is_array($list) ? count($list) : NULL);
+        }
+        return $found;
+    }
+
+    // The data file that stops the program and can be brought back from a copy: array('file' =>
+    // 'config.json', 'time' => of the newest copy, 'copies' => all of them, see copies()), or NULL.
+    public static function restorable(): ?array
+    {
+        foreach (array('config.json' => self::config(), 'torrents.json' => self::torrents()) as $name => $store)
+        {
+            $broken = FALSE;
+            if ($name == 'config.json' && ! $store->exists() && self::torrents()->exists())
+                $broken = TRUE;
+            else
+            {
+                try
+                {
+                    $store->read();
+                }
+                catch (StorageException $e)
+                {
+                    $broken = TRUE;
+                }
+            }
+            $copies = $broken ? self::copies($name) : array();
+            if ( ! empty($copies))
+                return array('file' => $name, 'time' => $copies[0]['time'], 'copies' => $copies);
+        }
+        return NULL;
+    }
+
+    // Puts a copy in place of a data file. The file it replaces is kept: as <file>.broken when it
+    // was damaged, as <file>.replaced when it was not. $copy - which copy ('' - the newest).
+    // FALSE if there is no such copy.
+    public static function restore(string $name, string $copy = ''): bool
+    {
+        $copies = self::copies($name);
+        if ($copy !== '')
+            $copies = array_values(array_filter($copies, function ($c) use ($copy) { return $c['copy'] === $copy; }));
+        if (empty($copies))
+            return FALSE;
+        $what = $copies[0];
+        $damaged = self::restorable();
+        $damaged = $damaged !== NULL && $damaged['file'] == $name;
+        $file = self::dir().'/'.$name;
+        $aside = $file.($damaged ? '.broken' : '.replaced');
+        if (is_file($file) && ! @rename($file, $aside))
+            return FALSE;
+        if ( ! @copy($file.'.'.$what['copy'], $file))
+        {
+            //nothing is lost: the file goes back
+            if (is_file($aside))
+                @rename($aside, $file);
+            return FALSE;
+        }
+        self::protect($file);
+        if (is_file($aside))
+            self::protect($aside);
+        self::$stores = array();
+        \TorrentMonitor\Data\Journal::add('data', 'Файл '.$name.($damaged ? ' был повреждён и' : '').' возвращён из копии от '.$what['time']
+            .'. '.($damaged ? 'Повреждённый' : 'Прежний').' файл сохранён как '.basename($aside));
+        return TRUE;
     }
 
     public static function config(): JsonStore
     {
-        return self::store('config.json', self::configDefaults(), self::CONFIG_VERSION, array(), TRUE);
+        return self::store('config.json', self::configDefaults(), self::CONFIG_VERSION, array(), TRUE, array(Repair::class, 'config'));
     }
 
     public static function torrents(): JsonStore
     {
-        return self::store('torrents.json', self::torrentsDefaults(), self::TORRENTS_VERSION, array(1 => array(Migrations::class, 'torrents1')), TRUE);
+        return self::store('torrents.json', self::torrentsDefaults(), self::TORRENTS_VERSION, array(1 => array(Migrations::class, 'torrents1')), TRUE, array(Repair::class, 'torrents'));
     }
 
     public static function state(): JsonStore
     {
-        return self::store('state.json', self::stateDefaults(), self::STATE_VERSION, array(1 => array(Migrations::class, 'state1')), FALSE);
+        return self::store('state.json', self::stateDefaults(), self::STATE_VERSION, array(1 => array(Migrations::class, 'state1')), FALSE, array(Repair::class, 'state'), TRUE);
     }
 
-    private static function store($name, $defaults, $version, $migrations, $backup): JsonStore
+    private static function store($name, $defaults, $version, $migrations, $backup, $repair = NULL, $recover = FALSE): JsonStore
     {
         if ( ! isset(self::$stores[$name]))
         {
             self::prepare();
-            self::$stores[$name] = new JsonStore(self::dir().'/'.$name, $defaults, $version, $migrations, $backup);
+            self::$stores[$name] = new JsonStore(self::dir().'/'.$name, $defaults, $version, $migrations, $backup, NULL, $repair, $recover);
         }
         return self::$stores[$name];
     }

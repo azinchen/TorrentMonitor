@@ -25,6 +25,16 @@
     <div class="card card--narrow">
         <h1>TorrentMonitor не может начать работу</h1>
         <p x-text="fatal"></p>
+        <template x-if="restore">
+            <div>
+                <p>Программа хранит предыдущую версию этого файла. Её можно вернуть: будут потеряны только изменения,
+                    сделанные после неё. Самая новая копия — от <span x-text="local('', restore.time)"></span>.</p>
+                <p x-show="(restore.copies || []).length > 1"><select x-model="restoreCopy">
+                    <template x-for="(c, i) in (restore.copies || [])" :key="c.copy"><option :value="i ? c.copy : ''" x-text="copyTitle(c)"></option></template>
+                </select></p>
+                <p><button class="btn btn--primary" @click="restoreData()">Восстановить из копии</button></p>
+            </div>
+        </template>
     </div>
 </div>
 
@@ -566,6 +576,16 @@
                     <div class="line" :class="item.ok === false ? 'line--bad' : (item.ok === true ? 'line--good' : '')" x-text="item.text"></div>
                 </template>
             </div>
+        </template>
+    </div>
+    <div class="card" x-show="dataCopies.length">
+        <div class="card__head"><h2>Копии данных</h2></div>
+        <p class="muted small">Перед каждым сохранением программа оставляет копию файла настроек и файла тем; раз в сутки копия становится
+            «вчерашней», а та — «позавчерашней». Если что-то удалено или изменено по ошибке, файл можно вернуть к одной из них.</p>
+        <template x-for="c in dataCopies" :key="c.file + c.copy">
+            <div class="line"><b x-text="c.file == 'torrents.json' ? 'Темы' : 'Настройки'"></b> <span class="muted" x-text="'(' + c.file + ')'"></span>
+                — <span x-text="copyTitle(c)"></span>
+                <button class="link" @click="restoreCopyOf(c)" :disabled="!!busy">вернуть</button></div>
         </template>
     </div>
 </section>

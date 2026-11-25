@@ -48,11 +48,25 @@ final class Ui
         $ui = new self();
         try
         {
-            $problem = App::storageProblem();
-            if ($problem !== NULL)
-                $ui->fail($problem, 503);
             if ($_SERVER['REQUEST_METHOD'] != 'POST')
                 $ui->fail('Нужен запрос POST.', 405);
+            // A damaged data file is brought back from its copy. The password is in the very file
+            // that may be damaged, so nobody can be asked for it: the action is open, but does
+            // something only while a file is damaged, and only puts back the program's own copy.
+            // Without damage the same action goes the usual way, behind the password (see doDataRestore).
+            $damaged = $action == 'data.restore' ? Files::restorable() : NULL;
+            if ($damaged !== NULL)
+            {
+                $body = json_decode((string)file_get_contents('php://input'), TRUE);
+                $copy = is_array($body) && isset($body['copy']) && is_string($body['copy']) ? $body['copy'] : '';
+                if ( ! Files::restore($damaged['file'], $copy))
+                    $ui->fail('Вернуть файл из этой копии не удалось.', 409);
+                echo json_encode(array('ok' => TRUE, 'message' => 'Файл возвращён из копии.'), JSON_UNESCAPED_UNICODE);
+                return;
+            }
+            $problem = App::storageProblem();
+            if ($problem !== NULL)
+                $ui->fail($problem, 503, array('restore' => Files::restorable()));
             Auth::start();
             Journal::$by = 'интерфейс';
             if ( ! Auth::csrfValid() && $action != 'boot')
@@ -70,15 +84,19 @@ final class Ui
         }
         catch (StorageException $e)
         {
-            $ui->fail($e->getMessage(), 503);
+            $ui->fail($e->getMessage(), 503, array('restore' => Files::restorable()));
+        }
+        catch (\Throwable $e)
+        {
+            $ui->fail(App::unexpected($e, 'интерфейс, '.$action), 500);
         }
     }
 
     /** @return never */
-    private function fail(string $message, int $code = 200)
+    private function fail(string $message, int $code = 200, array $more = array())
     {
         http_response_code($code);
-        echo json_encode(array('ok' => FALSE, 'message' => $message), JSON_UNESCAPED_UNICODE);
+        echo json_encode(array('ok' => FALSE, 'message' => $message) + $more, JSON_UNESCAPED_UNICODE);
         exit;
     }
 
@@ -755,6 +773,29 @@ final class Ui
                 $torrents[(string)$topic['id']] = isset($statuses[$hash]) ? $statuses[$hash] : array('state' => 'missing');
         }
         return array('supported' => TRUE, 'answered' => TRUE, 'torrents' => empty($torrents) ? new \stdClass() : $torrents) + $result;
+    }
+
+    // The copies of the data files that can be brought back: for the «Состояние» page
+    private function doDataCopies(): array
+    {
+        $copies = array();
+        foreach (array_keys(Files::COPIED) as $name)
+            foreach (Files::copies($name) as $copy)
+                $copies[] = $copy + array('timeUtc' => Time::serverUtc($copy['time']));
+        return array('copies' => $copies);
+    }
+
+    // Brings a data file back from a copy while nothing is damaged: a mistake noticed later
+    // (topics removed, settings changed). A damaged file is restored before this, without a password.
+    private function doDataRestore(): array
+    {
+        $file = $this->str('file');
+        $copy = $this->str('copy');
+        if ( ! isset(Files::COPIED[$file]) || ! in_array($copy, \TorrentMonitor\Storage\JsonStore::COPIES, TRUE))
+            $this->fail('Такой копии нет.', 422);
+        if ( ! Files::restore($file, $copy))
+            $this->fail('Вернуть файл из этой копии не удалось.', 409);
+        return array('message' => 'Файл '.$file.' возвращён из копии. Прежний сохранён как '.$file.'.replaced.', 'reload' => TRUE);
     }
 
     //checks the connection to the torrent client with the saved settings

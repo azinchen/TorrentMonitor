@@ -61,6 +61,10 @@ final class Api
         {
             self::respond(FALSE, $e->getMessage(), NULL, 503);
         }
+        catch (\Throwable $e)
+        {
+            self::respond(FALSE, App::unexpected($e, 'API'), NULL, 500);
+        }
     }
 
     private static function respond(bool $ok, string $message, $data = NULL, int $code = 200): void

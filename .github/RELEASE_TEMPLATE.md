@@ -29,11 +29,14 @@ Who reads it: mostly a TorrentMonitor user, inside the program - the block
 
 What a release describes: the changes since the previous release, a beta
 included - a copy that skips versions is shown the descriptions of all of them.
-A release candidate and the final version of a series (4.0.0-rc.1, then 4.0.0,
-after 4.0.0-betaN) are read by people who never saw the betas: their section
-describes everything since the previous stable version, as the program is now,
-not beta by beta. The section of the final version replaces the sections of
-its betas and candidates in CHANGELOG.md.
+The first release candidate and the final version of a series (4.0.0-rc.1, then
+4.0.0, after 4.0.0-betaN) are read by people who never saw the betas: their
+section describes everything since the previous stable version, as the program
+is now, not beta by beta. A later candidate (4.0.0-rc.2) describes the changes
+since the candidate before it, like a beta: a copy that skipped a candidate is
+shown both descriptions, and two full ones would say the same twice. The section
+of the final version takes in the candidates and replaces the sections of its
+betas and candidates in CHANGELOG.md.
 
 Names of pre-releases: the number is set off by a dot - 4.0.0-rc.1, 4.1.0-beta.1.
 GitHub orders releases of one day by the rules of semantic versioning, where
