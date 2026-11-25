@@ -5,14 +5,15 @@ use TorrentMonitor\Storage\Files;
 
 // The journal of events (journal.log in the data directory): one line per event, the newest last.
 //   [2026-11-24 12:00:00] run: Проверка (по расписанию), 20 с: ...
-// Kinds: run - a check run and its result; update - a version installed or not; settings - settings
+// Kinds: run - a check run and its result; error - something went wrong (a tracker, the client,
+// the API, the system), written when it begins, not at every run it lasts; update - a version installed or not; settings - settings
 // changed; tracker - a tracker's account or address changed; topic - a topic added, removed or
 // replaced; access - sign-in and keys; service - the torrent client or the Cloudflare solver seen;
 // data - data converted. Nothing secret is written: passwords and keys are only said to have changed.
 // The file keeps as many lines as the journalSize setting says (0 - no journal at all).
 final class Journal
 {
-    const KINDS = array('run', 'update', 'settings', 'tracker', 'topic', 'access', 'service', 'data');
+    const KINDS = array('run', 'error', 'update', 'settings', 'tracker', 'topic', 'access', 'service', 'data');
 
     //who makes the changes of this request, as the journal names it: «интерфейс», «API», «Sonarr»
     public static string $by = '';

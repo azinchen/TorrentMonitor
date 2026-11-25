@@ -163,7 +163,7 @@ document.addEventListener('alpine:init', () => {
             }
         },
         badge(id) {
-            if (id === 'status') return this.warnings.length + (this.status.update ? 1 : 0);
+            if (id === 'status') return this.status.update ? 1 : 0;
             if (id === 'users') return this.users.reduce((n, u) => n + u.found.length, 0);
             if (id === 'trackers') return this.trackers.filter(t => t.needsAccount && !t.ready && this.topics.some(x => x.tracker === t.name)).length;
             return 0;
@@ -415,7 +415,7 @@ document.addEventListener('alpine:init', () => {
         },
         // ---- journal of events
         journalKinds: [
-            { id: 'run', title: 'Проверки' }, { id: 'update', title: 'Обновления' }, { id: 'settings', title: 'Настройки' },
+            { id: 'run', title: 'Проверки' }, { id: 'error', title: 'Ошибки' }, { id: 'update', title: 'Обновления' }, { id: 'settings', title: 'Настройки' },
             { id: 'tracker', title: 'Трекеры' }, { id: 'topic', title: 'Темы' }, { id: 'access', title: 'Вход' },
             { id: 'service', title: 'Подключения' }, { id: 'data', title: 'Данные' },
         ],
@@ -436,15 +436,6 @@ document.addEventListener('alpine:init', () => {
         async checkHealth() {
             const data = await this.call('health', {}, { silent: true });
             if (data) this.health = data.groups;
-        },
-        get warningGroups() {
-            const groups = {};
-            for (const w of this.warnings) (groups[w.source] = groups[w.source] || []).push(w);
-            return Object.keys(groups).sort().map(source => ({ source, items: groups[source] }));
-        },
-        warningTopic(w) {
-            const topic = this.topics.find(t => t.id === w.topic);
-            return topic ? topic.name : '';
         },
         async installUpdate() {
             if (!confirm('Установить версию ' + this.status.update.version + '?')) return;

@@ -113,6 +113,8 @@ final class Runner
             Files::state()->update(function (&$data) { unset($data['news']); });
 
         $started = microtime(TRUE);
+        //errors that only last are not journalled again by this run
+        Problems::remember();
         if ($this->debug)
         {
             $log = @fopen(self::logFile(), 'w');
