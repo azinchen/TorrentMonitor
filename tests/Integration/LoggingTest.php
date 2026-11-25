@@ -2,9 +2,15 @@
 // The log of a check run and the journal of events.
 final class LoggingTest extends IntegrationTestCase
 {
+    //what the last run printed: it is kept in a file only while the detailed log is on
     private function log()
     {
-        return (string)file_get_contents(getenv('TM_DATA_DIR').'/engine.log');
+        return Env::$output;
+    }
+
+    private function logFile()
+    {
+        return getenv('TM_DATA_DIR').'/engine.log';
     }
 
     public function testRunLogStartsWithTheEnvironmentAndEndsWithTheResult()
@@ -32,14 +38,15 @@ final class LoggingTest extends IntegrationTestCase
         $this->assertStringNotContainsString('GET https://rutracker.org', $this->log());
         $this->assertStringContainsString('Проверено тем: 2 — обновлено 1, без изменений 1, с ошибками 0.', $this->log());
         $this->assertStringContainsString('Готово за', end($lines));
-        $this->assertSame(trim($this->log()), trim($output), 'the output of the run is its log');
+        $this->assertFileDoesNotExist($this->logFile(), 'a usual run keeps no log: its result is in the journal');
 
         // the result is shown above the log and goes to the journal
         $status = Env::uiOpen()['json']['status'];
         $this->assertStringStartsWith('Проверено тем: 2 — обновлено 1, без изменений 1, с ошибками 0.', $status['lastRunSummary']);
         $runs = AppState::journal('run');
         $this->assertCount(2, $runs);
-        $this->assertMatchesRegularExpression('/^Проверка \((по расписанию|из командной строки)\), \d+ с\. Проверено тем: 2 — обновлено 1, без изменений 1, с ошибками 0\./u', $runs[1]);
+        $this->assertMatchesRegularExpression('/^Проверка \((по расписанию|из командной строки)\), \d+ с\. Проверено тем: 2 — обновлено 1, без изменений 1, с ошибками 0\. Обновлено: Тема с обновлением\.$/u', $runs[1]);
+        $this->assertStringEndsWith('Обновлено: Тема с обновлением; Тема без изменений.', $runs[0]);
         $this->assertNotNull(AppState::topic($same));
         $this->assertNotNull(AppState::topic($changed));
     }
@@ -57,6 +64,13 @@ final class LoggingTest extends IntegrationTestCase
         $this->assertMatchesRegularExpression('~GET https://rutracker\.org/forum/viewtopic\.php\?t=803 -> 200, \d+ байт, [\d.]+ с~u', $this->log());
         $this->assertStringContainsString('Проверено тем: 1 — обновлено 0, без изменений 1, с ошибками 0.', $this->log());
         $this->assertStringNotContainsString(Env::TRACKER_PASS, $this->log());
+        // the detailed log is kept in a file and shown by the interface, until a usual run replaces it
+        $this->assertSame(trim($this->log()), trim((string)file_get_contents($this->logFile())));
+        $this->assertStringContainsString('viewtopic.php?t=803', Env::ui('run.log')['json']['log']);
+        AppState::setSettings(array('debug' => '0'));
+        Env::runEngine();
+        $this->assertFileDoesNotExist($this->logFile());
+        $this->assertSame('', Env::ui('run.log')['json']['log']);
     }
 
     public function testErrorsOfARunAreInItsResultAndInTheJournal()
@@ -103,7 +117,8 @@ final class LoggingTest extends IntegrationTestCase
         $this->assertStringStartsWith('Настройки (интерфейс): ', $line);
         $this->assertStringContainsString('время ожидания ответа: 15 → 20', $line);
         $this->assertStringContainsString('передача в torrent-клиент: включено', $line);
-        $this->assertStringContainsString('адрес клиента: 127.0.0.1:9091 → http://transmission:9091', $line, 'a login in an address is left out');
+        $this->assertStringContainsString('адрес клиента изменён', $line);
+        $this->assertStringNotContainsString('transmission:9091', $line, 'addresses of services are private');
         $this->assertStringContainsString('логин клиента изменён', $line);
         $this->assertStringContainsString('пароль клиента изменён', $line);
         foreach (array('Client-Secret-1', 'someone', 'secret@') as $secret)
@@ -159,7 +174,7 @@ final class LoggingTest extends IntegrationTestCase
         AppState::useQbittorrent();
         // not asked yet: the log says so and asks nothing
         Env::runEngine();
-        $this->assertStringContainsString('Torrent-клиент: qBittorrent '.Env::qbt().' (версия неизвестна: связь ещё не проверялась)', $this->log());
+        $this->assertStringContainsString('Torrent-клиент: qBittorrent (версия неизвестна: связь ещё не проверялась)', $this->log());
 
         $checked = Env::ui('client.test');
         $this->assertTrue($checked['json']['ok'], $checked['body']);
@@ -168,11 +183,16 @@ final class LoggingTest extends IntegrationTestCase
         $this->assertSame('qBittorrent', $seen['name']);
         $this->assertMatchesRegularExpression('/^\d+\.\d+/', $seen['version']);
         $this->assertMatchesRegularExpression('/^libtorrent [\d.]+, web API [\d.]+$/', $seen['details']);
-        $this->assertMatchesRegularExpression('/^Torrent-клиент: qBittorrent \d+\.\d+[\d.]* \(libtorrent [\d.]+, web API [\d.]+\), /u', AppState::journal('service')[0]);
+        $this->assertMatchesRegularExpression('/^Torrent-клиент: qBittorrent \d+\.\d+[\d.]* \(libtorrent [\d.]+, web API [\d.]+\)$/u', AppState::journal('service')[0]);
 
         // the next run prints what is remembered
         Env::runEngine();
-        $this->assertMatchesRegularExpression('/Torrent-клиент: qBittorrent \d+\.\d+[\d.]* \(libtorrent [\d.]+, web API [\d.]+\), '.preg_quote(Env::qbt(), '/').', проверено \d{4}-\d\d-\d\d \d\d:\d\d/u', $this->log());
+        $this->assertMatchesRegularExpression('/Torrent-клиент: qBittorrent \d+\.\d+[\d.]* \(libtorrent [\d.]+, web API [\d.]+\), проверено \d{4}-\d\d-\d\d \d\d:\d\d/u', $this->log());
+        // where the client is stays out of the log, the detailed one too
+        AppState::setSettings(array('debug' => '1'));
+        Env::runEngine();
+        $this->assertStringNotContainsString(preg_replace('~^\w+://~', '', Env::qbt()), $this->log());
+        AppState::setSettings(array('debug' => '0'));
         // the same version again is not an event
         Env::ui('client.test');
         $this->assertCount(1, AppState::journal('service'));
@@ -188,9 +208,31 @@ final class LoggingTest extends IntegrationTestCase
         $checked = Env::ui('network.test');
         $this->assertTrue($checked['json']['ok'], $checked['body']);
         $this->assertStringContainsString('Решатель Cloudflare '.Env::SOLVER.' отвечает: FlareSolverr 9.8.7.', $checked['json']['message']);
-        $this->assertSame('Решатель Cloudflare: FlareSolverr 9.8.7, '.Env::SOLVER, AppState::journal('service')[0]);
+        $this->assertSame('Решатель Cloudflare: FlareSolverr 9.8.7', AppState::journal('service')[0]);
         Env::runEngine();
-        $this->assertStringContainsString('Решатель Cloudflare: FlareSolverr 9.8.7, '.Env::SOLVER.', проверено ', $this->log());
+        $this->assertStringContainsString('Решатель Cloudflare: FlareSolverr 9.8.7, проверено ', $this->log());
+        $this->assertStringNotContainsString(Env::SOLVER, $this->log().implode("\n", AppState::journal()));
+    }
+
+    public function testAVersionInstalledOutsideTheProgramIsJournalled()
+    {
+        // the first start only remembers the version
+        Env::runEngine();
+        $before = AppState::version();
+        $this->assertSame($before, AppState::state()['program']);
+        $this->assertSame(array(), AppState::journal('update'));
+
+        // the files are replaced by something else: a new Docker image, an archive unpacked by hand
+        file_put_contents('/app/version.txt', json_encode(array('system' => '9.9.9', 'database' => '9.9.9')));
+        Env::runEngine();
+        Env::runEngine();
+
+        $lines = AppState::journal('update');
+        $this->assertCount(1, $lines, 'said once');
+        $this->assertStringContainsString('Версия программы изменилась: '.$before.' → 9.9.9', $lines[0]);
+        $this->assertSame('9.9.9', AppState::state()['program']);
+        // the client and the solver the new version starts with are named after it
+        $this->assertSame(array('Torrent-клиент: не используется', 'Решатель Cloudflare: не задан'), AppState::journal('service'));
     }
 
     public function testJournalKeepsTheNumberOfLinesItIsToldTo()
@@ -218,7 +260,9 @@ final class LoggingTest extends IntegrationTestCase
         Env::ui('settings.save', array('proxy' => true, 'proxyAddress' => 'user:Proxy-Secret@127.0.0.1:1080', 'proxyType' => 'SOCKS5'));
         $text = Env::ui('about')['json']['text'];
         $this->assertStringStartsWith('TorrentMonitor '.AppState::version().', PHP ', $text);
-        $this->assertStringContainsString('Прокси: SOCKS5 127.0.0.1:1080.', $text);
+        $this->assertStringContainsString('Прокси: включён, SOCKS5.', $text);
+        $this->assertStringNotContainsString('127.0.0.1:1080', $text);
+        $this->assertStringNotContainsString(preg_replace('~^\w+://~', '', Env::qbt()), $text);
         $this->assertStringContainsString('Обновления: вручную', $text);
         foreach (array('Proxy-Secret', Env::CLIENT_PASS) as $secret)
             $this->assertStringNotContainsString($secret, $text);

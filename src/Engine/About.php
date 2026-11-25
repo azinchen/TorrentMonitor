@@ -22,17 +22,11 @@ final class About
         $lines[] = 'TorrentMonitor '.App::versionLabel().', PHP '.PHP_VERSION.($started !== '' ? ', запуск '.$started : '');
         $lines[] = 'Часовой пояс сервера: '.date_default_timezone_get().'. Каталог данных: '.\TorrentMonitor\Storage\Files::dir();
 
-        $name = Clients::currentName();
-        if ($name === NULL)
-            $lines[] = 'Torrent-клиент: не используется';
-        else
-            $lines[] = 'Torrent-клиент: '.self::seen('client', $name, (string)Settings::get('torrentAddress'));
-
-        $solver = (string)Settings::get('flaresolverrUrl');
-        $lines[] = 'Решатель Cloudflare: '.($solver === '' ? 'не задан' : self::seen('solver', '', $solver));
+        foreach (self::services() as $line)
+            $lines[] = $line;
 
         $channels = array('stable' => 'стабильные версии', 'beta' => 'бета-версии', 'dev' => 'версия в разработке');
-        $lines[] = 'Прокси: '.(Settings::on('proxy') ? Settings::get('proxyType').' '.self::withoutLogin((string)Settings::get('proxyAddress')) : 'выключен')
+        $lines[] = 'Прокси: '.(Settings::on('proxy') ? 'включён, '.Settings::get('proxyType') : 'выключен')
             .'. Обновления: '.(Settings::on('autoUpdate') ? 'автоматически, '.$channels[Release::channel()] : 'вручную');
 
         $counts = array();
@@ -46,16 +40,28 @@ final class About
         return $lines;
     }
 
-    //a service as it was last seen, or just its address when it never was (or another one is set now)
+    /** @return string[] the torrent client and the Cloudflare solver, one line each */
+    public static function services(): array
+    {
+        $name = Clients::currentName();
+        $solver = (string)Settings::get('flaresolverrUrl');
+        return array(
+            'Torrent-клиент: '.($name === NULL ? 'не используется' : self::seen('client', $name, (string)Settings::get('torrentAddress'))),
+            'Решатель Cloudflare: '.($solver === '' ? 'не задан' : self::seen('solver', '', $solver)),
+        );
+    }
+
+    // A service as it was last seen, or just its name when it never was (or another one is set now).
+    // Its address is not written: it is private and is of no use in a log that is shown to others.
     private static function seen(string $key, string $name, string $address): string
     {
         $address = self::withoutLogin($address);
         $seen = State::service($key);
         if ($seen === NULL || self::withoutLogin((string)$seen['address']) != $address || ($name !== '' && $seen['name'] != $name))
-            return trim($name.' '.$address).' (версия неизвестна: связь ещё не проверялась)';
+            return ($name !== '' ? $name : 'задан').' (версия неизвестна: связь ещё не проверялась)';
         $text = trim($seen['name'].' '.$seen['version']);
         return ($text !== '' ? $text : 'версию не сообщает').($seen['details'] !== '' ? ' ('.$seen['details'].')' : '')
-            .', '.$address.', проверено '.substr((string)$seen['at'], 0, 16);
+            .', проверено '.substr((string)$seen['at'], 0, 16);
     }
 
     // An address without the login and password it may carry: http://user:pass@host -> http://host

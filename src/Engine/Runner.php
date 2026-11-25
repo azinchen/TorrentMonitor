@@ -35,6 +35,10 @@ final class Runner
     private array $count = array('checked' => 0, 'updated' => 0, 'failed' => 0, 'client' => 0, 'paused' => 0, 'stopped' => 0);
     /** @var int[] "source — what went wrong" => how many times */
     private array $errors = array();
+    //names of the topics this run updated, for its line of the journal
+    private array $updatedNames = array();
+    //how many of them the journal names; the rest are counted
+    const NAMED = 10;
     //the topic being checked, not written to the log yet: it is written when something happens to it
     private ?string $label = NULL;
     private bool $clientSeen = FALSE;
@@ -62,7 +66,8 @@ final class Runner
             $this->by = PHP_SAPI == 'cli' && function_exists('posix_isatty') && @posix_isatty(STDOUT) ? 'из командной строки' : 'по расписанию';
     }
 
-    /** @var resource|null run log (data/engine.log): it is shown by the "Status" page */
+    /** @var resource|null the detailed log of the run (data/engine.log), kept only while «Подробный журнал
+     *  проверки» is on. What a usual run did is in the journal: one line with its result. */
     private $log = NULL;
 
     // A line of the log. The usual log holds what happened: topics updated, errors, the result.
@@ -108,8 +113,14 @@ final class Runner
             Files::state()->update(function (&$data) { unset($data['news']); });
 
         $started = microtime(TRUE);
-        $log = @fopen(self::logFile(), 'w');
-        $this->log = $log === FALSE ? NULL : $log;
+        if ($this->debug)
+        {
+            $log = @fopen(self::logFile(), 'w');
+            $this->log = $log === FALSE ? NULL : $log;
+        }
+        //a log left by an earlier detailed run would describe a run that is not the last one any more
+        elseif ( ! $this->dryRun && is_file(self::logFile()))
+            @unlink(self::logFile());
         // Delivery and script messages also go to the log
         $direct = $this->out;
         $this->out = function ($line) use ($direct) {
@@ -375,7 +386,12 @@ final class Runner
                 $fields = array_merge($fields, $changes);
             }
             if ($delivered && empty($fields['error']))
+            {
                 $this->count['updated']++;
+                //a topic added a moment ago gets its name in this very run
+                $known = isset($fields['name']) && $fields['name'] !== '' ? (string)$fields['name'] : (string)$topic['name'];
+                $this->updatedNames[] = $known !== '' ? $known : 'тема '.$topic['topicId'].' ('.$topic['tracker'].')';
+            }
             if ( ! $this->dryRun)
                 $this->changes[$id] = $fields;
         }
@@ -476,7 +492,14 @@ final class Runner
         $short = array_slice($errors, 0, 3);
         if (count($errors) > 3)
             $short[] = 'и другие';
-        \TorrentMonitor\Data\Journal::add('run', 'Проверка ('.$this->by.$this->scope().'), '.sprintf('%.0f', $seconds).' с. '.$result
+        //which topics were updated: the journal is where the user looks for it
+        $names = '';
+        if ( ! empty($this->updatedNames))
+        {
+            $more = count($this->updatedNames) - self::NAMED;
+            $names = ' Обновлено: '.implode('; ', array_slice($this->updatedNames, 0, self::NAMED)).($more > 0 ? ' и ещё '.$more : '').'.';
+        }
+        \TorrentMonitor\Data\Journal::add('run', 'Проверка ('.$this->by.$this->scope().'), '.sprintf('%.0f', $seconds).' с. '.$result.$names
             .(empty($short) ? '' : ' Ошибки: '.implode('; ', $short).'.'));
     }
 

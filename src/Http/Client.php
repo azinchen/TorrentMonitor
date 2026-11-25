@@ -23,6 +23,8 @@ final class Client
     private array $trackerProxy;
     /** @var callable|null function(string $line): void */
     private $log;
+    //addresses that are not written to the log, and what is written instead: array(address => name)
+    private array $private = array();
     // Whether bypassing Cloudflare is allowed (it can be turned off for availability checks)
     public bool $solveChallenges = TRUE;
     //whether the Cloudflare solver was asked for anything since this object was made
@@ -41,6 +43,7 @@ final class Client
         $this->proxy = (isset($options['proxy']) ? (array)$options['proxy'] : array()) + array('enabled' => FALSE, 'address' => '', 'type' => '');
         $this->trackerProxy = isset($options['trackerProxy']) ? (array)$options['trackerProxy'] : array();
         $this->log = isset($options['log']) ? $options['log'] : NULL;
+        $this->private = isset($options['private']) ? (array)$options['private'] : array();
     }
 
     public function hasSolver(): bool
@@ -320,7 +323,7 @@ final class Client
                 $response->body = $body;
                 $responses[$key] = $response;
 
-                $this->log(sprintf('%s %s -> %s, %d байт, %.2f с', $requests[$key]->method, $requests[$key]->url,
+                $this->log(sprintf('%s %s -> %s, %d байт, %.2f с', $requests[$key]->method, $this->shown($requests[$key]),
                     $response->error !== '' ? $response->error : $response->status, strlen($body), microtime(TRUE) - $started[$key]));
 
                 curl_multi_remove_handle($multi, $ch);
@@ -394,6 +397,32 @@ final class Client
 
         curl_setopt_array($ch, $options);
         return $ch;
+    }
+
+    //host and port of an address, whatever else it carries: http://user:pass@Host:8080/path -> host:8080
+    private static function authority(string $address): string
+    {
+        $address = preg_replace('~^[a-z0-9+.\-]+://~i', '', trim($address));
+        $address = preg_replace('~[/?#].*$~', '', $address);
+        return strtolower(preg_replace('~^.*@~', '', $address));
+    }
+
+    // A request as the detailed log names it. The address of a service of the user (the torrent
+    // client, the Cloudflare solver) is replaced by its name, a request that carries a key in its
+    // address is cut to the site, and keys in the query of any other address are hidden.
+    private function shown(Request $request): string
+    {
+        $authority = self::authority($request->url);
+        $path = (string)parse_url($request->url, PHP_URL_PATH);
+        foreach ($this->private as $address => $name)
+        {
+            $own = self::authority((string)$address);
+            if ($own !== '' && ($authority === $own || strpos($authority, $own.':') === 0))
+                return $name.' '.($path !== '' ? $path : '/');
+        }
+        if ($request->secret)
+            return $request->origin().'/…';
+        return preg_replace('~([?&](?:passkey|pk|uk|token|apikey|api_key|key|password|pass)=)[^&#\s]+~i', '$1***', $request->url);
     }
 
     private function log(string $line): void

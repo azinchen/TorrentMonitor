@@ -64,7 +64,10 @@ final class App
         {
             $notice = self::legacyDatabaseNotice();
             if ($notice === NULL)
+            {
                 Files::check();
+                Data\State::sawVersion();
+            }
             return $notice;
         }
         catch (Storage\StorageException $e)
@@ -102,6 +105,9 @@ final class App
                 'proxy'        => array('enabled' => ! empty($settings['proxy']), 'address' => $settings['proxyAddress'], 'type' => $settings['proxyType']),
                 'trackerProxy' => Accounts::proxies(),
                 'log'          => self::$logger,
+                //the detailed log names these services instead of showing where they are
+                'private'      => array_filter(array((string)$settings['torrentAddress'] => 'torrent-клиент', (string)$settings['flaresolverrUrl'] => 'решатель Cloudflare'),
+                    function ($address) { return $address !== ''; }, ARRAY_FILTER_USE_KEY),
             ), new State());
         }
         return self::$http;

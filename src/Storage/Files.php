@@ -214,6 +214,9 @@ final class Files
     {
         return array(
             'updateNotified' => FALSE,
+            // the version of the program files at the previous start ('' - not known yet): a different
+            // one now means the program was updated from outside, by a new Docker image for example
+            'program'        => '',
             // result of the last check run, one line: shown above its log
             'lastRunSummary' => '',
             // what the torrent client and the Cloudflare solver said about themselves when they were last

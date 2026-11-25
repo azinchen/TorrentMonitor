@@ -505,7 +505,9 @@ final class CoreTest extends TestCase
         $this->assertSame('RSS-лента: выключено', $text(array('rss' => '1'), array('rss' => '0')));
         $this->assertSame('torrent-клиент: Transmission → qBittorrent; пароль клиента изменён',
             $text(array('torrentClient' => 'Transmission', 'torrentPassword' => 'old'), array('torrentClient' => 'qBittorrent', 'torrentPassword' => 'new')));
-        $this->assertSame('решатель Cloudflare: пусто → http://byparr:8191', $text(array(), array('flaresolverrUrl' => 'http://byparr:8191')));
+        // addresses of the user's services are private: only the fact of a change is written
+        $this->assertSame('адрес решателя Cloudflare изменён', $text(array(), array('flaresolverrUrl' => 'http://byparr:8191')));
+        $this->assertSame('адрес TorrentMonitor изменён; адрес клиента изменён', $text(array('torrentAddress' => 'a:1', 'serverAddress' => 'http://x/'), array('torrentAddress' => 'b:2', 'serverAddress' => 'http://y/')));
         $this->assertSame('адрес прокси удалён', $text(array('proxyAddress' => 'user:pass@host:1'), array('proxyAddress' => '')));
         // settings the journal has no name for (the password hash, the API key) are never written
         $this->assertSame('', $text(array('password' => 'a', 'ApiKey' => 'b'), array('password' => 'c', 'ApiKey' => 'd')));

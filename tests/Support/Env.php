@@ -89,10 +89,13 @@ class Env
         AppState::baseline();
     }
 
+    // what the last run started by runEngine() printed
+    public static $output = '';
+
     // runs the engine the way cron does; returns its output
     public static function runEngine()
     {
-        return self::sh('cd /app && php engine.php 2>&1');
+        return self::$output = self::sh('cd /app && php engine.php 2>&1');
     }
 
     // a run that is expected to refuse to work: returns its output, fails if it reports success
