@@ -195,6 +195,17 @@ if ($host == 'rutracker.org')
     return send($status, $out, $headers);
 }
 
+// NNM-Club as a guest sees it: the main page, and the page of a post, which names its topic
+// (the topic of post N is N + 1000)
+if ($host == 'nnmclub.to')
+{
+    parse_str($query, $q);
+    if ($path == '/forum/viewtopic.php' && isset($q['p']) && ctype_digit((string)$q['p']))
+        return send(200, '<html><head><title>Тема :: NNM-Club</title></head><body><h1 style="display:inline">'
+            .'<a class="maintitle" href="viewtopic.php?t='.((int)$q['p'] + 1000).'">Тема</a></h1></body></html>');
+    return send($path == '/' ? 200 : 404, '<html><head><title>NNM-Club</title></head><body></body></html>');
+}
+
 // a webhook receiver that only records what it was sent (see /__control/requests)
 if ($path == '/hook')
     return send_json(array('ok' => true));

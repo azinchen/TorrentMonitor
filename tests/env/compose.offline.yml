@@ -4,7 +4,7 @@ services:
   fake:
     networks:
       default:
-        aliases: [rutracker.org, www.rutracker.org]
+        aliases: [rutracker.org, www.rutracker.org, nnmclub.to]
 
   # old-format databases for the tests of tools/convert-db.php
   mariadb:

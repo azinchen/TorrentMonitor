@@ -60,6 +60,12 @@ final class ApiTest extends IntegrationTestCase
 
     public function testTopicNeedsTrackerCredentialsRow()
     {
+        // NNM-Club writes the address of a post into its torrent files: the topic is found by it
+        $post = Env::api('POST', 'torrents', array('json' => array('url' => 'https://nnmclub.to/forum/viewtopic.php?p=13160487')));
+        $this->assertSame(201, $post['status'], $post['body']);
+        $this->assertSame('nnmclub.to', $post['json']['data']['tracker']);
+        $this->assertSame('13161487', $post['json']['data']['topicId']);
+
         $response = Env::api('POST', 'torrents', array('json' => array('url' => 'https://unknown-tracker.example/forum/viewtopic.php?t=1')));
         $this->assertSame(422, $response['status']);
         $this->assertFalse($response['json']['ok']);

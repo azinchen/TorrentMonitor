@@ -522,16 +522,21 @@ final class Ui
         return array('message' => 'Учётные данные '.$name.' удалены.') + $this->doOverview();
     }
 
-    //tries to log in to the tracker with the saved credentials
+    //tries to log in to the tracker with the saved credentials; a tracker that is used without
+    //signing in is opened instead, so that the check always says whether the tracker works
     private function doTrackerTest(): array
     {
         $name = $this->str('name');
         if ( ! Registry::has($name))
             $this->fail('Неизвестный трекер.');
         @set_time_limit(240);
+        $guest = ! Registry::needsAccount($name) || (Registry::accountOptional($name) && ! Registry::hasAccount($name));
         try
         {
-            Registry::get($name)->login();
+            if ($guest)
+                Registry::get($name)->reach();
+            else
+                Registry::get($name)->login();
         }
         catch (TrackerException $e)
         {
@@ -541,9 +546,10 @@ final class Ui
         {
             $this->fail('Ошибка: '.$e->getMessage());
         }
-        if (Registry::accountOptional($name) && ! Registry::hasAccount($name))
-            return array('message' => $name.' проверяется без входа: учётные данные не заданы.') + $this->doOverview();
-        return array('message' => Registry::needsAccount($name) ? 'Вход на '.$name.' выполнен.' : $name.' не требует входа.') + $this->doOverview();
+        if ($guest)
+            return array('message' => $name.' отвечает. '.(Registry::needsAccount($name) ? 'Учётные данные не заданы: трекер проверяется без входа.' : 'Вход ему не нужен.'))
+                + $this->doOverview();
+        return array('message' => 'Вход на '.$name.' выполнен.') + $this->doOverview();
     }
 
     // ---------------------------------------------------------------- settings

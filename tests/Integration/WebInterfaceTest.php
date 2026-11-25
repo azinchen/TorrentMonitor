@@ -207,7 +207,10 @@ final class WebInterfaceTest extends IntegrationTestCase
 
         $this->assertFalse(Env::ui('tracker.save', array('name' => 'rutracker.org', 'login' => 'x', 'address' => 'not a host'))['json']['ok']);
         $this->assertFalse(Env::ui('tracker.save', array('name' => 'unknown.example'))['json']['ok']);
-        $this->assertTrue(Env::ui('tracker.test', array('name' => 'rutor.is'))['json']['ok'], 'a tracker without accounts has nothing to check');
+        // a tracker that needs no account is opened instead: here it cannot be reached, and the check says so
+        $unreachable = Env::ui('tracker.test', array('name' => 'rutor.is'));
+        $this->assertFalse($unreachable['json']['ok'], 'the check is a real one');
+        $this->assertStringContainsString('не отвечает', $unreachable['json']['message'].$unreachable['body']);
 
         // a tracker whose account is optional is ready without one and is read as a guest
         $nnm = null;
@@ -219,7 +222,7 @@ final class WebInterfaceTest extends IntegrationTestCase
         $this->assertTrue($nnm['accountOptional']);
         $guest = Env::ui('tracker.test', array('name' => 'nnmclub.to'));
         $this->assertTrue($guest['json']['ok'], $guest['body']);
-        $this->assertSame('nnmclub.to проверяется без входа: учётные данные не заданы.', $guest['json']['message']);
+        $this->assertSame('nnmclub.to отвечает. Учётные данные не заданы: трекер проверяется без входа.', $guest['json']['message']);
     }
 
     public function testCheckIsStartedFromTheInterfaceAndItsLogIsShown()
