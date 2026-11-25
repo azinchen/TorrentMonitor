@@ -2,9 +2,15 @@
 // The log of a check run and the journal of events.
 final class LoggingTest extends IntegrationTestCase
 {
+    //what the last run printed: it is kept in a file only while the detailed log is on
     private function log()
     {
-        return (string)file_get_contents(getenv('TM_DATA_DIR').'/engine.log');
+        return Env::$output;
+    }
+
+    private function logFile()
+    {
+        return getenv('TM_DATA_DIR').'/engine.log';
     }
 
     public function testRunLogStartsWithTheEnvironmentAndEndsWithTheResult()
@@ -32,7 +38,7 @@ final class LoggingTest extends IntegrationTestCase
         $this->assertStringNotContainsString('GET https://rutracker.org', $this->log());
         $this->assertStringContainsString('Проверено тем: 2 — обновлено 1, без изменений 1, с ошибками 0.', $this->log());
         $this->assertStringContainsString('Готово за', end($lines));
-        $this->assertSame(trim($this->log()), trim($output), 'the output of the run is its log');
+        $this->assertFileDoesNotExist($this->logFile(), 'a usual run keeps no log: its result is in the journal');
 
         // the result is shown above the log and goes to the journal
         $status = Env::uiOpen()['json']['status'];
@@ -58,6 +64,13 @@ final class LoggingTest extends IntegrationTestCase
         $this->assertMatchesRegularExpression('~GET https://rutracker\.org/forum/viewtopic\.php\?t=803 -> 200, \d+ байт, [\d.]+ с~u', $this->log());
         $this->assertStringContainsString('Проверено тем: 1 — обновлено 0, без изменений 1, с ошибками 0.', $this->log());
         $this->assertStringNotContainsString(Env::TRACKER_PASS, $this->log());
+        // the detailed log is kept in a file and shown by the interface, until a usual run replaces it
+        $this->assertSame(trim($this->log()), trim((string)file_get_contents($this->logFile())));
+        $this->assertStringContainsString('viewtopic.php?t=803', Env::ui('run.log')['json']['log']);
+        AppState::setSettings(array('debug' => '0'));
+        Env::runEngine();
+        $this->assertFileDoesNotExist($this->logFile());
+        $this->assertSame('', Env::ui('run.log')['json']['log']);
     }
 
     public function testErrorsOfARunAreInItsResultAndInTheJournal()

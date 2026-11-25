@@ -221,10 +221,11 @@ final class WebInterfaceTest extends IntegrationTestCase
         Env::waitFor(function () { return ! Env::ui('run.log')['json']['running']; }, 'the check to finish');
 
         $this->assertSame('2026-11-01 10:00:00', AppState::topic($id)['timestamp']);
-        $log = Env::ui('run.log')['json']['log'];
-        $this->assertStringContainsString('Тема 903 на трекере rutracker.org', $log);
-        $this->assertStringContainsString('Готово за', $log);
-        $this->assertStringNotContainsString(Env::TRACKER_PASS, $log);
+        // what the check did is a line of the journal; a log of its own is kept only in detailed mode
+        $run = AppState::journal('run')[0];
+        $this->assertStringStartsWith('Проверка (вручную), ', $run);
+        $this->assertStringEndsWith('Обновлено: Тема.', $run);
+        $this->assertSame('', Env::ui('run.log')['json']['log']);
 
         // one topic can be checked on its own
         Env::setTopic(903, 'Тема', '02-Ноя-26 10:00', 2);

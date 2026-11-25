@@ -359,7 +359,7 @@
             </select>
             <small>Бета-версии: устанавливается самая новая версия, бета или стабильная. Версия в разработке: текущее состояние репозитория, после каждого изменения.
                 При смене выбора устанавливается последняя версия нового выбора, даже если она ниже установленной.</small></label>
-        <label class="check"><input type="checkbox" x-model="settingsForm.debug"> Подробный журнал проверки: каждая проверенная тема и каждый запрос к трекеру (для поиска причины ошибки)</label>
+        <label class="check"><input type="checkbox" x-model="settingsForm.debug"> Подробный журнал проверки: каждая проверенная тема и каждый запрос к трекеру (для поиска причины ошибки; показан в «Состоянии» под журналом событий)</label>
         <label class="field field--advanced" x-show="advanced"><span>Часовой пояс трекеров</span>
             <select x-model="settingsForm.trackerTimezone">
                 <template x-for="z in timezones" :key="z"><option :value="z" x-text="z" :selected="z == settingsForm.trackerTimezone"></option></template>
@@ -564,10 +564,10 @@
             и трекеров, добавленные и удалённые темы. Хранится в файле <code>journal.log</code> в каталоге данных; длина задаётся
             в расширенных настройках.</p>
         <details class="runlog" x-show="runLog" :open="status.running || runLogOpen" @toggle="runLogOpen = $el.open">
-            <summary>Ход последней проверки</summary>
+            <summary>Подробный журнал последней проверки</summary>
             <pre class="log" x-text="runLog"></pre>
-            <p class="muted small">Что происходило во время последней проверки, строка за строкой. Каждую проверенную тему и каждый
-                запрос к трекеру показывает «Подробный журнал проверки» в настройках — он нужен, когда вы ищете причину ошибки.</p>
+            <p class="muted small">Каждая проверенная тема и каждый запрос последней проверки. Ведётся, пока в настройках включён
+                «Подробный журнал проверки»; файл <code>engine.log</code> в каталоге данных.</p>
         </details>
     </div>
 

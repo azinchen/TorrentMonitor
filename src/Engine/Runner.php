@@ -66,7 +66,8 @@ final class Runner
             $this->by = PHP_SAPI == 'cli' && function_exists('posix_isatty') && @posix_isatty(STDOUT) ? 'из командной строки' : 'по расписанию';
     }
 
-    /** @var resource|null run log (data/engine.log): it is shown by the "Status" page */
+    /** @var resource|null the detailed log of the run (data/engine.log), kept only while «Подробный журнал
+     *  проверки» is on. What a usual run did is in the journal: one line with its result. */
     private $log = NULL;
 
     // A line of the log. The usual log holds what happened: topics updated, errors, the result.
@@ -112,8 +113,14 @@ final class Runner
             Files::state()->update(function (&$data) { unset($data['news']); });
 
         $started = microtime(TRUE);
-        $log = @fopen(self::logFile(), 'w');
-        $this->log = $log === FALSE ? NULL : $log;
+        if ($this->debug)
+        {
+            $log = @fopen(self::logFile(), 'w');
+            $this->log = $log === FALSE ? NULL : $log;
+        }
+        //a log left by an earlier detailed run would describe a run that is not the last one any more
+        elseif ( ! $this->dryRun && is_file(self::logFile()))
+            @unlink(self::logFile());
         // Delivery and script messages also go to the log
         $direct = $this->out;
         $this->out = function ($line) use ($direct) {
