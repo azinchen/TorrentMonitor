@@ -157,6 +157,25 @@ final class LoggingTest extends IntegrationTestCase
         $this->assertSame('Тема удалена (интерфейс): «Тема», rutracker.org', AppState::journal('topic')[1]);
     }
 
+    public function testTitleChangesAreJournalled()
+    {
+        $this->loginToTracker();
+        Env::setTopic(811, 'Сериал / Серии 1-3', '21-Ноя-26 10:00', 1);
+        $id = $this->trackTopic(811);
+        Env::runEngine();
+        $this->assertSame(array(), preg_grep('/Название темы изменено/u', AppState::journal('topic')), 'the first title is not a change');
+
+        // the tracker renames the topic together with a new episode
+        Env::setTopic(811, 'Сериал / Серии 1-4', '22-Ноя-26 10:00', 2);
+        Env::runEngine();
+        $this->assertContains('Название темы изменено (по названию на трекере): «Сериал / Серии 1-3» → «Сериал / Серии 1-4», rutracker.org', AppState::journal('topic'));
+
+        // the user renames it
+        $saved = Env::ui('topic.save', array('id' => $id, 'name' => 'Мой сериал', 'autoRename' => false));
+        $this->assertTrue($saved['json']['ok'], $saved['body']);
+        $this->assertContains('Название темы изменено (интерфейс): «Сериал / Серии 1-4» → «Мой сериал», rutracker.org', AppState::journal('topic'));
+    }
+
     public function testWrongPasswordsAreCountedInOneLine()
     {
         Env::ui('settings.password', array('password' => 'Right-Pass'));
