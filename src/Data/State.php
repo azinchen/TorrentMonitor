@@ -50,7 +50,7 @@ final class State implements ClearanceStore
         $title = $key == 'client' ? 'Torrent-клиент' : 'Решатель Cloudflare';
         $text = function (array $s) { return trim($s['name'].' '.$s['version']).($s['details'] !== '' ? ' ('.$s['details'].')' : ''); };
         if ($before === NULL || $before['name'] != $name || $before['address'] != $address)
-            Journal::add('service', $title.': '.$text($now));
+            Journal::add('service', $title.': '.$text($now).', '.\TorrentMonitor\Privacy::address($address));
         elseif ($before['version'] != $version || $before['details'] != $details)
             Journal::add('service', $title.': '.$text($before).' → '.$text($now));
     }

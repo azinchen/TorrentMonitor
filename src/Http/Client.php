@@ -324,7 +324,7 @@ final class Client
                 $responses[$key] = $response;
 
                 $this->log(sprintf('%s %s -> %s, %d байт, %.2f с', $requests[$key]->method, $this->shown($requests[$key]),
-                    $response->error !== '' ? $response->error : $response->status, strlen($body), microtime(TRUE) - $started[$key]));
+                    $response->error !== '' ? $this->shownError($requests[$key], $response->error) : $response->status, strlen($body), microtime(TRUE) - $started[$key]));
 
                 curl_multi_remove_handle($multi, $ch);
                 unset($handles[$key]);
@@ -408,21 +408,39 @@ final class Client
     }
 
     // A request as the detailed log names it. The address of a service of the user (the torrent
-    // client, the Cloudflare solver) is replaced by its name, a request that carries a key in its
-    // address is cut to the site, and keys in the query of any other address are hidden.
+    // client, the Cloudflare solver) is private: its site part is written inside a mark (see Privacy).
+    // A request that carries a key in its address is cut to the site, and keys in the query of any
+    // other address are hidden.
     private function shown(Request $request): string
     {
-        $authority = self::authority($request->url);
-        $path = (string)parse_url($request->url, PHP_URL_PATH);
-        foreach ($this->private as $address => $name)
+        if ($this->isPrivate($request))
         {
-            $own = self::authority((string)$address);
-            if ($own !== '' && ($authority === $own || strpos($authority, $own.':') === 0))
-                return $name.' '.($path !== '' ? $path : '/');
+            $path = (string)parse_url($request->url, PHP_URL_PATH);
+            return \TorrentMonitor\Privacy::address($request->origin()).($path !== '' ? $path : '/');
         }
         if ($request->secret)
             return $request->origin().'/…';
         return preg_replace('~([?&](?:passkey|pk|uk|token|apikey|api_key|key|password|pass)=)[^&#\s]+~i', '$1***', $request->url);
+    }
+
+    //whether the request goes to a service of the user
+    private function isPrivate(Request $request): bool
+    {
+        $authority = self::authority($request->url);
+        foreach ($this->private as $address => $name)
+        {
+            $own = self::authority((string)$address);
+            if ($own !== '' && ($authority === $own || strpos($authority, $own.':') === 0))
+                return TRUE;
+        }
+        return FALSE;
+    }
+
+    //an error text of curl names the host it could not reach: of a service of the user that is private
+    private function shownError(Request $request, string $error): string
+    {
+        $host = $request->host();
+        return $host !== '' && $this->isPrivate($request) ? str_replace($host, \TorrentMonitor\Privacy::host($host), $error) : $error;
     }
 
     private function log(string $line): void

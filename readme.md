@@ -63,5 +63,7 @@ https://hub.docker.com/r/alfonder/torrentmonitor
 
 ![Состояние](wiki/images/status.png)
 
+![Журнал](wiki/images/log.png)
+
 ### Лицензия:
 [MIT](LICENSE). Сведения о стороннем коде — в файле [NOTICE](NOTICE).

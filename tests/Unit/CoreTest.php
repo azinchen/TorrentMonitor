@@ -513,12 +513,27 @@ final class CoreTest extends TestCase
         $this->assertSame('RSS-лента: выключено', $text(array('rss' => '1'), array('rss' => '0')));
         $this->assertSame('torrent-клиент: Transmission → qBittorrent; пароль клиента изменён',
             $text(array('torrentClient' => 'Transmission', 'torrentPassword' => 'old'), array('torrentClient' => 'qBittorrent', 'torrentPassword' => 'new')));
-        // addresses of the user's services are private: only the fact of a change is written
-        $this->assertSame('адрес решателя Cloudflare изменён', $text(array(), array('flaresolverrUrl' => 'http://byparr:8191')));
-        $this->assertSame('адрес TorrentMonitor изменён; адрес клиента изменён', $text(array('torrentAddress' => 'a:1', 'serverAddress' => 'http://x/'), array('torrentAddress' => 'b:2', 'serverAddress' => 'http://y/')));
-        $this->assertSame('адрес прокси удалён', $text(array('proxyAddress' => 'user:pass@host:1'), array('proxyAddress' => '')));
+        // addresses of the user's services and folders are private: written inside marks, without a login
+        $this->assertSame('адрес решателя Cloudflare: пусто → {{a:http://byparr:8191}}', $text(array(), array('flaresolverrUrl' => 'http://byparr:8191')));
+        $this->assertSame('адрес TorrentMonitor: {{a:http://x/}} → {{a:http://y/}}; адрес клиента: {{a:a:1}} → {{a:b:2}}', $text(array('torrentAddress' => 'a:1', 'serverAddress' => 'http://x/'), array('torrentAddress' => 'b:2', 'serverAddress' => 'http://y/')));
+        $this->assertSame('адрес прокси: {{a:host:1}} → пусто', $text(array('proxyAddress' => 'user:pass@host:1'), array('proxyAddress' => '')));
+        $this->assertSame('каталог загрузки: пусто → {{d:/downloads}}', $text(array(), array('pathToDownload' => '/downloads')));
         // settings the journal has no name for (the password hash, the API key) are never written
         $this->assertSame('', $text(array('password' => 'a', 'ApiKey' => 'b'), array('password' => 'c', 'ApiKey' => 'd')));
+    }
+
+    public function testPrivateValuesInLogs()
+    {
+        $line = 'клиент '.\TorrentMonitor\Privacy::address('http://qbt:8080').', каталог '.\TorrentMonitor\Privacy::folder('/data').', снова '.\TorrentMonitor\Privacy::address('http://qbt:8080');
+        $this->assertSame('клиент {{a:http://qbt:8080}}, каталог {{d:/data}}, снова {{a:http://qbt:8080}}', $line);
+        $this->assertSame('клиент http://qbt:8080, каталог /data, снова http://qbt:8080', \TorrentMonitor\Privacy::plain($line));
+        $seen = array();
+        $this->assertSame('клиент адрес 1, каталог каталог 1, снова адрес 1', \TorrentMonitor\Privacy::hidden($line, $seen));
+        // another value of the same kind gets the next number, the first one keeps its own
+        $this->assertSame('адрес 2 и адрес 1', \TorrentMonitor\Privacy::hidden(\TorrentMonitor\Privacy::address('x').' и '.\TorrentMonitor\Privacy::address('http://qbt:8080'), $seen));
+        $this->assertSame('', \TorrentMonitor\Privacy::address(''), 'nothing to mark');
+        $this->assertSame('без меток', \TorrentMonitor\Privacy::plain('без меток'));
+        $this->assertSame('a} }b', \TorrentMonitor\Privacy::plain(\TorrentMonitor\Privacy::folder('a}}b')), 'a value cannot end its own mark');
     }
 
     public function testAddressWithoutItsLogin()

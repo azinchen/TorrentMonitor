@@ -375,3 +375,16 @@ fieldset { border: 0; border-top: 1px solid var(--border); margin: .75rem 0 0; p
 .runlog[open] summary { color: inherit; }
 .runlog__bar { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; margin-top: .5rem; }
 .runlog__bar select { width: auto; max-width: 100%; }
+
+/* the page of the log: the log takes the height the window has left */
+.logpage { display: flex; flex-direction: column; height: calc(100vh - 6.5rem); min-height: 28rem; }
+.logbar { display: flex; flex-wrap: wrap; gap: .5rem 1rem; align-items: center; margin-bottom: .5rem; }
+.logbar select, .logbar input[type=search] { width: auto; max-width: 100%; }
+.logbar .check { margin: 0; }
+.logbox { flex: 1; min-height: 12rem; overflow: auto; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: .5rem .75rem; font-size: .88rem; }
+.logline { padding: .2rem 0; border-top: 1px solid var(--border); overflow-wrap: anywhere; }
+.logline:first-child { border-top: 0; }
+.logline__time { display: inline-block; min-width: 10.5rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+.logline--detail { border-top: 0; padding: 0; font-family: var(--mono); font-size: .8rem; color: var(--muted); white-space: pre-wrap; }
+.logline--detail .logline__time { min-width: 10.5rem; }
+.updates { display: flex; flex-wrap: wrap; gap: .5rem .75rem; align-items: center; margin: .25rem 0 .75rem; }

@@ -60,7 +60,7 @@ final class Files
     public static function setMode(string $text): void
     {
         self::$mode = self::validMode($text) ? octdec($text) : NULL;
-        foreach (array_merge((array)glob(self::dir().'/*.json'), (array)glob(self::dir().'/*.json.bak')) as $file)
+        foreach (array_merge((array)glob(self::dir().'/*.json'), (array)glob(self::dir().'/*.json.bak'), (array)glob(self::dir().'/*.log')) as $file)
             self::protect($file);
     }
 
