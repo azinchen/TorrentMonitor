@@ -1,6 +1,8 @@
 <?php
 // tools/convert-db.php: one-time transfer of a 3.x database into JSON files.
-// The old databases are built from the schemas of version 3.3.6 (tests/Fixtures/legacy).
+// The old databases are built from the schemas of version 3.3.6 (tests/Fixtures/legacy) and of the
+// layout version 2.0 had (tests/Fixtures/legacy-2.0: the schemas of 1.8.9.5, the last ones published
+// before 2.0; the layout did not change until 3.0).
 final class ConverterTest extends IntegrationTestCase
 {
     const KEY = '00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff';
@@ -24,30 +26,30 @@ final class ConverterTest extends IntegrationTestCase
         return 'enc:'.base64_encode($iv.$tag.$cipher);
     }
 
-    private static function sqlite($file)
+    private static function sqlite($file, $layout = 'legacy')
     {
         @unlink($file);
         $pdo = new PDO('sqlite:'.$file);
         $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-        $pdo->exec(file_get_contents(TESTS_DIR.'/Fixtures/legacy/sqlite.sql'));
+        $pdo->exec(file_get_contents(TESTS_DIR.'/Fixtures/'.$layout.'/sqlite.sql'));
         return $pdo;
     }
 
-    private static function mysql()
+    private static function mysql($layout = 'legacy')
     {
         $pdo = new PDO('mysql:host=mariadb;dbname=torrentmonitor;charset=utf8', 'tm', 'tm-test-pass');
         $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
         $pdo->exec('SET sql_mode = ""');
-        $pdo->exec(file_get_contents(TESTS_DIR.'/Fixtures/legacy/mysql.sql'));
+        $pdo->exec(file_get_contents(TESTS_DIR.'/Fixtures/'.$layout.'/mysql.sql'));
         return $pdo;
     }
 
-    private static function pgsql()
+    private static function pgsql($layout = 'legacy')
     {
         $pdo = new PDO('pgsql:host=postgres;dbname=torrentmonitor', 'tm', 'tm-test-pass');
         $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
         $pdo->exec('DROP SCHEMA public CASCADE; CREATE SCHEMA public;');
-        $pdo->exec(file_get_contents(TESTS_DIR.'/Fixtures/legacy/postgresql.sql'));
+        $pdo->exec(file_get_contents(TESTS_DIR.'/Fixtures/'.$layout.'/postgresql.sql'));
         return $pdo;
     }
 
@@ -162,6 +164,73 @@ final class ConverterTest extends IntegrationTestCase
 
         $this->assertStringNotContainsString(Env::TRACKER_PASS, $report, 'the report never shows passwords');
         $this->assertSame('0600', substr(sprintf('%o', fileperms($this->out.'/config.json')), -4));
+        $this->assertStringContainsString(', версия 3.0 или новее', $report);
+        $this->assertStringNotContainsString('Warning: ', $report);
+    }
+
+    // A database that was last updated by version 2.0: no category of a topic, fewer settings,
+    // a tracker under its former name, topics of trackers version 4 does not have.
+    /** @dataProvider databases */
+    public function testDatabaseOfVersion2IsTransferred($type, $quote, $connection)
+    {
+        $pdo = $type == 'sqlite' ? self::sqlite('/tmp/legacy.sqlite', 'legacy-2.0') : self::$type('legacy-2.0');
+        $n = function ($name) use ($quote) { return $quote.$name.$quote; };
+        $run = function ($sql, $params = array()) use ($pdo) { $pdo->prepare($sql)->execute($params); };
+        $run('UPDATE settings SET '.$n('val').' = ? WHERE '.$n('key').' = ?', array('http://app/', 'serverAddress'));
+        $run('UPDATE settings SET '.$n('val').' = ? WHERE '.$n('key').' = ?', array('11', 'sendUpdateService'));
+        $run('UPDATE notifications SET address = ? WHERE id = ?', array('123456:telegram-token', 11));
+        $run('UPDATE credentials SET log = ?, pass = ? WHERE tracker = ?', array(Env::TRACKER_USER, Env::TRACKER_PASS, 'rutracker.org'));
+        $run('UPDATE credentials SET log = ?, pass = ? WHERE tracker = ?', array('old-name-user', 'old-name-pass', 'rutor.info'));
+        $topic = 'INSERT INTO torrent (id, tracker, name, hd, path, torrent_id, ep, '.$n('timestamp').', auto_update, hash, script, pause, error, closed) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)';
+        $run($topic, array(3, 'rutracker.org', 'Сериал', 0, '/media/tv/', '801', '', '2023-01-08 19:45:00', 1, 'aabb', '', 0, 0, 0));
+        $run($topic, array(4, 'rutor.info', 'Фильм', 0, '', '555', '', '2023-01-09 10:00:00', 0, '', '', 1, 0, 0));
+        $run($topic, array(5, 'tfile.cc', 'Старая тема', 0, '', '777', '', '2022-05-01 10:00:00', 0, '', '', 0, 0, 1));
+        $run($topic, array(6, 'baibako.tv', 'Show', 1, '', '', 'S01E02', '2022-06-01 00:00:00', 0, '', '', 0, 0, 0));
+        $run('INSERT INTO watch (id, tracker, name) VALUES (?,?,?)', array(2, 'rutor.info', 'releaser'));
+        $run('INSERT INTO warning (id, '.$n('time').', '.$n('where').', reason, t_id) VALUES (?,?,?,?,?)', array(1, '2023-01-10 10:00:00', 'rutor.info', 'cant_find_date', 4));
+
+        $report = $this->convert($connection.' --data='.escapeshellarg($this->out).' --config=/tmp/no-settings.php');
+        $this->assertStringNotContainsString('Warning: ', $report, 'columns this version did not have are not an error');
+        $this->assertStringContainsString(', версия до 2.1.7', $report);
+        $this->assertStringNotContainsString('старше версии 2.0', $report);
+        $this->assertStringContainsString('трекер rutor.info теперь называется rutor.is', $report);
+        $this->assertStringContainsString('версия 4 не работает с трекерами: ', $report);
+        $this->assertStringContainsString('tfile.cc — 1', $report);
+        $this->assertStringContainsString('baibako.tv — 1', $report);
+
+        $config = $this->converted('config.json');
+        $this->assertSame('http://app/', $config['settings']['serverAddress']);
+        $this->assertArrayNotHasKey('userAgent', $config['settings'], 'a setting this version did not have takes its default later');
+        $this->assertSame(array('login' => 'old-name-user', 'password' => 'old-name-pass', 'passkey' => ''), $config['trackers']['rutor.is']);
+        $this->assertArrayNotHasKey('rutor.info', $config['trackers']);
+        $this->assertSame(array('11' => '123456:telegram-token'), $config['notifications']);
+
+        $torrents = $this->converted('torrents.json');
+        $this->assertSame(array('rutracker.org', 'rutor.is', 'tfile.cc', 'baibako.tv'), array_column($torrents['torrents'], 'tracker'));
+        $this->assertSame('', $torrents['torrents'][0]['category']);
+        $this->assertSame(array(1, 0, 1), array($torrents['torrents'][1]['pause'], $torrents['torrents'][1]['closed'], $torrents['torrents'][2]['closed']));
+        $this->assertSame('rutor.is', $torrents['users'][0]['tracker']);
+        $this->assertSame('rutor.is', $this->converted('state.json')['warnings'][0]['where']);
+
+        // the program works with the result: defaults for what is missing, the renamed tracker is known
+        exec('cp -a '.escapeshellarg($this->out).'/. '.escapeshellarg(getenv('TM_DATA_DIR')).'/');
+        $this->assertSame('rutor.is', AppState::topic(4)['tracker']);
+        $this->assertSame('', AppState::topic(3)['category']);
+        $this->assertTrue(Env::uiOpen()['json']['ok'], 'the interface opens on the converted data');
+        $this->assertSame(15, (int)AppState::setting('httpTimeout'));
+        $this->assertNotSame('', AppState::setting('userAgent'));
+    }
+
+    // The trackers the converter knows are the ones the program has
+    public function testConverterKnowsTheTrackersOfTheProgram()
+    {
+        $source = file_get_contents('/app/tools/convert-db.php');
+        $this->assertSame(1, preg_match('/const SUPPORTED_TRACKERS = array\((.*?)\);/s', $source, $m));
+        preg_match_all("/'([^']+)'/", $m[1], $names);
+        $known = array_keys((new ReflectionClassConstant('TorrentMonitor\\Tracker\\Registry', 'TRACKERS'))->getValue());
+        sort($names[1]);
+        sort($known);
+        $this->assertSame($known, $names[1]);
     }
 
     public function testWithoutTheKeyEncryptedValuesAreListedForReentry()
