@@ -12,6 +12,7 @@
 /logs/
 /tmp/
 /update.zip
+/tmp_update/
 
 # release archives built by tools/release.sh
 /dist/
