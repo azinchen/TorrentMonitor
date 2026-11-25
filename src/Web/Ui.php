@@ -48,11 +48,21 @@ final class Ui
         $ui = new self();
         try
         {
-            $problem = App::storageProblem();
-            if ($problem !== NULL)
-                $ui->fail($problem, 503);
             if ($_SERVER['REQUEST_METHOD'] != 'POST')
                 $ui->fail('Нужен запрос POST.', 405);
+            // A damaged data file is brought back from its copy. The password is in the very file
+            // that may be damaged, so nobody can be asked for it: the action is open, but does
+            // something only while a file is damaged, and only puts back the program's own copy.
+            if ($action == 'data.restore')
+            {
+                if ( ! Files::restore())
+                    $ui->fail('Восстанавливать нечего: файлы данных в порядке или копии нет.', 409);
+                echo json_encode(array('ok' => TRUE, 'message' => 'Файл возвращён из копии.'), JSON_UNESCAPED_UNICODE);
+                return;
+            }
+            $problem = App::storageProblem();
+            if ($problem !== NULL)
+                $ui->fail($problem, 503, array('restore' => Files::restorable()));
             Auth::start();
             Journal::$by = 'интерфейс';
             if ( ! Auth::csrfValid() && $action != 'boot')
@@ -70,15 +80,19 @@ final class Ui
         }
         catch (StorageException $e)
         {
-            $ui->fail($e->getMessage(), 503);
+            $ui->fail($e->getMessage(), 503, array('restore' => Files::restorable()));
+        }
+        catch (\Throwable $e)
+        {
+            $ui->fail(App::unexpected($e, 'интерфейс, '.$action), 500);
         }
     }
 
     /** @return never */
-    private function fail(string $message, int $code = 200)
+    private function fail(string $message, int $code = 200, array $more = array())
     {
         http_response_code($code);
-        echo json_encode(array('ok' => FALSE, 'message' => $message), JSON_UNESCAPED_UNICODE);
+        echo json_encode(array('ok' => FALSE, 'message' => $message) + $more, JSON_UNESCAPED_UNICODE);
         exit;
     }
 

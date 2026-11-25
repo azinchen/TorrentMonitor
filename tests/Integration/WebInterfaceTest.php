@@ -64,12 +64,20 @@ final class WebInterfaceTest extends IntegrationTestCase
         @unlink(getenv('TM_DATA_DIR').'/config.json.bak');
         Env::uiClose();
 
-        $boot = Env::uiOpen()['json'];
-        $this->assertTrue($boot['setup']);
-        $this->assertFalse(Env::ui('login', array('password' => 'torrentmonitor'))['json']['ok']);
-        $this->assertSame(401, Env::ui('overview')['status']);
+        // it is not a new installation: the first setup, with a password of the visitor's choice, is not offered
+        $boot = Env::uiOpen();
+        $this->assertSame(503, $boot['status']);
+        $this->assertStringContainsString('Файл настроек отсутствует', $boot['json']['message']);
+        $this->assertArrayNotHasKey('setup', $boot['json']);
+        $this->assertNull($boot['json']['restore'], 'there is no copy to bring back');
+        $this->assertSame(503, Env::ui('setup', array('password' => 'New-Secret'))['status']);
+        $this->assertSame(503, Env::ui('login', array('password' => 'torrentmonitor'))['status']);
+        $this->assertStringContainsString('Файл настроек отсутствует', Env::runEngineExpectingFailure());
 
-        $this->assertTrue(Env::ui('setup', array('password' => 'New-Secret'))['json']['ok']);
+        // the owner of the server writes a settings file without protection and sets a password in the interface
+        file_put_contents(getenv('TM_DATA_DIR').'/config.json', '{"version": 1, "settings": {"auth": "0"}}');
+        Env::uiClose();
+        $this->assertTrue(Env::uiOpen()['json']['in']);
         $this->assertCount(1, AppState::topics(), 'the topics are still there');
     }
 

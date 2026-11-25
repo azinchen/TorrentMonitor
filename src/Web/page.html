@@ -25,6 +25,13 @@
     <div class="card card--narrow">
         <h1>TorrentMonitor не может начать работу</h1>
         <p x-text="fatal"></p>
+        <template x-if="restore">
+            <div>
+                <p>Программа хранит предыдущую версию этого файла. Её можно вернуть: будут потеряны только изменения,
+                    сделанные после <span x-text="local('', restore.time)"></span>.</p>
+                <p><button class="btn btn--primary" @click="restoreData()">Восстановить из копии</button></p>
+            </div>
+        </template>
     </div>
 </div>
 

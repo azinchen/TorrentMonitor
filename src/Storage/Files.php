@@ -101,32 +101,106 @@ final class Files
     // Reads all data files; StorageException if any of them is corrupted or inaccessible
     public static function check(): void
     {
+        //The settings are gone and the topics are not: that is not a new installation. Treating it
+        //as one would offer the first setup, with a new password, to whoever opens the address.
+        if ( ! self::config()->exists() && self::torrents()->exists())
+            throw new StorageException('Файл настроек отсутствует: '.self::config()->file().', хотя файл тем есть'
+                .(is_file(self::config()->file().'.bak') ? '. Предыдущая версия файла сохранена рядом: config.json.bak'
+                    : '. Верните его из резервной копии; чтобы начать заново, удалите и torrents.json'));
         self::config()->read();
         self::torrents()->read();
         self::state()->read();
+        //a damaged state file was put aside and started anew: said once, in the journal
+        if (self::state()->recovered !== NULL)
+        {
+            $aside = self::state()->recovered;
+            self::state()->recovered = NULL;
+            \TorrentMonitor\Data\Journal::add('data', 'Файл state.json был повреждён и начат заново: сохранённые сессии трекеров, отметки ошибок '
+                .'и найденные темы пользователей сброшены. Прежний файл сохранён как '.$aside);
+        }
+    }
+
+    // The data file that stops the program and can be brought back from its copy: array('file' =>
+    // 'config.json', 'time' => when the copy was made, 'Y-m-d H:i:s'), or NULL when there is none.
+    public static function restorable(): ?array
+    {
+        foreach (array('config.json' => self::config(), 'torrents.json' => self::torrents()) as $name => $store)
+        {
+            $file = $store->file();
+            $broken = FALSE;
+            if ($name == 'config.json' && ! $store->exists() && self::torrents()->exists())
+                $broken = TRUE;
+            else
+            {
+                try
+                {
+                    $store->read();
+                }
+                catch (StorageException $e)
+                {
+                    $broken = TRUE;
+                }
+            }
+            if ( ! $broken || ! is_file($file.'.bak'))
+                continue;
+            //the copy must be a file the program can read
+            $copy = json_decode((string)@file_get_contents($file.'.bak'), TRUE);
+            if ( ! is_array($copy) || ! isset($copy['version']) || ! is_int($copy['version']))
+                continue;
+            try
+            {
+                call_user_func(array(Repair::class, $name == 'config.json' ? 'config' : 'torrents'), $copy + ($name == 'torrents.json' && $copy['version'] < self::TORRENTS_VERSION ? array('topics' => array()) : array()));
+            }
+            catch (Damaged $e)
+            {
+                continue;
+            }
+            return array('file' => $name, 'time' => date('Y-m-d H:i:s', (int)@filemtime($file.'.bak')));
+        }
+        return NULL;
+    }
+
+    // Puts the copy in place of the damaged file, which is kept as <file>.broken. FALSE if there is nothing to restore.
+    public static function restore(): bool
+    {
+        $what = self::restorable();
+        if ($what === NULL)
+            return FALSE;
+        $file = self::dir().'/'.$what['file'];
+        if (is_file($file) && ! @rename($file, $file.'.broken'))
+            return FALSE;
+        if ( ! @copy($file.'.bak', $file))
+            return FALSE;
+        self::protect($file);
+        if (is_file($file.'.broken'))
+            self::protect($file.'.broken');
+        self::$stores = array();
+        \TorrentMonitor\Data\Journal::add('data', 'Файл '.$what['file'].' был повреждён и возвращён из копии от '.$what['time']
+            .'. Повреждённый файл сохранён как '.$what['file'].'.broken');
+        return TRUE;
     }
 
     public static function config(): JsonStore
     {
-        return self::store('config.json', self::configDefaults(), self::CONFIG_VERSION, array(), TRUE);
+        return self::store('config.json', self::configDefaults(), self::CONFIG_VERSION, array(), TRUE, array(Repair::class, 'config'));
     }
 
     public static function torrents(): JsonStore
     {
-        return self::store('torrents.json', self::torrentsDefaults(), self::TORRENTS_VERSION, array(1 => array(Migrations::class, 'torrents1')), TRUE);
+        return self::store('torrents.json', self::torrentsDefaults(), self::TORRENTS_VERSION, array(1 => array(Migrations::class, 'torrents1')), TRUE, array(Repair::class, 'torrents'));
     }
 
     public static function state(): JsonStore
     {
-        return self::store('state.json', self::stateDefaults(), self::STATE_VERSION, array(1 => array(Migrations::class, 'state1')), FALSE);
+        return self::store('state.json', self::stateDefaults(), self::STATE_VERSION, array(1 => array(Migrations::class, 'state1')), FALSE, array(Repair::class, 'state'), TRUE);
     }
 
-    private static function store($name, $defaults, $version, $migrations, $backup): JsonStore
+    private static function store($name, $defaults, $version, $migrations, $backup, $repair = NULL, $recover = FALSE): JsonStore
     {
         if ( ! isset(self::$stores[$name]))
         {
             self::prepare();
-            self::$stores[$name] = new JsonStore(self::dir().'/'.$name, $defaults, $version, $migrations, $backup);
+            self::$stores[$name] = new JsonStore(self::dir().'/'.$name, $defaults, $version, $migrations, $backup, NULL, $repair, $recover);
         }
         return self::$stores[$name];
     }

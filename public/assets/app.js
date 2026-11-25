@@ -17,6 +17,7 @@ document.addEventListener('alpine:init', () => {
         loading: true,          // first load
         busy: '',               // the action currently running (to disable buttons)
         fatal: '',              // the server cannot work (corrupted data, etc.)
+        restore: null,          // the damaged data file that can be brought back from its copy: { file, time }
         csrf: '',
         mode: 'app',            // setup | login | app
         page: 'topics',
@@ -108,6 +109,16 @@ document.addEventListener('alpine:init', () => {
             }
         },
 
+        // brings a damaged data file back from the copy the program keeps, then starts the page again
+        async restoreData() {
+            if (!this.restore || !confirm('Вернуть ' + this.restore.file + ' из копии от ' + this.local('', this.restore.time) + '? Изменения, сделанные после неё, будут потеряны. Повреждённый файл сохранится как ' + this.restore.file + '.broken.')) return;
+            const response = await fetch('ui/data.restore', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}', credentials: 'same-origin' });
+            let data = null;
+            try { data = await response.json(); } catch (e) { /* not JSON */ }
+            if (data && data.ok) location.reload();
+            else this.fatal = (data && data.message ? data.message + ' ' : '') + this.fatal;
+        },
+
         // ---- server requests
         async call(action, body = {}, options = {}) {
             if (!options.silent) this.busy = action;
@@ -121,7 +132,9 @@ document.addEventListener('alpine:init', () => {
                 let data = null;
                 try { data = await response.json(); } catch (e) { /* not JSON: server error */ }
                 if (response.status === 401) { this.mode = 'login'; return null; }
-                if (response.status === 503 && data) { this.fatal = data.message; return null; }
+                if (response.status === 503 && data) { this.fatal = data.message; this.restore = data.restore || null; return null; }
+                //the page cannot start without its first answer: said in full, not in a passing note
+                if (action === 'boot' && (!data || !data.ok)) { this.fatal = data && data.message ? data.message : 'Сервер ответил ошибкой (' + response.status + '). Подробности — в журнале ошибок PHP.'; return null; }
                 if (!data) { this.toast('Сервер ответил ошибкой (' + response.status + ').', true); return null; }
                 if (!data.ok) { this.toast(data.message, true); return null; }
                 if (data.message && !options.quiet) this.toast(data.message);

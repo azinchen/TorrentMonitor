@@ -536,6 +536,14 @@ final class CoreTest extends TestCase
         $this->assertSame('a} }b', \TorrentMonitor\Privacy::plain(\TorrentMonitor\Privacy::folder('a}}b')), 'a value cannot end its own mark');
     }
 
+    public function testUnexpectedErrorIsToldWithoutThePathsOfTheServer()
+    {
+        $text = \TorrentMonitor\App::unexpected(new \TypeError('strcmp(): Argument #1 must be of type string'), 'проверка');
+        $this->assertStringStartsWith('Внутренняя ошибка программы (проверка): strcmp(): Argument #1 must be of type string [CoreTest.php:', $text);
+        $this->assertStringNotContainsString(__DIR__, $text);
+        $this->assertStringContainsString('записана в журнал', $text);
+    }
+
     public function testAddressWithoutItsLogin()
     {
         $clean = function ($address) { return \TorrentMonitor\Engine\About::withoutLogin($address); };

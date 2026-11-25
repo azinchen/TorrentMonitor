@@ -74,6 +74,139 @@ final class StorageTest extends IntegrationTestCase
         $this->assertSame('{"version": 1, "torrents": [', file_get_contents($this->dataFile('torrents.json')), 'the damaged file is not overwritten');
     }
 
+    // A file can be valid JSON and wrong inside: what has an obvious value is put right
+    public function testWrongValuesInsideAFileArePutRight()
+    {
+        $this->loginToTracker();
+        $kept = $this->trackTopic(720);
+        $torrents = json_decode(file_get_contents($this->dataFile('torrents.json')), true);
+        $good = $torrents['topics'][0];
+        $torrents['topics'] = array(
+            'a' => $good,                                                          // the list became a map
+            'b' => null,                                                           // not a topic at all
+            'c' => 'oops',
+            'd' => array('tracker' => 'rutracker.org', 'topicId' => 721),          // no number, no other fields, a number where text belongs
+            'e' => array('id' => $good['id'], 'tracker' => 'rutracker.org', 'name' => array('x'), 'paused' => 'no', 'error' => 'yes',
+                'updatedAt' => 12345, 'hash' => null, 'sonarrSeasons' => 'all', 'stopAfterDays' => 'abc', 'fromTheFuture' => array('kept' => true)),
+        );
+        unset($torrents['nextId']);
+        $torrents['users'] = 'oops';
+        file_put_contents($this->dataFile('torrents.json'), json_encode($torrents));
+
+        $config = json_decode(file_get_contents($this->dataFile('config.json')), true);
+        $config['settings']['httpTimeout'] = array('15');          // a list where a value belongs: the default is used
+        $config['settings']['rss'] = 1;                             // a number where text belongs
+        $config['trackers']['kinozal.me'] = 'oops';
+        $config['trackers']['rutracker.org']['login'] = array('a');
+        $config['notifications'] = 'oops';
+        file_put_contents($this->dataFile('config.json'), json_encode($config));
+
+        $state = json_decode(file_get_contents($this->dataFile('state.json')), true);
+        $state['warnings'] = array('oops', array(), array('id' => 7, 'source' => 'rutracker.org', 'code' => 'cant_find_date', 'topicId' => $kept));
+        $state['lastRun'] = array('x');
+        $state['found'] = 'oops';
+        file_put_contents($this->dataFile('state.json'), json_encode($state));
+
+        Env::uiClose();
+        $boot = Env::uiOpen();
+        $this->assertSame(200, $boot['status'], $boot['body']);
+        $overview = Env::ui('overview');
+        $this->assertTrue($overview['json']['ok'], $overview['body']);
+        $topics = $overview['json']['topics'];
+        $this->assertCount(3, $topics, 'what is not a topic is left out');
+        $this->assertCount(3, array_unique(array_column($topics, 'id')), 'every topic has a number of its own');
+        $this->assertContains($kept, array_column($topics, 'id'), 'a topic keeps its number');
+        $this->assertSame('15', $overview['json']['settings']['httpTimeout']);
+        $this->assertCount(1, $overview['json']['warnings']);
+        $this->assertTrue(Env::api('GET', 'torrents')['json']['ok']);
+        $output = Env::runEngine();
+        $this->assertStringNotContainsString('Warning', $output);
+        $this->assertStringNotContainsString('Fatal', $output);
+        $this->assertStringContainsString('Проверено тем:', $output);
+
+        // the next save writes the file as it should be, and keeps what this version does not know
+        $saved = AppState::topics();
+        $this->assertCount(3, $saved);
+        foreach ($saved as $topic)
+        {
+            $this->assertIsInt($topic['id']);
+            $this->assertIsString($topic['name']);
+            $this->assertIsBool($topic['paused']);
+        }
+    }
+
+    // What cannot be guessed makes the file damaged: the program says which part, and offers its copy
+    public function testASectionOfAWrongTypeIsDamageAndTheCopyCanBeBroughtBack()
+    {
+        $this->loginToTracker();
+        $this->trackTopic(722);
+        $this->trackTopic(723);       // the second save leaves a copy that holds the first topic
+        $torrents = json_decode(file_get_contents($this->dataFile('torrents.json')), true);
+        $torrents['topics'] = 'oops';
+        file_put_contents($this->dataFile('torrents.json'), json_encode($torrents));
+
+        Env::uiClose();
+        $boot = Env::uiOpen();
+        $this->assertSame(503, $boot['status']);
+        $this->assertStringContainsString('Файл данных повреждён', $boot['json']['message']);
+        $this->assertStringContainsString('(раздел topics)', $boot['json']['message']);
+        $this->assertSame('torrents.json', $boot['json']['restore']['file']);
+        $this->assertMatchesRegularExpression('/^\d{4}-\d\d-\d\d \d\d:\d\d:\d\d$/', $boot['json']['restore']['time']);
+        $this->assertStringContainsString('(раздел topics)', Env::runEngineExpectingFailure());
+
+        $restored = Env::ui('data.restore');
+        $this->assertTrue($restored['json']['ok'], $restored['body']);
+        Env::uiClose();
+        $this->assertSame(200, Env::uiOpen()['status']);
+        $this->assertCount(1, AppState::topics(), 'the copy is the file as it was before the last save');
+        $this->assertStringContainsString('"oops"', file_get_contents($this->dataFile('torrents.json.broken')), 'the damaged file is kept');
+        $this->assertContains(true, array_map(function ($line) { return strpos($line, 'torrents.json был повреждён и возвращён из копии') !== false; }, AppState::journal('data')));
+
+        // nothing is damaged any more: there is nothing to bring back
+        $again = Env::ui('data.restore');
+        $this->assertSame(409, $again['status']);
+
+        // the settings: a section of a wrong type, and no section at all
+        foreach (array('"oops"', NULL) as $settings)
+        {
+            $config = json_decode(file_get_contents($this->dataFile('config.json')), true);
+            Env::ui('settings.save', array('httpTimeout' => '21'));     // makes a copy
+            if ($settings === NULL)
+                unset($config['settings']);
+            else
+                $config['settings'] = 'oops';
+            file_put_contents($this->dataFile('config.json'), json_encode($config));
+            Env::uiClose();
+            $boot = Env::uiOpen();
+            $this->assertSame(503, $boot['status']);
+            $this->assertStringContainsString('(раздел settings)', $boot['json']['message']);
+            $this->assertSame('config.json', $boot['json']['restore']['file']);
+            $this->assertTrue(Env::ui('data.restore')['json']['ok']);
+            Env::uiClose();
+            $this->assertSame(200, Env::uiOpen()['status']);
+        }
+    }
+
+    // The state holds nothing that cannot be found out again: a damaged one does not stop the program
+    public function testDamagedStateFileIsStartedAnew()
+    {
+        $this->loginToTracker();
+        $id = $this->trackTopic(724);
+        file_put_contents($this->dataFile('state.json'), '{"version": 2, "cookies": {');
+
+        Env::uiClose();
+        $boot = Env::uiOpen();
+        $this->assertSame(200, $boot['status'], $boot['body']);
+        $this->assertFileExists($this->dataFile('state.json.broken'));
+        $this->assertSame('{"version": 2, "cookies": {', file_get_contents($this->dataFile('state.json.broken')));
+        $this->assertNotNull(AppState::topic($id), 'topics and settings are untouched');
+        $lines = AppState::journal('data');
+        $this->assertCount(1, $lines);
+        $this->assertStringContainsString('state.json был повреждён и начат заново', $lines[0]);
+        Env::runEngine();
+        $this->assertCount(1, AppState::journal('data'), 'said once');
+    }
+
     public function testWebAndEngineWritingTogetherLoseNothing()
     {
         $this->loginToTracker();

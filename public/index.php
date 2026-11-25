@@ -25,6 +25,11 @@ $path = '/'.trim($path, '/');
 
 require_once dirname(__DIR__).'/src/bootstrap.php';
 
+//a warning of PHP printed into an answer would break it for the page and show the paths of the server:
+//warnings go to the error log of PHP, and unexpected errors are answered in words (see App::unexpected)
+ini_set('display_errors', '0');
+ini_set('log_errors', '1');
+
 if ($path == '/api' || strncmp($path, '/api/', 5) === 0)
 {
     $segments = array_values(array_filter(explode('/', substr($path, 4)), 'strlen'));

@@ -76,6 +76,25 @@ final class App
         }
     }
 
+    // An error nobody expected: instead of the raw text of PHP (with the paths of the server) the
+    // user gets one sentence, and the journal and the PHP error log get the place it happened in.
+    // $where - what was being done. Returns the sentence.
+    public static function unexpected(\Throwable $e, string $where): string
+    {
+        $place = basename($e->getFile()).':'.$e->getLine();
+        $text = 'Внутренняя ошибка программы ('.$where.'): '.$e->getMessage().' ['.$place.']';
+        error_log('TorrentMonitor: '.get_class($e).' in '.$e->getFile().':'.$e->getLine().': '.$e->getMessage());
+        try
+        {
+            Data\Journal::add('error', $text);
+        }
+        catch (\Throwable $ignored)
+        {
+            //the journal may be what is broken
+        }
+        return $text.'. Она записана в журнал; сообщите о ней разработчикам.';
+    }
+
     // Where to write the HTTP client's debug lines (function(string): void) or NULL
     public static function setLogger(?callable $logger): void
     {
