@@ -5,6 +5,8 @@ use TorrentMonitor\Http\Request;
 
 final class Nnmclub extends ForumTracker
 {
+    // topics and torrent files are open to guests; an account only makes downloads count on the tracker
+    const ACCOUNT_OPTIONAL = TRUE;
     const ADDRESSES = array('https://nnmclub.to');
     const CHARSET = 'windows-1251';
 

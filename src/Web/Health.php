@@ -156,7 +156,7 @@ final class Health
 
     private static function used(string $name): bool
     {
-        if (Registry::needsAccount($name) && Registry::ready($name))
+        if (Registry::needsAccount($name) && Registry::hasAccount($name))
             return TRUE;
         foreach (\TorrentMonitor\Data\Topics::all() as $topic)
             if ($topic['tracker'] == $name)

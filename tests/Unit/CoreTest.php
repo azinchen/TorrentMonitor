@@ -322,6 +322,14 @@ final class CoreTest extends TestCase
 
     // ---- topic dates
 
+    public function testNnmclubWorksWithoutAnAccount()
+    {
+        $this->assertTrue(Registry::needsAccount('nnmclub.to'), 'an account can be set');
+        $this->assertTrue(Registry::accountOptional('nnmclub.to'));
+        $this->assertFalse(Registry::accountOptional('rutracker.org'));
+        $this->assertFalse(Registry::accountOptional('rutor.is'));
+    }
+
     public function testNnmclubDate()
     {
         $tracker = Registry::get('nnmclub.to');

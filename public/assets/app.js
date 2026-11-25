@@ -300,6 +300,7 @@ document.addEventListener('alpine:init', () => {
         trackerState(t) {
             if (t.warnings) return { text: 'ошибки: ' + t.warnings, kind: 'bad' };
             if (!t.needsAccount) return { text: 'вход не нужен', kind: 'muted' };
+            if (t.accountOptional && !t.login && !t.hasCookie) return { text: 'без входа', kind: 'muted' };
             if (t.ready) return { text: t.login ? 'учётная запись задана' : 'вход по cookie', kind: 'good' };
             return { text: 'не настроен', kind: 'muted' };
         },
