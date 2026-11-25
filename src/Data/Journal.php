@@ -37,7 +37,7 @@ final class Journal
         'sonarrReplaceTorrent' => 'удаление раздачи заменённой темы', 'send' => 'уведомления', 'sendUpdate' => 'уведомления об обновлениях',
         'sendWarning' => 'уведомления об ошибках', 'sendUpdateService' => 'сервис уведомлений об обновлениях',
         'sendWarningService' => 'сервис уведомлений об ошибках', 'trackerTimezone' => 'часовой пояс трекеров',
-        'dataFileMode' => 'права на файлы данных', 'journalSize' => 'длина журнала',
+        'dataFileMode' => 'права на файлы данных', 'journalSize' => 'длина журнала', 'debugKeep' => 'хранить подробных журналов',
     );
     //settings that are on or off
     const SWITCHES = array('auth', 'rss', 'debug', 'autoUpdate', 'proxy', 'useTorrent', 'deleteDistribution', 'deleteOldFiles', 'deleteFilesOnRemove',

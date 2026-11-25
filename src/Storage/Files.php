@@ -145,6 +145,8 @@ final class Files
             'autoUpdate'           => '0',
             // how many lines the journal of events keeps; 0 - no journal
             'journalSize'          => '1000',
+            // how many detailed logs of check runs are kept (engine.log, engine.1.log ...)
+            'debugKeep'            => '10',
             // access mode of the data files, three octal digits (640); empty - the owner only
             'dataFileMode'         => '',
             // what automatic updates install: stable, beta or dev

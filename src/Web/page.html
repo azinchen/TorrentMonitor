@@ -373,6 +373,9 @@
         <label class="field field--advanced" x-show="advanced"><span>Длина журнала событий</span>
             <input type="number" min="0" max="100000" x-model="settingsForm.journalSize" required>
             <small>Сколько последних событий хранить: проверки, обновления, изменения настроек. 0 — журнал не ведётся.</small></label>
+        <label class="field field--advanced" x-show="advanced"><span>Хранить подробных журналов</span>
+            <input type="number" min="1" max="100" x-model="settingsForm.debugKeep" required>
+            <small>Подробные журналы скольких последних проверок хранить, пока включён «Подробный журнал проверки». Каждая проверка — отдельный файл <code>engine*.log</code> в каталоге данных.</small></label>
         <label class="field field--advanced" x-show="advanced"><span>Прекращать проверку через</span>
             <input type="number" min="0" x-model="settingsForm.stopAfterDays" required>
             <small>Дней без обновлений, после которых тема больше не проверяется. 0 — проверять всегда. У темы может быть своё значение.</small></label>
@@ -547,11 +550,21 @@
         <p class="muted small" x-show="journal.length">Проверки с их итогом и обновлёнными темами, ошибки, обновления программы, изменения настроек
             и трекеров, добавленные и удалённые темы. Ошибка записывается, когда она появилась, а не при каждой проверке, пока она длится. Хранится в файле <code>journal.log</code> в каталоге данных; длина задаётся
             в расширенных настройках.</p>
-        <details class="runlog" x-show="runLog" :open="status.running || runLogOpen" @toggle="runLogOpen = $el.open">
-            <summary>Подробный журнал последней проверки</summary>
+        <details class="runlog" x-show="runLog || runLogs.length" :open="status.running || runLogOpen" @toggle="runLogOpen = $el.open">
+            <summary>Подробный журнал проверки</summary>
+            <div class="runlog__bar">
+                <select x-model.number="runLogN" @change="loadLog()" :disabled="status.running" title="Какую проверку показать">
+                    <template x-for="r in runLogs" :key="r.n">
+                        <option :value="r.n" x-text="(r.n ? '' : 'последняя, ') + local(r.timeUtc, r.time) + ' · ' + kb(r.size)"></option>
+                    </template>
+                </select>
+                <button type="button" class="btn btn--small" @click="saveLog()">Скачать</button>
+                <span class="muted small" x-show="runLogCut">показан конец журнала; целиком — «Скачать»</span>
+            </div>
             <pre class="log" x-text="runLog"></pre>
-            <p class="muted small">Каждая проверенная тема и каждый запрос последней проверки. Ведётся, пока в настройках включён
-                «Подробный журнал проверки»; файл <code>engine.log</code> в каталоге данных.</p>
+            <p class="muted small">Каждая проверенная тема и каждый запрос проверки; в начале — версия программы, torrent-клиент
+                и решатель Cloudflare. Ведётся, пока в настройках включён «Подробный журнал проверки»; сколько проверок хранить,
+                задаётся в расширенных настройках. Файлы <code>engine*.log</code> в каталоге данных.</p>
         </details>
     </div>
 

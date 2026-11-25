@@ -37,7 +37,7 @@ final class Ui
     const SETTINGS = array('serverAddress', 'auth', 'rss', 'debug', 'autoUpdate', 'userAgent', 'httpTimeout', 'flaresolverrUrl',
         'proxy', 'proxyAddress', 'proxyType', 'useTorrent', 'torrentClient', 'torrentAddress', 'torrentLogin', 'pathToDownload',
         'qbitCategory', 'deleteDistribution', 'deleteOldFiles', 'deleteFilesOnRemove', 'stopAfterDays', 'removeOnSeriesDelete', 'sonarrReplaceTopic', 'sonarrReplaceTorrent',
-        'send', 'sendUpdate', 'sendWarning', 'trackerTimezone', 'updateChannel', 'dataFileMode', 'httpConcurrency', 'httpSites', 'journalSize');
+        'send', 'sendUpdate', 'sendWarning', 'trackerTimezone', 'updateChannel', 'dataFileMode', 'httpConcurrency', 'httpSites', 'journalSize', 'debugKeep');
 
     private array $in = array();
 
@@ -578,6 +578,8 @@ final class Ui
             $values['httpConcurrency'] = (string)min(50, max(1, (int)$values['httpConcurrency']));
         if (isset($values['journalSize']))
             $values['journalSize'] = (string)min(100000, max(0, (int)$values['journalSize']));
+        if (isset($values['debugKeep']))
+            $values['debugKeep'] = (string)min(100, max(1, (int)$values['debugKeep'] ?: 10));
         if (isset($values['httpSites']))
             $values['httpSites'] = (string)min(10, max(1, (int)$values['httpSites'] ?: 3));
         if (isset($values['dataFileMode']) && $values['dataFileMode'] !== '' && ! Files::validMode($values['dataFileMode']))
@@ -808,9 +810,20 @@ final class Ui
     //log of the last run
     private function doRunLog(): array
     {
-        $log = (string)@file_get_contents(Runner::logFile());
+        //which of the kept logs: 0 - the last run; 'full' - the whole file, to be saved
+        $n = max(0, (int)(isset($this->in['n']) ? $this->in['n'] : 0));
+        $log = (string)@file_get_contents(Runner::logFile($n));
+        $runs = array();
+        foreach (Runner::logs() as $i)
+        {
+            //a run is named by when it began: the stamp of its first line
+            $first = (string)@file_get_contents(Runner::logFile($i), FALSE, NULL, 0, 21);
+            $time = preg_match('/^\[(\d{4}-\d\d-\d\d \d\d:\d\d:\d\d)\]/', $first, $m) ? $m[1] : date('Y-m-d H:i:s', (int)@filemtime(Runner::logFile($i)));
+            $runs[] = array('n' => $i, 'time' => $time, 'timeUtc' => Time::serverUtc($time), 'size' => (int)@filesize(Runner::logFile($i)));
+        }
         //the lines are stamped on the server's clock: with its offset from UTC the page shows them on the browser's
-        return array('running' => Lock::busy(), 'log' => strlen($log) > 200000 ? substr($log, -200000) : $log, 'offset' => (int)date('Z'));
+        return array('running' => Lock::busy(), 'log' => empty($this->in['full']) && strlen($log) > 200000 ? substr($log, -200000) : $log,
+            'cut' => empty($this->in['full']) && strlen($log) > 200000, 'offset' => (int)date('Z'), 'runs' => $runs, 'n' => $n);
     }
 
     private function doUpdateCheck(): array

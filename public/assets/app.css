@@ -373,3 +373,5 @@ fieldset { border: 0; border-top: 1px solid var(--border); margin: .75rem 0 0; p
 .runlog { margin-top: .75rem; }
 .runlog summary { cursor: pointer; color: var(--muted); font-size: .9rem; }
 .runlog[open] summary { color: inherit; }
+.runlog__bar { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; margin-top: .5rem; }
+.runlog__bar select { width: auto; max-width: 100%; }
