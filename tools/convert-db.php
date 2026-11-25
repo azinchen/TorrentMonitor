@@ -176,6 +176,49 @@ function rows(PDO $pdo, $table)
     }
 }
 
+// names of the columns of a table; empty when the database has no such table
+function columns(PDO $pdo, $table)
+{
+    try
+    {
+        $statement = $pdo->query('SELECT * FROM '.$table.' WHERE 1 = 0');
+        $names = array();
+        for ($i = 0; $i < $statement->columnCount(); $i++)
+        {
+            $meta = $statement->getColumnMeta($i);
+            $names[] = (string)$meta['name'];
+        }
+        return $names;
+    }
+    catch (PDOException $e)
+    {
+        return array();
+    }
+}
+
+// a column that databases of earlier versions do not have yet
+function col(array $row, $name, $default = '')
+{
+    return isset($row[$name]) ? $row[$name] : $default;
+}
+
+// Trackers of version 4. Topics of any other tracker are carried over, but cannot be checked.
+const SUPPORTED_TRACKERS = array('rutracker.org', 'nnmclub.to', 'lostfilm.tv', 'rutor.is', 'kinozal.me', 'anidub.com', 'newstudio.tv',
+    'animelayer.ru', 'rustorka.com', 'pornolab.net', 'lostfilm-mirror', 'booktracker.org', 'riperam.org', 'kinozal.tv', 'kinozal.guru');
+// Names trackers had in earlier versions (the updates of 1.6 - 1.8.9.7 renamed them in the database;
+// an installation that skipped those updates still has the old ones)
+const RENAMED_TRACKERS = array('rutor.org' => 'rutor.is', 'rutor.info' => 'rutor.is',
+    'nnm-club.ru' => 'nnmclub.to', 'nnm-club.me' => 'nnmclub.to', 'nnm-club.name' => 'nnmclub.to');
+
+$renamed = array();
+$trackerName = function ($name) use (&$renamed) {
+    $name = (string)$name;
+    if ( ! isset(RENAMED_TRACKERS[$name]))
+        return $name;
+    $renamed[$name] = RENAMED_TRACKERS[$name];
+    return RENAMED_TRACKERS[$name];
+};
+
 function byId($a, $b)
 {
     return (int)$a['id'] - (int)$b['id'];
@@ -211,11 +254,15 @@ if (empty($settingRows))
     fail('в базе нет таблицы settings или она пуста: это не база TorrentMonitor?');
 usort($settingRows, 'byId');
 $buckets = array('config' => array(), 'state' => array());
+$dbVersion = '';
 foreach ($settingRows as $row)
 {
     $name = $row['key'];
     if ($name == 'dbVersion')
+    {
+        $dbVersion = trim((string)$row['val']);
         continue;
+    }
     $value = $name == 'torrentPassword' ? $decrypt($row['val'], 'пароль torrent-клиента') : (string)$row['val'];
     $bucket = in_array($name, $stateKeys) ? 'state' : 'config';
     if (array_key_exists($name, $buckets[$bucket]))
@@ -231,20 +278,38 @@ foreach ($settingRows as $row)
 $settings = $buckets['config'];
 $stateSettings = $buckets['state'];
 
+// Which version the database is of. The layout has been the same since 1.5; version 3.0 added the
+// category of a topic, 2.1.7 the userAgent setting. Supported: 2.0 and later (tested: 2.0 and 3.3.6).
+$topicColumns = columns($pdo, 'torrent');
+$supported = in_array('closed', $topicColumns) && columns($pdo, 'notifications');
+if ($dbVersion !== '')
+    $databaseVersion = $dbVersion;
+elseif (in_array('category', $topicColumns))
+    $databaseVersion = '3.0 или новее';
+elseif (array_key_exists('userAgent', $settings))
+    $databaseVersion = '2.1.7 – 2.2.x';
+elseif ($supported)
+    $databaseVersion = 'до 2.1.7';
+else
+    $databaseVersion = 'старше 2.0';
+if ( ! $supported)
+    $notes['version'] = 'база данных старше версии 2.0: перенос таких баз не проверялся. Проверьте темы и настройки после переноса.';
+
 // tracker credentials and cookies
 $trackers = array();
 $cookies = array();
 foreach (rows($pdo, 'credentials') as $row)
 {
-    $tracker = $row['tracker'];
+    $name = $trackerName($row['tracker']);
     $login = (string)$row['log'];
-    $password = $decrypt($row['pass'], 'пароль трекера '.$tracker);
-    $passkey = $decrypt(isset($row['passkey']) ? $row['passkey'] : '', 'passkey трекера '.$tracker);
-    $cookie = $decrypt(isset($row['cookie']) ? $row['cookie'] : '', 'cookie трекера '.$tracker);
-    if (trim($login) !== '' || trim($password) !== '' || $passkey !== '')
-        $trackers[$tracker] = array('login' => $login, 'password' => $password, 'passkey' => $passkey);
-    if ($cookie !== '')
-        $cookies[$tracker] = $cookie;
+    $password = $decrypt($row['pass'], 'пароль трекера '.$name);
+    $passkey = $decrypt(isset($row['passkey']) ? $row['passkey'] : '', 'passkey трекера '.$name);
+    $cookie = $decrypt(isset($row['cookie']) ? $row['cookie'] : '', 'cookie трекера '.$name);
+    //an account under the present name of a tracker is not replaced by one under its old name
+    if ((trim($login) !== '' || trim($password) !== '' || $passkey !== '') && ! isset($trackers[$name]))
+        $trackers[$name] = array('login' => $login, 'password' => $password, 'passkey' => $passkey);
+    if ($cookie !== '' && ! isset($cookies[$name]))
+        $cookies[$name] = $cookie;
 }
 
 // notification service addresses
@@ -260,21 +325,21 @@ $topicRows = rows($pdo, 'torrent');
 usort($topicRows, 'byId');
 foreach ($topicRows as $row)
 {
-    $timestamp = (string)$row['timestamp'];
+    $timestamp = (string)col($row, 'timestamp');
     $topics[] = array(
         'id'             => (int)$row['id'],
-        'tracker'        => (string)$row['tracker'],
+        'tracker'        => $trackerName($row['tracker']),
         'name'           => (string)$row['name'],
-        'hd'             => (int)$row['hd'],
-        'path'           => (string)$row['path'],
+        'hd'             => (int)col($row, 'hd', 0),
+        'path'           => (string)col($row, 'path'),
         'torrent_id'     => (string)$row['torrent_id'],
-        'ep'             => (string)$row['ep'],
+        'ep'             => (string)col($row, 'ep'),
         'timestamp'      => $timestamp === '' ? '0000-00-00 00:00:00' : $timestamp,
-        'auto_update'    => (int)$row['auto_update'],
-        'hash'           => (string)$row['hash'],
-        'script'         => (string)$row['script'],
-        'pause'          => (int)$row['pause'],
-        'error'          => (int)$row['error'],
+        'auto_update'    => (int)col($row, 'auto_update', 0),
+        'hash'           => (string)col($row, 'hash'),
+        'script'         => (string)col($row, 'script'),
+        'pause'          => (int)col($row, 'pause', 0),
+        'error'          => (int)col($row, 'error', 0),
         'closed'         => isset($row['closed']) ? (int)$row['closed'] : 0,
         'category'       => isset($row['category']) ? (string)$row['category'] : '',
         // the old database did not know when a topic was added; the torrent's date is used as the update time
@@ -288,7 +353,7 @@ $users = array();
 $userRows = rows($pdo, 'watch');
 usort($userRows, 'byId');
 foreach ($userRows as $row)
-    $users[] = array('id' => (int)$row['id'], 'tracker' => (string)$row['tracker'], 'name' => (string)$row['name']);
+    $users[] = array('id' => (int)$row['id'], 'tracker' => $trackerName($row['tracker']), 'name' => (string)$row['name']);
 
 $buffer = array();
 $bufferRows = rows($pdo, 'buffer');
@@ -296,9 +361,9 @@ usort($bufferRows, 'byId');
 foreach ($bufferRows as $row)
     $buffer[] = array(
         'id' => (int)$row['id'], 'user_id' => (int)$row['user_id'], 'section' => (string)$row['section'],
-        'threme_id' => (int)$row['threme_id'], 'threme' => (string)$row['threme'], 'timestamp' => (string)$row['timestamp'],
+        'threme_id' => (int)$row['threme_id'], 'threme' => (string)$row['threme'], 'timestamp' => (string)col($row, 'timestamp'),
         'accept' => (int)$row['accept'], 'downloaded' => (int)$row['downloaded'], 'new' => (int)$row['new'],
-        'tracker' => (string)$row['tracker'],
+        'tracker' => $trackerName($row['tracker']),
     );
 
 // errors, the torrent client queue
@@ -307,13 +372,30 @@ $warningRows = rows($pdo, 'warning');
 usort($warningRows, 'byId');
 foreach ($warningRows as $row)
     $warnings[] = array(
-        'id' => (int)$row['id'], 'time' => (string)$row['time'], 'where' => (string)$row['where'],
-        'reason' => (string)$row['reason'], 't_id' => $row['t_id'] === NULL ? NULL : (int)$row['t_id'],
+        'id' => (int)$row['id'], 'time' => (string)$row['time'], 'where' => $trackerName($row['where']),
+        'reason' => (string)$row['reason'], 't_id' => col($row, 't_id', NULL) === NULL ? NULL : (int)$row['t_id'],
     );
 
 $temp = array();
 foreach (rows($pdo, 'temp') as $row)
-    $temp[(string)$row['id']] = array('name' => (string)$row['name'], 'path' => (string)$row['path'], 'tracker' => (string)$row['tracker'], 'date' => (string)$row['date']);
+    $temp[(string)$row['id']] = array('name' => (string)$row['name'], 'path' => (string)$row['path'], 'tracker' => $trackerName($row['tracker']), 'date' => (string)$row['date']);
+
+// what the user should know about trackers
+foreach ($renamed as $old => $new)
+    $notes['renamed '.$old] = 'трекер '.$old.' теперь называется '.$new.': его темы и учётная запись перенесены под новым названием';
+$unsupported = array();
+foreach (array_merge($topics, $users) as $item)
+    if ( ! in_array($item['tracker'], SUPPORTED_TRACKERS, TRUE))
+        $unsupported[$item['tracker']] = (isset($unsupported[$item['tracker']]) ? $unsupported[$item['tracker']] : 0) + 1;
+if ($unsupported)
+{
+    arsort($unsupported);
+    $parts = array();
+    foreach ($unsupported as $name => $count)
+        $parts[] = $name.' — '.$count;
+    $notes['unsupported'] = 'версия 4 не работает с трекерами: '.implode(', ', $parts).' (число тем и отслеживаемых пользователей). '
+        .'Они перенесены, но проверяться не будут: удалите их в интерфейсе или замените темами другого трекера';
+}
 
 // per-tracker proxies from the old config.xml
 $trackerProxy = array();
@@ -381,7 +463,7 @@ $files = array(
 $dataDir = isset($options['data']) ? $options['data'] : (getenv('TM_DATA_DIR') ?: $root.'/data');
 $dataDir = rtrim($dataDir, '/\\');
 
-say('База данных: '.$db['type'].' '.$db['name']);
+say('База данных: '.$db['type'].' '.$db['name'].', версия '.$databaseVersion);
 say('Каталог данных: '.$dataDir);
 say('');
 say('Будет перенесено:');
