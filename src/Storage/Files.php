@@ -60,7 +60,7 @@ final class Files
     public static function setMode(string $text): void
     {
         self::$mode = self::validMode($text) ? octdec($text) : NULL;
-        foreach (array_merge((array)glob(self::dir().'/*.json'), (array)glob(self::dir().'/*.json.bak'), (array)glob(self::dir().'/*.log')) as $file)
+        foreach (array_merge((array)glob(self::dir().'/*.json'), (array)glob(self::dir().'/*.json.bak'), (array)glob(self::dir().'/*.json.bak.*'), (array)glob(self::dir().'/*.log')) as $file)
             self::protect($file);
     }
 
@@ -120,13 +120,50 @@ final class Files
         }
     }
 
-    // The data file that stops the program and can be brought back from its copy: array('file' =>
-    // 'config.json', 'time' => when the copy was made, 'Y-m-d H:i:s'), or NULL when there is none.
+    //the files that are copied before every save, and what checks a copy of each
+    const COPIED = array('config.json' => 'config', 'torrents.json' => 'torrents');
+
+    // The copies of a data file the program can read, the newest first: each array('file' =>
+    // 'torrents.json', 'copy' => 'bak' | 'bak.1' | 'bak.2', 'time' => when it was made ('Y-m-d H:i:s'),
+    // 'topics' => the number of topics in it (NULL for the settings)).
+    /** @return array[] */
+    public static function copies(string $name): array
+    {
+        if ( ! isset(self::COPIED[$name]))
+            return array();
+        $found = array();
+        foreach (JsonStore::COPIES as $copy)
+        {
+            $file = self::dir().'/'.$name.'.'.$copy;
+            $data = is_file($file) ? json_decode((string)@file_get_contents($file), TRUE) : NULL;
+            if ( ! is_array($data) || ! isset($data['version']) || ! is_int($data['version']))
+                continue;
+            //a copy in an earlier format is migrated when it is read: only its shape is looked at here
+            $current = $name == 'torrents.json' ? self::TORRENTS_VERSION : self::CONFIG_VERSION;
+            if ($data['version'] >= $current)
+            {
+                try
+                {
+                    call_user_func(array(Repair::class, self::COPIED[$name]), $data);
+                }
+                catch (Damaged $e)
+                {
+                    continue;
+                }
+            }
+            $list = isset($data['topics']) ? $data['topics'] : (isset($data['torrents']) ? $data['torrents'] : NULL);
+            $found[] = array('file' => $name, 'copy' => $copy, 'time' => date('Y-m-d H:i:s', (int)@filemtime($file)),
+                'topics' => $name == 'torrents.json' && is_array($list) ? count($list) : NULL);
+        }
+        return $found;
+    }
+
+    // The data file that stops the program and can be brought back from a copy: array('file' =>
+    // 'config.json', 'time' => of the newest copy, 'copies' => all of them, see copies()), or NULL.
     public static function restorable(): ?array
     {
         foreach (array('config.json' => self::config(), 'torrents.json' => self::torrents()) as $name => $store)
         {
-            $file = $store->file();
             $broken = FALSE;
             if ($name == 'config.json' && ! $store->exists() && self::torrents()->exists())
                 $broken = TRUE;
@@ -141,42 +178,43 @@ final class Files
                     $broken = TRUE;
                 }
             }
-            if ( ! $broken || ! is_file($file.'.bak'))
-                continue;
-            //the copy must be a file the program can read
-            $copy = json_decode((string)@file_get_contents($file.'.bak'), TRUE);
-            if ( ! is_array($copy) || ! isset($copy['version']) || ! is_int($copy['version']))
-                continue;
-            try
-            {
-                call_user_func(array(Repair::class, $name == 'config.json' ? 'config' : 'torrents'), $copy + ($name == 'torrents.json' && $copy['version'] < self::TORRENTS_VERSION ? array('topics' => array()) : array()));
-            }
-            catch (Damaged $e)
-            {
-                continue;
-            }
-            return array('file' => $name, 'time' => date('Y-m-d H:i:s', (int)@filemtime($file.'.bak')));
+            $copies = $broken ? self::copies($name) : array();
+            if ( ! empty($copies))
+                return array('file' => $name, 'time' => $copies[0]['time'], 'copies' => $copies);
         }
         return NULL;
     }
 
-    // Puts the copy in place of the damaged file, which is kept as <file>.broken. FALSE if there is nothing to restore.
-    public static function restore(): bool
+    // Puts a copy in place of a data file. The file it replaces is kept: as <file>.broken when it
+    // was damaged, as <file>.replaced when it was not. $copy - which copy ('' - the newest).
+    // FALSE if there is no such copy.
+    public static function restore(string $name, string $copy = ''): bool
     {
-        $what = self::restorable();
-        if ($what === NULL)
+        $copies = self::copies($name);
+        if ($copy !== '')
+            $copies = array_values(array_filter($copies, function ($c) use ($copy) { return $c['copy'] === $copy; }));
+        if (empty($copies))
             return FALSE;
-        $file = self::dir().'/'.$what['file'];
-        if (is_file($file) && ! @rename($file, $file.'.broken'))
+        $what = $copies[0];
+        $damaged = self::restorable();
+        $damaged = $damaged !== NULL && $damaged['file'] == $name;
+        $file = self::dir().'/'.$name;
+        $aside = $file.($damaged ? '.broken' : '.replaced');
+        if (is_file($file) && ! @rename($file, $aside))
             return FALSE;
-        if ( ! @copy($file.'.bak', $file))
+        if ( ! @copy($file.'.'.$what['copy'], $file))
+        {
+            //nothing is lost: the file goes back
+            if (is_file($aside))
+                @rename($aside, $file);
             return FALSE;
+        }
         self::protect($file);
-        if (is_file($file.'.broken'))
-            self::protect($file.'.broken');
+        if (is_file($aside))
+            self::protect($aside);
         self::$stores = array();
-        \TorrentMonitor\Data\Journal::add('data', 'Файл '.$what['file'].' был повреждён и возвращён из копии от '.$what['time']
-            .'. Повреждённый файл сохранён как '.$what['file'].'.broken');
+        \TorrentMonitor\Data\Journal::add('data', 'Файл '.$name.($damaged ? ' был повреждён и' : '').' возвращён из копии от '.$what['time']
+            .'. '.($damaged ? 'Повреждённый' : 'Прежний').' файл сохранён как '.basename($aside));
         return TRUE;
     }
 

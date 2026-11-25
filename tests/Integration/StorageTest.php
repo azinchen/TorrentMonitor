@@ -151,6 +151,8 @@ final class StorageTest extends IntegrationTestCase
         $this->assertStringContainsString('Файл данных повреждён', $boot['json']['message']);
         $this->assertStringContainsString('(раздел topics)', $boot['json']['message']);
         $this->assertSame('torrents.json', $boot['json']['restore']['file']);
+        $this->assertSame('bak', $boot['json']['restore']['copies'][0]['copy']);
+        $this->assertSame(1, $boot['json']['restore']['copies'][0]['topics']);
         $this->assertMatchesRegularExpression('/^\d{4}-\d\d-\d\d \d\d:\d\d:\d\d$/', $boot['json']['restore']['time']);
         $this->assertStringContainsString('(раздел topics)', Env::runEngineExpectingFailure());
 
@@ -162,9 +164,9 @@ final class StorageTest extends IntegrationTestCase
         $this->assertStringContainsString('"oops"', file_get_contents($this->dataFile('torrents.json.broken')), 'the damaged file is kept');
         $this->assertContains(true, array_map(function ($line) { return strpos($line, 'torrents.json был повреждён и возвращён из копии') !== false; }, AppState::journal('data')));
 
-        // nothing is damaged any more: there is nothing to bring back
+        // nothing is damaged any more: without naming a file and a copy there is nothing to bring back
         $again = Env::ui('data.restore');
-        $this->assertSame(409, $again['status']);
+        $this->assertSame(422, $again['status']);
 
         // the settings: a section of a wrong type, and no section at all
         foreach (array('"oops"', NULL) as $settings)
@@ -185,6 +187,60 @@ final class StorageTest extends IntegrationTestCase
             Env::uiClose();
             $this->assertSame(200, Env::uiOpen()['status']);
         }
+    }
+
+    // Three copies are kept: of the last save, of about a day ago and of about two days ago
+    public function testCopiesOfADayAndOfTwoDaysAgoAreKeptAndCanBeBroughtBack()
+    {
+        $this->loginToTracker();
+        $first = $this->trackTopic(730);
+        $this->trackTopic(731);
+        $bak = $this->dataFile('torrents.json.bak');
+        $this->assertFileExists($bak);
+        $this->assertFileDoesNotExist($bak.'.1', 'the first save of a day only leaves the copy of the last save');
+
+        // the next save: there is no copy of the day yet, so the copy of the last save becomes it
+        $this->trackTopic(732);
+        $this->assertFileExists($bak.'.1');
+        $this->assertCount(1, json_decode(file_get_contents($bak.'.1'), true)['topics'], 'it holds the file as it was two saves ago');
+        // saves of the same day leave it alone
+        $this->trackTopic(733);
+        $this->assertCount(1, json_decode(file_get_contents($bak.'.1'), true)['topics']);
+        $this->assertFileDoesNotExist($bak.'.2');
+
+        // a day later the copy of the day becomes the copy of the day before
+        touch($bak.'.1', time() - 90000);
+        $this->trackTopic(734);
+        $this->assertCount(1, json_decode(file_get_contents($bak.'.2'), true)['topics']);
+        $this->assertCount(3, json_decode(file_get_contents($bak.'.1'), true)['topics']);
+        $this->assertCount(4, json_decode(file_get_contents($bak), true)['topics']);
+        foreach (array('', '.1', '.2') as $suffix)
+            $this->assertSame(substr(sprintf('%o', fileperms($this->dataFile('torrents.json'))), -4), substr(sprintf('%o', fileperms($bak.$suffix)), -4));
+
+        // the page «Состояние» lists them, the newest first, with the number of topics in each
+        $copies = array_values(array_filter(Env::ui('data.copies')['json']['copies'], function ($c) { return $c['file'] == 'torrents.json'; }));
+        $this->assertSame(array('bak', 'bak.1', 'bak.2'), array_column($copies, 'copy'));
+        $this->assertSame(array(4, 3, 1), array_column($copies, 'topics'));
+        $this->assertMatchesRegularExpression('/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ$/', $copies[0]['timeUtc']);
+
+        // a mistake noticed later: the file is brought back to the copy of two days ago
+        $this->assertCount(5, AppState::topics());
+        $back = Env::ui('data.restore', array('file' => 'torrents.json', 'copy' => 'bak.2'));
+        $this->assertTrue($back['json']['ok'], $back['body']);
+        $topics = AppState::topics();
+        $this->assertCount(1, $topics);
+        $this->assertSame($first, $topics[0]['id']);
+        $this->assertCount(5, json_decode(file_get_contents($this->dataFile('torrents.json.replaced')), true)['topics'], 'the file that was replaced is kept');
+        $this->assertContains(true, array_map(function ($line) { return strpos($line, 'torrents.json возвращён из копии') !== false; }, AppState::journal('data')));
+        $this->assertFalse(Env::ui('data.restore', array('file' => 'torrents.json', 'copy' => 'bak.9'))['json']['ok']);
+        $this->assertFalse(Env::ui('data.restore', array('file' => 'state.json', 'copy' => 'bak'))['json']['ok']);
+
+        // behind the password when nothing is damaged
+        Env::ui('settings.password', array('password' => 'Copy-Secret-1', 'password2' => 'Copy-Secret-1'));
+        Env::uiClose();
+        Env::uiOpen();
+        $this->assertSame(401, Env::ui('data.restore', array('file' => 'torrents.json', 'copy' => 'bak'))['status']);
+        $this->assertSame(401, Env::ui('data.copies')['status']);
     }
 
     // The state holds nothing that cannot be found out again: a damaged one does not stop the program

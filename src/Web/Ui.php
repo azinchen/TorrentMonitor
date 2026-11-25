@@ -53,10 +53,14 @@ final class Ui
             // A damaged data file is brought back from its copy. The password is in the very file
             // that may be damaged, so nobody can be asked for it: the action is open, but does
             // something only while a file is damaged, and only puts back the program's own copy.
-            if ($action == 'data.restore')
+            // Without damage the same action goes the usual way, behind the password (see doDataRestore).
+            $damaged = $action == 'data.restore' ? Files::restorable() : NULL;
+            if ($damaged !== NULL)
             {
-                if ( ! Files::restore())
-                    $ui->fail('Восстанавливать нечего: файлы данных в порядке или копии нет.', 409);
+                $body = json_decode((string)file_get_contents('php://input'), TRUE);
+                $copy = is_array($body) && isset($body['copy']) && is_string($body['copy']) ? $body['copy'] : '';
+                if ( ! Files::restore($damaged['file'], $copy))
+                    $ui->fail('Вернуть файл из этой копии не удалось.', 409);
                 echo json_encode(array('ok' => TRUE, 'message' => 'Файл возвращён из копии.'), JSON_UNESCAPED_UNICODE);
                 return;
             }
@@ -769,6 +773,29 @@ final class Ui
                 $torrents[(string)$topic['id']] = isset($statuses[$hash]) ? $statuses[$hash] : array('state' => 'missing');
         }
         return array('supported' => TRUE, 'answered' => TRUE, 'torrents' => empty($torrents) ? new \stdClass() : $torrents) + $result;
+    }
+
+    // The copies of the data files that can be brought back: for the «Состояние» page
+    private function doDataCopies(): array
+    {
+        $copies = array();
+        foreach (array_keys(Files::COPIED) as $name)
+            foreach (Files::copies($name) as $copy)
+                $copies[] = $copy + array('timeUtc' => Time::serverUtc($copy['time']));
+        return array('copies' => $copies);
+    }
+
+    // Brings a data file back from a copy while nothing is damaged: a mistake noticed later
+    // (topics removed, settings changed). A damaged file is restored before this, without a password.
+    private function doDataRestore(): array
+    {
+        $file = $this->str('file');
+        $copy = $this->str('copy');
+        if ( ! isset(Files::COPIED[$file]) || ! in_array($copy, \TorrentMonitor\Storage\JsonStore::COPIES, TRUE))
+            $this->fail('Такой копии нет.', 422);
+        if ( ! Files::restore($file, $copy))
+            $this->fail('Вернуть файл из этой копии не удалось.', 409);
+        return array('message' => 'Файл '.$file.' возвращён из копии. Прежний сохранён как '.$file.'.replaced.', 'reload' => TRUE);
     }
 
     //checks the connection to the torrent client with the saved settings

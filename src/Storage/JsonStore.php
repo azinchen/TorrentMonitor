@@ -178,6 +178,25 @@ class JsonStore
         return $data;
     }
 
+    // Copies kept next to the file: .bak - the file before the last save; .bak.1 and .bak.2 - older
+    // ones, about a day and about two days old. Copies of the last saves alone would all be minutes
+    // old - a check run saves many times - and of no use after a mistake noticed the next day.
+    const COPIES = array('bak', 'bak.1', 'bak.2');
+    const COPY_AGE = 86400;
+
+    // Once a day the copy of the last save becomes the copy of the day, and that one the copy of the day before
+    private function age(): void
+    {
+        $last = $this->file.'.bak';
+        $day = $this->file.'.bak.1';
+        clearstatcache(TRUE, $day);
+        if ( ! is_file($last) || (is_file($day) && time() - (int)@filemtime($day) < self::COPY_AGE))
+            return;
+        if (is_file($day))
+            @rename($day, $this->file.'.bak.2');
+        @rename($last, $day);
+    }
+
     // The file cannot be used. $part - what is wrong in it ('' - it cannot be read at all).
     // A file that holds nothing lasting is put aside and started anew; otherwise the program stops.
     private function damaged(string $part)
@@ -215,8 +234,11 @@ class JsonStore
         Files::protect($tmp);
 
         if ($this->backup && is_file($this->file))
+        {
+            $this->age();
             if (@copy($this->file, $this->file.'.bak'))
                 Files::protect($this->file.'.bak');
+        }
 
         if ( ! @rename($tmp, $this->file))
         {

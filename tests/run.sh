@@ -246,7 +246,7 @@ cmd_screenshots() {
     }
     shot topics topics 1280,620
     shot trackers trackers 1280,880
-    shot status status 1280,900
+    shot status status 1280,1120
     shot log log 1280,760
     remove_stack
     return $status
