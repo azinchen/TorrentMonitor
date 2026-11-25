@@ -35,6 +35,10 @@ final class Runner
     private array $count = array('checked' => 0, 'updated' => 0, 'failed' => 0, 'client' => 0, 'paused' => 0, 'stopped' => 0);
     /** @var int[] "source — what went wrong" => how many times */
     private array $errors = array();
+    //names of the topics this run updated, for its line of the journal
+    private array $updatedNames = array();
+    //how many of them the journal names; the rest are counted
+    const NAMED = 10;
     //the topic being checked, not written to the log yet: it is written when something happens to it
     private ?string $label = NULL;
     private bool $clientSeen = FALSE;
@@ -375,7 +379,12 @@ final class Runner
                 $fields = array_merge($fields, $changes);
             }
             if ($delivered && empty($fields['error']))
+            {
                 $this->count['updated']++;
+                //a topic added a moment ago gets its name in this very run
+                $known = isset($fields['name']) && $fields['name'] !== '' ? (string)$fields['name'] : (string)$topic['name'];
+                $this->updatedNames[] = $known !== '' ? $known : 'тема '.$topic['topicId'].' ('.$topic['tracker'].')';
+            }
             if ( ! $this->dryRun)
                 $this->changes[$id] = $fields;
         }
@@ -476,7 +485,14 @@ final class Runner
         $short = array_slice($errors, 0, 3);
         if (count($errors) > 3)
             $short[] = 'и другие';
-        \TorrentMonitor\Data\Journal::add('run', 'Проверка ('.$this->by.$this->scope().'), '.sprintf('%.0f', $seconds).' с. '.$result
+        //which topics were updated: the journal is where the user looks for it
+        $names = '';
+        if ( ! empty($this->updatedNames))
+        {
+            $more = count($this->updatedNames) - self::NAMED;
+            $names = ' Обновлено: '.implode('; ', array_slice($this->updatedNames, 0, self::NAMED)).($more > 0 ? ' и ещё '.$more : '').'.';
+        }
+        \TorrentMonitor\Data\Journal::add('run', 'Проверка ('.$this->by.$this->scope().'), '.sprintf('%.0f', $seconds).' с. '.$result.$names
             .(empty($short) ? '' : ' Ошибки: '.implode('; ', $short).'.'));
     }
 

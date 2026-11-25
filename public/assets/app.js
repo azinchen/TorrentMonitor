@@ -48,6 +48,7 @@ document.addEventListener('alpine:init', () => {
         apiKey: '',
         health: null,
         runLog: '',
+        runLogOpen: false,      // the log of the last run is unfolded
         logTimer: null,
 
         // ---- startup

@@ -39,7 +39,8 @@ final class LoggingTest extends IntegrationTestCase
         $this->assertStringStartsWith('Проверено тем: 2 — обновлено 1, без изменений 1, с ошибками 0.', $status['lastRunSummary']);
         $runs = AppState::journal('run');
         $this->assertCount(2, $runs);
-        $this->assertMatchesRegularExpression('/^Проверка \((по расписанию|из командной строки)\), \d+ с\. Проверено тем: 2 — обновлено 1, без изменений 1, с ошибками 0\./u', $runs[1]);
+        $this->assertMatchesRegularExpression('/^Проверка \((по расписанию|из командной строки)\), \d+ с\. Проверено тем: 2 — обновлено 1, без изменений 1, с ошибками 0\. Обновлено: Тема с обновлением\.$/u', $runs[1]);
+        $this->assertStringEndsWith('Обновлено: Тема с обновлением; Тема без изменений.', $runs[0]);
         $this->assertNotNull(AppState::topic($same));
         $this->assertNotNull(AppState::topic($changed));
     }
