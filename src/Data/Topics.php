@@ -107,7 +107,10 @@ final class Topics
         $found = 0;
         if (empty($updates))
             return 0;
-        Files::torrents()->update(function (&$data) use ($updates, &$found) {
+        //titles that changed: array(old, new, tracker). A topic that had no title yet only gets one.
+        $renamed = array();
+        Files::torrents()->update(function (&$data) use ($updates, &$found, &$renamed) {
+            $renamed = array();
             $changed = FALSE;
             //one pass over the list instead of a search per topic: a run saves hundreds at once
             $places = array();
@@ -127,9 +130,15 @@ final class Topics
                     $fields['lastActivityAt'] = self::now();
                 $data['topics'][$i] = array_merge($before, $fields);
                 $changed = $changed || $data['topics'][$i] !== $before;
+                if ($before['name'] !== '' && (string)$data['topics'][$i]['name'] !== (string)$before['name'])
+                    $renamed[] = array((string)$before['name'], (string)$data['topics'][$i]['name'], (string)$before['tracker']);
             }
             return $changed;
         });
+        //who renamed it: the interface or the API name themselves, a check run that follows the tracker does not
+        foreach ($renamed as $r)
+            Journal::add('topic', 'Название темы изменено'.(Journal::$by !== '' ? ' ('.Journal::$by.')' : ' (по названию на трекере)')
+                .': «'.$r[0].'» → «'.$r[1].'», '.$r[2]);
         return $found;
     }
 
