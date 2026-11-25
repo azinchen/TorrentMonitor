@@ -75,6 +75,25 @@ final class Transmission extends HttpClientBase
         $this->rpc('torrent-remove', array('ids' => array($id), 'delete-local-data' => $deleteData));
     }
 
+    public function statuses(): ?array
+    {
+        $data = $this->rpc('torrent-get', array('fields' => array('hashString', 'status', 'percentDone', 'rateDownload', 'totalSize', 'uploadRatio', 'error', 'errorString')));
+        $found = array();
+        foreach (isset($data['arguments']['torrents']) && is_array($data['arguments']['torrents']) ? $data['arguments']['torrents'] : array() as $t)
+        {
+            if (empty($t['hashString']))
+                continue;
+            // 0 stopped, 1 and 2 checking, 3 and 5 waiting in the queue, 4 downloading, 6 seeding
+            $states = array(0 => 'stopped', 1 => 'checking', 2 => 'checking', 3 => 'queued', 4 => 'downloading', 5 => 'queued', 6 => 'seeding');
+            $code = isset($t['status']) ? (int)$t['status'] : -1;
+            $failed = ! empty($t['error']);
+            $found[strtolower((string)$t['hashString'])] = self::status($failed ? 'error' : (isset($states[$code]) ? $states[$code] : 'downloading'),
+                (isset($t['percentDone']) ? (float)$t['percentDone'] : 0) * 100, isset($t['rateDownload']) ? $t['rateDownload'] : 0,
+                isset($t['totalSize']) ? $t['totalSize'] : 0, isset($t['uploadRatio']) ? $t['uploadRatio'] : 0, $failed && isset($t['errorString']) ? (string)$t['errorString'] : '');
+        }
+        return $found;
+    }
+
     public function info(string $id): ?array
     {
         $data = $this->rpc('torrent-get', array('ids' => array(strtolower($id)), 'fields' => array('comment', 'downloadDir', 'name')));

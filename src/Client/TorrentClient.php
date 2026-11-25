@@ -19,6 +19,13 @@ interface TorrentClient
     // NULL if there is no such torrent or the client cannot do this.
     public function info(string $id): ?array;
 
+    // The state of every torrent the client has, in one request: array(info-hash in lower case =>
+    // array('state' => downloading | seeding | stopped | queued | checking | error,
+    // 'progress' => percent done, 0..100, 'speed' => download speed, bytes per second,
+    // 'size' => bytes, 'ratio' => uploaded to downloaded, 'message' => the client's error text or '')).
+    // NULL if the client cannot tell (it has no list of torrents, or does not know them by hash).
+    public function statuses(): ?array;
+
     // What the client says about itself: array('version' => '5.3.0', 'details' => 'libtorrent 2.1.2.0').
     // Both are '' when the client does not tell. Who packaged the client (an image of linuxserver.io,
     // for one) is not something a client reports.

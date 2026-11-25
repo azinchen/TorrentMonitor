@@ -17,6 +17,15 @@ final class TransmissionTest extends IntegrationTestCase
         $this->assertSame($hash, strtolower(AppState::topic($id)['hash']));
         $this->assertNoWarnings();
 
+        // the page of topics is told what the client is doing with the torrent
+        $status = Env::ui('client.status')['json'];
+        $this->assertTrue($status['supported'] && $status['answered'], json_encode($status));
+        $torrent = $status['torrents'][(string)$id];
+        $this->assertContains($torrent['state'], array('downloading', 'seeding', 'stopped', 'queued', 'checking', 'error'), json_encode($torrent));
+        $this->assertGreaterThanOrEqual(0, $torrent['progress']);
+        $this->assertLessThanOrEqual(100, $torrent['progress']);
+        $this->assertGreaterThan(0, $torrent['size']);
+
         Env::setTopic(401, 'Сериал', '08-Янв-26 19:45', 2);
         Env::runEngine();
 
