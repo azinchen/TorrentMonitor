@@ -23,7 +23,7 @@ document.addEventListener('alpine:init', () => {
         pages: PAGES,
         theme: localStorage.getItem('tm-theme') || 'auto',
         advanced: localStorage.getItem('tm-advanced') === '1',  // settings: show the ones that rarely need changing
-        sort: ['new', 'old', 'az', 'za'].includes(localStorage.getItem('tm-sort')) ? localStorage.getItem('tm-sort') : 'new',   // order of the topics list
+        sort: ['new', 'old', 'az', 'za', 'client', 'added', 'tracker', 'errors'].includes(localStorage.getItem('tm-sort')) ? localStorage.getItem('tm-sort') : 'new',   // order of the topics list
         pageSize: ['50', '100', '200', 'all'].includes(localStorage.getItem('tm-page-size')) ? localStorage.getItem('tm-page-size') : '50',   // topics on one page
         pageNo: 0,              // page of the topics list being shown, from 0
         journalKind: '',        // kind of events the journal shows ('' - all)
@@ -48,6 +48,7 @@ document.addEventListener('alpine:init', () => {
         passwordForm: { current: '', password: '', password2: '' },
         apiKey: '',
         health: null,
+        clientStatus: { loaded: false, supported: false, answered: false, error: '', client: null, time: '', timeUtc: '', torrents: {} },   // what the torrent client says about the torrents of the topics
         logLines: [],           // the log: [time on the server's clock, kind, text with marks of private values], the oldest first
         logOffset: 0,           // seconds the server's clock is ahead of UTC
         logCut: false,          // the oldest detailed lines are left out
@@ -165,6 +166,7 @@ document.addEventListener('alpine:init', () => {
             if (location.hash.slice(1) !== id) history.replaceState(null, '', '#' + id);
             if (id === 'status' && !this.health) this.checkHealth();
             if (id === 'log') this.loadLog(true);
+            if (id === 'topics') this.loadClientStatus();
         },
         badge(id) {
             if (id === 'status') return this.status.update ? 1 : 0;
@@ -207,6 +209,13 @@ document.addEventListener('alpine:init', () => {
                 old: (a, b) => when(a).localeCompare(when(b)) || a.id - b.id,
                 az: byName,
                 za: (a, b) => byName(b, a),
+                //what the torrent client is doing: downloading first (the nearest to the end first), seeding last;
+                //without an answer of the client it is the order of the newest first
+                client: (a, b) => this.clientRank(a) - this.clientRank(b) || when(b).localeCompare(when(a)) || b.id - a.id,
+                added: (a, b) => (b.addedAtUtc || b.addedAt || '').localeCompare(a.addedAtUtc || a.addedAt || '') || b.id - a.id,
+                tracker: (a, b) => a.tracker.localeCompare(b.tracker) || byName(a, b),
+                //what needs attention first: errors, then what is not being checked
+                errors: (a, b) => this.troubleRank(a) - this.troubleRank(b) || when(b).localeCompare(when(a)) || b.id - a.id,
             }[this.sort];
             return this.topics
                 .filter(t => !this.filter.tracker || t.tracker === this.filter.tracker)
@@ -221,6 +230,56 @@ document.addEventListener('alpine:init', () => {
                 })
                 .sort(order);
         },
+        // ---- what the torrent client says about the torrents
+        // asked once when the page of topics is opened: a client that is down must not hold the list back
+        async loadClientStatus() {
+            const data = await this.call('client.status', {}, { silent: true });
+            if (data) this.clientStatus = { ...data, loaded: true, torrents: data.torrents || {} };
+        },
+        clientOf(topic) { return this.clientStatus.answered ? this.clientStatus.torrents[topic.id] : null; },
+        // the tag of a topic: { text, kind, title } or null when there is nothing to say
+        clientTag(topic) {
+            const s = this.clientOf(topic);
+            if (!s) return null;
+            const percent = s.progress >= 100 ? '' : ' ' + Math.floor(s.progress) + ' %';
+            const asOf = 'по ответу ' + this.clientStatus.client + ' на ' + this.local(this.clientStatus.timeUtc, this.clientStatus.time);
+            const details = [s.size ? this.bytes(s.size) : '', s.speed ? this.bytes(s.speed) + '/с' : '', s.ratio ? 'рейтинг ' + s.ratio : '', s.message || '', asOf].filter(Boolean).join(' · ');
+            //short - what the compact list shows: a sign and the percent, in a column of one width
+            const short = (sign, done) => sign + (s.progress >= 100 && done ? '' : ' ' + Math.floor(s.progress || 0) + ' %');
+            const tag = (text, shortText, kind, more) => ({ text, short: shortText, kind, title: text + ' · ' + (more || details) });
+            switch (s.state) {
+                case 'downloading': return tag('загружается' + percent, short('↓'), 'good');
+                case 'seeding': return tag('раздаётся', short('↑', true), 'good');
+                case 'stopped': return tag('остановлен' + percent, short('■', true), '');
+                case 'queued': return tag('в очереди' + percent, short('…'), '');
+                case 'checking': return tag('проверка' + percent, short('⟳'), '');
+                case 'error': return tag('ошибка в клиенте', '! клиент', 'bad');
+                case 'missing': return tag('нет в клиенте', '✕ нет', 'warn', 'Тема была передана в ' + this.clientStatus.client + ', но такой раздачи там больше нет · ' + asOf);
+                default: return null;
+            }
+        },
+        clientRank(topic) {
+            const s = this.clientOf(topic);
+            if (!s) return 9;
+            const rank = { error: 0, downloading: 1, checking: 2, queued: 3, stopped: 4, missing: 5, seeding: 6 }[s.state];
+            //of those that download, the nearest to the end first
+            return (rank === undefined ? 8 : rank) + (s.state === 'downloading' ? (100 - (s.progress || 0)) / 1000 : 0);
+        },
+        troubleRank(topic) {
+            if (!topic.supported || topic.error) return 0;
+            const s = this.clientOf(topic);
+            if (s && (s.state === 'error' || s.state === 'missing')) return 1;
+            if (topic.waiting) return 2;
+            if (topic.stopped) return 3;
+            return topic.paused ? 4 : 5;
+        },
+        bytes(n) {
+            const units = ['Б', 'КБ', 'МБ', 'ГБ', 'ТБ'];
+            let i = 0;
+            while (n >= 1024 && i < units.length - 1) { n /= 1024; i++; }
+            return (i ? n.toFixed(n < 10 ? 1 : 0) : n) + ' ' + units[i];
+        },
+
         // how many topics one page holds (0 - all of them) and how many pages there are
         get perPage() { return this.pageSize === 'all' ? 0 : Number(this.pageSize); },
         get pageCount() { return this.perPage ? Math.max(1, Math.ceil(this.foundTopics.length / this.perPage)) : 1; },

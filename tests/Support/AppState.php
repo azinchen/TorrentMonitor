@@ -79,6 +79,19 @@ class AppState
         ));
     }
 
+    // changes fields of a stored topic
+    public static function setTopic($id, array $fields)
+    {
+        self::storage();
+        \TorrentMonitor\Data\Topics::update($id, $fields);
+    }
+
+    public static function removeTopic($id)
+    {
+        self::storage();
+        \TorrentMonitor\Data\Topics::delete($id);
+    }
+
     // topic as stored, or null
     public static function topic($id)
     {

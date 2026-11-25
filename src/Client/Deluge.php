@@ -75,6 +75,27 @@ final class Deluge extends HttpClientBase
         $this->rpc('core.remove_torrent', array($id, $deleteData));
     }
 
+    public function statuses(): ?array
+    {
+        $this->connect();
+        $list = $this->rpc('core.get_torrents_status', array(new \stdClass(), array('state', 'progress', 'download_payload_rate', 'total_size', 'ratio', 'message')));
+        if ( ! is_array($list))
+            throw new ClientException('connect_fail');
+        $states = array('Downloading' => 'downloading', 'Allocating' => 'downloading', 'Seeding' => 'seeding', 'Paused' => 'stopped',
+            'Queued' => 'queued', 'Checking' => 'checking', 'Moving' => 'checking', 'Error' => 'error');
+        $found = array();
+        foreach ($list as $hash => $t)
+        {
+            if ( ! is_array($t))
+                continue;
+            $state = isset($t['state']) ? (string)$t['state'] : '';
+            $found[strtolower((string)$hash)] = self::status(isset($states[$state]) ? $states[$state] : 'downloading', isset($t['progress']) ? (float)$t['progress'] : 0,
+                isset($t['download_payload_rate']) ? $t['download_payload_rate'] : 0, isset($t['total_size']) ? $t['total_size'] : 0,
+                isset($t['ratio']) ? $t['ratio'] : 0, $state == 'Error' && isset($t['message']) ? (string)$t['message'] : '');
+        }
+        return $found;
+    }
+
     public function info(string $id): ?array
     {
         $this->connect();

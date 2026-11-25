@@ -88,6 +88,39 @@ final class QBittorrent extends HttpClientBase
         $this->call(Request::post($this->address.'/api/v2/torrents/delete', array('hashes' => strtolower($id), 'deleteFiles' => $deleteData ? 'true' : 'false')));
     }
 
+    // how qBittorrent names the states (4.x: paused..., 5.x: stopped...)
+    const STATES = array(
+        'error' => 'error', 'missingFiles' => 'error',
+        'uploading' => 'seeding', 'stalledUP' => 'seeding', 'forcedUP' => 'seeding',
+        'pausedUP' => 'stopped', 'stoppedUP' => 'stopped', 'pausedDL' => 'stopped', 'stoppedDL' => 'stopped',
+        'queuedUP' => 'queued', 'queuedDL' => 'queued',
+        'checkingUP' => 'checking', 'checkingDL' => 'checking', 'checkingResumeData' => 'checking', 'moving' => 'checking',
+        'downloading' => 'downloading', 'stalledDL' => 'downloading', 'forcedDL' => 'downloading', 'metaDL' => 'downloading',
+        'forcedMetaDL' => 'downloading', 'allocating' => 'downloading',
+    );
+
+    public function statuses(): ?array
+    {
+        $response = $this->call(Request::get($this->address.'/api/v2/torrents/info'));
+        $list = $response->status == 200 ? $response->json() : NULL;
+        if ( ! is_array($list))
+            throw new ClientException($response->status == 403 ? 'log_passwd' : 'connect_fail');
+        $found = array();
+        foreach ($list as $t)
+        {
+            if ( ! is_array($t) || empty($t['hash']))
+                continue;
+            $state = isset($t['state']) ? (string)$t['state'] : '';
+            $status = self::status(isset(self::STATES[$state]) ? self::STATES[$state] : 'downloading', (isset($t['progress']) ? (float)$t['progress'] : 0) * 100,
+                isset($t['dlspeed']) ? $t['dlspeed'] : 0, isset($t['size']) ? $t['size'] : 0, isset($t['ratio']) ? $t['ratio'] : 0, $state == 'missingFiles' ? 'файлы не найдены' : '');
+            $found[strtolower((string)$t['hash'])] = $status;
+            //a torrent of both versions of the protocol is known to TorrentMonitor by its first one
+            if ( ! empty($t['infohash_v1']))
+                $found[strtolower((string)$t['infohash_v1'])] = $status;
+        }
+        return $found;
+    }
+
     public function info(string $id): ?array
     {
         $hash = rawurlencode(strtolower($id));

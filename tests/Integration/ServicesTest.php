@@ -37,6 +37,15 @@ final class ServicesTest extends IntegrationTestCase
         $this->assertNotNull($info, 'Deluge has the torrent');
         $this->assertSame(Env::DOWNLOADS.'/deluge', rtrim($info['path'], '/'));
 
+        // the page of topics is told what the client is doing with the torrent
+        $status = Env::ui('client.status')['json'];
+        $this->assertTrue($status['supported'] && $status['answered'], json_encode($status));
+        $torrent = $status['torrents'][(string)$id];
+        $this->assertContains($torrent['state'], array('downloading', 'seeding', 'stopped', 'queued', 'checking', 'error'), json_encode($torrent));
+        $this->assertGreaterThanOrEqual(0, $torrent['progress']);
+        $this->assertLessThanOrEqual(100, $torrent['progress']);
+        $this->assertGreaterThan(0, $torrent['size']);
+
         Env::setTopic(501, 'Сериал', '08-Янв-26 19:45', 2);
         Env::runEngine();
 
@@ -93,6 +102,21 @@ final class ServicesTest extends IntegrationTestCase
         $this->assertNotContains($first, $this->torrServerHashes(), 'old torrent is removed');
 
         $this->client()->remove($second, false);
+    }
+
+    public function testClientsWithoutAListOfTorrentsHaveNoStatus()
+    {
+        $this->useClient('TorrServer', Env::TORRSERVER, '', '');
+        $status = Env::ui('client.status')['json'];
+        $this->assertFalse($status['supported']);
+        $this->assertFalse($status['answered']);
+        $this->assertSame('', $status['error']);
+
+        // no client at all
+        AppState::setSettings(array('useTorrent' => '0'));
+        $none = Env::ui('client.status')['json'];
+        $this->assertNull($none['client']);
+        $this->assertFalse($none['supported']);
     }
 
     public function testClientCheckTellsAWorkingTorrServerFromAWrongAddress()

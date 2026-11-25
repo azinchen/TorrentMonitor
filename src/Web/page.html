@@ -130,6 +130,9 @@
         </div>
     </header>
 
+    <p class="clientdown" x-show="clientStatus.loaded && clientStatus.supported && !clientStatus.answered && topics.length">
+        <span x-text="clientStatus.error"></span> <a href="#settings" @click.prevent="open('settings')">Настройки torrent-клиента</a></p>
+
     <div class="filters" x-show="topics.length > 5">
         <input type="search" x-model="filter.text" placeholder="Поиск по названию">
         <select x-model="filter.tracker">
@@ -147,6 +150,10 @@
             <option value="old">Сначала старые</option>
             <option value="az">По названию, А→Я</option>
             <option value="za">По названию, Я→А</option>
+            <option value="added">По дате добавления</option>
+            <option value="tracker">По трекеру</option>
+            <option value="errors">Сначала с ошибками</option>
+            <option value="client" x-show="clientStatus.supported" x-text="clientStatus.answered || !clientStatus.loaded ? 'По состоянию в клиенте' : 'По состоянию в клиенте (клиент не отвечает)'"></option>
         </select>
         <select x-model="pageSize" x-show="topics.length > 50" title="Сколько тем показывать на одной странице">
             <option value="50">по 50</option>
@@ -188,6 +195,13 @@
                         <span class="tag" x-show="t.paused">пауза</span>
                         <span class="tag" x-show="t.stopped && !t.paused" title="Тема давно не обновлялась">проверка прекращена</span>
                         <span class="tag tag--warn" x-show="t.waiting">ждёт torrent-клиент</span>
+                        <template x-if="clientTag(t)">
+                            <span class="tag tag--client" :class="clientTag(t).kind ? 'tag--' + clientTag(t).kind : ''" :title="clientTag(t).title"
+                                x-text="compact && expanded !== t.id ? clientTag(t).short : clientTag(t).text"></span>
+                        </template>
+                        <template x-if="compact && expanded !== t.id && clientStatus.answered && !clientTag(t)">
+                            <span class="tag tag--client tag--none"></span>
+                        </template>
                     </div>
                     <template x-for="w in topicWarnings(t)" :key="w.id">
                         <div class="row__error" x-text="w.text"></div>

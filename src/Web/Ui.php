@@ -722,6 +722,41 @@ final class Ui
         return array('message' => implode(' ', $lines));
     }
 
+    // What the torrent client says about the torrents of the topics: for the page of topics.
+    // supported - the client can tell; answered - it did; torrents - topic id => its torrent
+    // (state "missing": the topic was passed to the client, and the client no longer has it).
+    // A client that does not answer is not an event of the journal: this is asked whenever the page is opened.
+    private function doClientStatus(): array
+    {
+        $name = Clients::currentName();
+        $result = array('client' => $name, 'supported' => FALSE, 'answered' => FALSE, 'error' => '', 'time' => date('Y-m-d H:i:s'),
+            'timeUtc' => Time::serverUtc(date('Y-m-d H:i:s')), 'torrents' => new \stdClass());
+        if ($name === NULL)
+            return $result;
+        try
+        {
+            $client = Clients::current();
+            if ($client instanceof \TorrentMonitor\Client\HttpClientBase)
+                $client->hurry(6);
+            $statuses = $client->statuses();
+        }
+        catch (\TorrentMonitor\Client\ClientException $e)
+        {
+            return array('supported' => TRUE, 'error' => $e->getMessage() == 'log_passwd'
+                ? $name.' не принимает логин или пароль: состояние раздач неизвестно.' : $name.' не отвечает: состояние раздач неизвестно.') + $result;
+        }
+        if ($statuses === NULL)
+            return $result;
+        $torrents = array();
+        foreach (Topics::all() as $topic)
+        {
+            $hash = strtolower((string)$topic['hash']);
+            if ($hash !== '')
+                $torrents[(string)$topic['id']] = isset($statuses[$hash]) ? $statuses[$hash] : array('state' => 'missing');
+        }
+        return array('supported' => TRUE, 'answered' => TRUE, 'torrents' => empty($torrents) ? new \stdClass() : $torrents) + $result;
+    }
+
     //checks the connection to the torrent client with the saved settings
     private function doClientTest(): array
     {
