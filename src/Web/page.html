@@ -530,24 +530,6 @@
 
     <div class="card">
         <div class="card__head">
-            <h2>Ошибки</h2><span class="spacer"></span>
-            <button class="btn btn--small" x-show="warnings.length" @click="act('warnings.clear', {})">Сбросить все</button>
-        </div>
-        <p class="muted" x-show="!warnings.length">Ошибок нет.</p>
-        <template x-for="g in warningGroups" :key="g.source">
-            <div class="group">
-                <div class="group__title"><b x-text="g.source"></b>
-                    <button class="link" @click="act('warnings.clear', { source: g.source })">сбросить</button></div>
-                <template x-for="w in g.items" :key="w.id">
-                    <div class="line line--bad"><span class="muted" x-text="local(w.timeUtc, w.time)"></span> <span x-text="w.text"></span>
-                        <span class="muted" x-show="warningTopic(w)" x-text="'— ' + warningTopic(w)"></span></div>
-                </template>
-            </div>
-        </template>
-    </div>
-
-    <div class="card">
-        <div class="card__head">
             <h2>Журнал событий</h2><span class="spacer"></span>
             <span class="running" x-show="status.running">идёт проверка…</span>
             <select x-model="journalKind" title="Какие события показывать" x-show="journal.length">
@@ -559,11 +541,11 @@
         <div class="journal" x-show="journal.length">
             <template x-for="(e, i) in shownJournal" :key="i">
                 <div class="journal__line"><span class="muted journal__time" x-text="local(e.timeUtc, e.time)"></span>
-                    <span class="tag" x-text="journalTitle(e.kind)"></span> <span x-text="e.text"></span></div>
+                    <span class="tag" :class="e.kind == 'error' ? 'tag--bad' : ''" x-text="journalTitle(e.kind)"></span> <span x-text="e.text"></span></div>
             </template>
         </div>
-        <p class="muted small" x-show="journal.length">Проверки с их итогом и обновлёнными темами, обновления программы, изменения настроек
-            и трекеров, добавленные и удалённые темы. Хранится в файле <code>journal.log</code> в каталоге данных; длина задаётся
+        <p class="muted small" x-show="journal.length">Проверки с их итогом и обновлёнными темами, ошибки, обновления программы, изменения настроек
+            и трекеров, добавленные и удалённые темы. Ошибка записывается, когда она появилась, а не при каждой проверке, пока она длится. Хранится в файле <code>journal.log</code> в каталоге данных; длина задаётся
             в расширенных настройках.</p>
         <details class="runlog" x-show="runLog" :open="status.running || runLogOpen" @toggle="runLogOpen = $el.open">
             <summary>Подробный журнал последней проверки</summary>

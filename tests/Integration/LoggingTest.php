@@ -86,6 +86,16 @@ final class LoggingTest extends IntegrationTestCase
         $run = AppState::journal('run')[0];
         $this->assertStringContainsString('с ошибками 1.', $run);
         $this->assertStringContainsString('Ошибки: rutracker.org — ', $run);
+
+        // the error itself is a line of the journal, written when it began and not at every run it lasts
+        $errors = AppState::journal('error');
+        $this->assertCount(1, $errors);
+        $this->assertMatchesRegularExpression('/^rutracker\.org: .+\. Тема тема 805\.$/u', $errors[0]);
+        Env::runEngine();
+        $this->assertCount(1, AppState::journal('error'), 'an error that lasts is not repeated');
+        $this->assertCount(2, AppState::journal('run'));
+        // the list behind the marks of topics and trackers still holds it
+        $this->assertCount(1, Env::ui('overview')['json']['warnings']);
     }
 
     public function testRunsStartedFromTheInterfaceAndTheApiSaySo()
