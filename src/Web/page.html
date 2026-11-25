@@ -352,6 +352,13 @@
             <input type="url" x-model="settingsForm.serverAddress" required>
             <small>Используется в ссылках RSS-ленты и на torrent-файлы (для Synology Download Station и TorrServer).</small></label>
         <label class="check"><input type="checkbox" x-model="settingsForm.rss"> RSS-лента скачанных torrent-файлов по адресу <code>/rss</code></label>
+        <div class="updates">
+            <span>Установлена версия <b x-text="status.version"></b>.</span>
+            <span x-show="status.update"><span x-text="status.update && status.update.downgrade ? 'Будет установлена версия' : 'Доступна версия'"></span>
+                <b x-text="status.update && status.update.version"></b> — <a href="#status" @click.prevent="open('status')">что в ней</a>.</span>
+            <button type="button" class="btn btn--small" @click="checkUpdate()" :disabled="!!busy" x-text="busy == 'update.check' ? 'Проверяю…' : 'Проверить обновления'"></button>
+            <button type="button" class="btn btn--small btn--primary" x-show="status.update" @click="installUpdate()" :disabled="!!busy" x-text="busy == 'update.install' ? 'Устанавливаю…' : 'Установить'"></button>
+        </div>
         <label class="check"><input type="checkbox" x-model="settingsForm.autoUpdate"> Устанавливать обновления TorrentMonitor автоматически</label>
         <label class="field" x-show="settingsForm.autoUpdate"><span>Какие версии</span>
             <select x-model="settingsForm.updateChannel">
@@ -361,7 +368,7 @@
             </select>
             <small>Бета-версии: устанавливается самая новая версия, бета или стабильная. Версия в разработке: текущее состояние репозитория, после каждого изменения.
                 При смене выбора устанавливается последняя версия нового выбора, даже если она ниже установленной.</small></label>
-        <label class="check"><input type="checkbox" x-model="settingsForm.debug"> Подробный журнал проверки: каждая проверенная тема и каждый запрос к трекеру (для поиска причины ошибки; показан в «Состоянии» под журналом событий)</label>
+        <label class="check"><input type="checkbox" x-model="settingsForm.debug"> Подробный журнал проверки: каждая проверенная тема и каждый запрос к трекеру (для поиска причины ошибки; показан на странице «Журнал»)</label>
         <label class="field field--advanced" x-show="advanced"><span>Часовой пояс трекеров</span>
             <select x-model="settingsForm.trackerTimezone">
                 <template x-for="z in timezones" :key="z"><option :value="z" x-text="z" :selected="z == settingsForm.trackerTimezone"></option></template>
@@ -533,43 +540,6 @@
 
     <div class="card">
         <div class="card__head">
-            <h2>Журнал событий</h2><span class="spacer"></span>
-            <span class="running" x-show="status.running">идёт проверка…</span>
-            <select x-model="journalKind" title="Какие события показывать" x-show="journal.length">
-                <option value="">Все события</option>
-                <template x-for="k in journalKinds" :key="k.id"><option :value="k.id" x-text="k.title"></option></template>
-            </select>
-        </div>
-        <p class="muted" x-show="!journal.length">Событий пока нет.</p>
-        <div class="journal" x-show="journal.length">
-            <template x-for="(e, i) in shownJournal" :key="i">
-                <div class="journal__line"><span class="muted journal__time" x-text="local(e.timeUtc, e.time)"></span>
-                    <span class="tag" :class="e.kind == 'error' ? 'tag--bad' : ''" x-text="journalTitle(e.kind)"></span> <span x-text="e.text"></span></div>
-            </template>
-        </div>
-        <p class="muted small" x-show="journal.length">Проверки с их итогом и обновлёнными темами, ошибки, обновления программы, изменения настроек
-            и трекеров, добавленные и удалённые темы. Ошибка записывается, когда она появилась, а не при каждой проверке, пока она длится. Хранится в файле <code>journal.log</code> в каталоге данных; длина задаётся
-            в расширенных настройках.</p>
-        <details class="runlog" x-show="runLog || runLogs.length" :open="status.running || runLogOpen" @toggle="runLogOpen = $el.open">
-            <summary>Подробный журнал проверки</summary>
-            <div class="runlog__bar">
-                <select x-model.number="runLogN" @change="loadLog()" :disabled="status.running" title="Какую проверку показать">
-                    <template x-for="r in runLogs" :key="r.n">
-                        <option :value="r.n" x-text="(r.n ? '' : 'последняя, ') + local(r.timeUtc, r.time) + ' · ' + kb(r.size)"></option>
-                    </template>
-                </select>
-                <button type="button" class="btn btn--small" @click="saveLog()">Скачать</button>
-                <span class="muted small" x-show="runLogCut">показан конец журнала; целиком — «Скачать»</span>
-            </div>
-            <pre class="log" x-text="runLog"></pre>
-            <p class="muted small">Каждая проверенная тема и каждый запрос проверки; в начале — версия программы, torrent-клиент
-                и решатель Cloudflare. Ведётся, пока в настройках включён «Подробный журнал проверки»; сколько проверок хранить,
-                задаётся в расширенных настройках. Файлы <code>engine*.log</code> в каталоге данных.</p>
-        </details>
-    </div>
-
-    <div class="card">
-        <div class="card__head">
             <h2>Проверка работы</h2><span class="spacer"></span>
             <button class="btn btn--small" @click="copyAbout()" title="Версии и настройки без паролей — для сообщения об ошибке">Скопировать сведения</button>
             <button class="btn btn--small" @click="health = null; checkHealth()">Проверить заново</button>
@@ -584,9 +554,35 @@
             </div>
         </template>
     </div>
+</section>
 
+<!-- ------------------------------------------------------------------ Log -->
+<section x-show="page == 'log'" class="logpage">
+    <header class="head"><h1>Журнал</h1><span class="running" x-show="status.running">идёт проверка…</span></header>
 
-    <p><button class="link" @click="act('update.check')">Проверить обновления TorrentMonitor</button></p>
+    <div class="logbar">
+        <select x-model="journalKind" title="Какие события показывать">
+            <option value="">Все события</option>
+            <template x-for="k in journalKinds.filter(k => k.id != 'detail' || logDetailed)" :key="k.id"><option :value="k.id" x-text="k.title"></option></template>
+        </select>
+        <input type="search" x-model.debounce.300ms="logSearch" placeholder="Поиск в журнале">
+        <label class="check"><input type="checkbox" x-model="settingsForm.debug" @change="saveDebug()" :disabled="!!busy"> Подробный журнал проверки</label>
+        <label class="check" title="Адреса ваших сервисов, каталоги, имена пользователей трекеров и IP-адреса заменяются словами «адрес 1», «каталог 1»"><input type="checkbox" x-model="hidePrivate" @change="saveHidePrivate()"> Скрыть личные данные</label>
+        <span class="spacer"></span>
+        <button class="btn btn--small" @click="downloadLog()" :disabled="!shownLog.length" title="Сохранить то, что показано: с выбранным видом событий, поиском и скрытыми или показанными личными данными">Скачать</button>
+    </div>
+    <p class="muted small" x-show="logCut">Подробных строк больше, чем показывает страница: самые старые опущены. Целиком они лежат в файлах <code>engine*.log</code> в каталоге данных.</p>
+
+    <div class="logbox" x-ref="logbox">
+        <p class="muted" x-show="!logLines.length">Событий пока нет.</p>
+        <p class="muted" x-show="logLines.length && !shownLog.length">Нет строк, которые подходят под выбранный вид и поиск.</p>
+        <div x-html="logHtml"></div>
+    </div>
+
+    <p class="muted small">Проверки с их итогом и обновлёнными темами, ошибки, обновления программы, изменения настроек и трекеров, добавленные
+        и удалённые темы. Пока включён «Подробный журнал проверки», между событиями показаны строки последних проверок: каждая тема и каждый запрос.
+        Пароли и ключи в журнал не пишутся никогда; адреса ваших сервисов, каталоги и имена можно скрыть перед тем, как показать журнал другим.
+        Время — по часам этого браузера.</p>
 </section>
 
 </main>

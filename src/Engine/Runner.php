@@ -152,6 +152,9 @@ final class Runner
             self::rotateLogs(self::logsKept());
             $log = @fopen(self::logFile(), 'w');
             $this->log = $log === FALSE ? NULL : $log;
+            //the log names private things: it gets the access mode of the data files
+            if ($this->log !== NULL)
+                Files::protect(self::logFile());
         }
         //logs left by earlier detailed runs would describe runs that are not the last ones any more
         elseif ( ! $this->dryRun)
@@ -161,7 +164,8 @@ final class Runner
         $this->out = function ($line) use ($direct) {
             if ($this->log !== NULL)
                 @fwrite($this->log, '['.date('Y-m-d H:i:s').'] '.$line."\n");
-            call_user_func($direct, $line);
+            //the file keeps the marks of private values; what is printed (cron, docker logs) is the real text
+            call_user_func($direct, \TorrentMonitor\Privacy::plain($line));
         };
         try
         {
@@ -559,7 +563,7 @@ final class Runner
         foreach (Users::all() as $user)
         {
             $name = $user['tracker'];
-            $this->detail('Пользователь '.$user['name'].' на трекере '.$name);
+            $this->detail('Пользователь '.\TorrentMonitor\Privacy::user((string)$user['name']).' на трекере '.$name);
             if ( ! Registry::has($name))
             {
                 $this->problem($name, 'unknown_tracker');

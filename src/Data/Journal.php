@@ -42,9 +42,11 @@ final class Journal
     //settings that are on or off
     const SWITCHES = array('auth', 'rss', 'debug', 'autoUpdate', 'proxy', 'useTorrent', 'deleteDistribution', 'deleteOldFiles', 'deleteFilesOnRemove',
         'removeOnSeriesDelete', 'sonarrReplaceTopic', 'sonarrReplaceTorrent', 'send', 'sendUpdate', 'sendWarning');
-    //settings whose value is not written: a password, or an address - it is private
-    const HIDDEN = array('torrentPassword', 'torrentLogin', 'proxyAddress', 'sendUpdateService', 'sendWarningService',
-        'serverAddress', 'torrentAddress', 'flaresolverrUrl');
+    //settings whose value is not written: a password, a login, an address that carries a key
+    const HIDDEN = array('torrentPassword', 'torrentLogin', 'sendUpdateService', 'sendWarningService');
+    //settings whose value is private: written inside a mark (see Privacy), to be hidden when the log is shown to others
+    const ADDRESSES = array('serverAddress', 'torrentAddress', 'flaresolverrUrl', 'proxyAddress');
+    const FOLDERS = array('pathToDownload');
 
     // What changed between two sets of settings, as text: "torrent-клиент: Transmission → qBittorrent;
     // пароль клиента изменён". '' when nothing did.
@@ -63,7 +65,14 @@ final class Journal
                 $parts[] = $title.': '.($new === '1' ? 'включено' : 'выключено');
             else
             {
-                $show = function ($value) { return $value === '' ? 'пусто' : \TorrentMonitor\Engine\About::withoutLogin($value); };
+                $show = function ($value) use ($key) {
+                    if ($value === '')
+                        return 'пусто';
+                    $value = \TorrentMonitor\Engine\About::withoutLogin($value);
+                    if (in_array($key, self::ADDRESSES, TRUE))
+                        return \TorrentMonitor\Privacy::address($value);
+                    return in_array($key, self::FOLDERS, TRUE) ? \TorrentMonitor\Privacy::folder($value) : $value;
+                };
                 $parts[] = $title.': '.$show($old).' → '.$show($new);
             }
         }
@@ -115,7 +124,7 @@ final class Journal
         if (self::size() == 0)
             return;
         $address = preg_replace('/[^0-9a-fA-F.:]/', '', $address);
-        $text = 'Неверный пароль при входе, адрес '.($address !== '' ? $address : 'неизвестен');
+        $text = 'Неверный пароль при входе, адрес '.($address !== '' ? \TorrentMonitor\Privacy::ip($address) : 'неизвестен');
         self::change(function (array $lines) use ($text) {
             $last = end($lines);
             if ($last !== FALSE && preg_match('/^\[([^\]]+)\] access: '.preg_quote($text, '/').'(?: ×(\d+))?$/u', $last, $m)
@@ -141,6 +150,17 @@ final class Journal
             if (count($events) >= $limit)
                 break;
         }
+        return $events;
+    }
+
+    // Every event, the oldest first: array(time, kind, text)
+    /** @return array[] */
+    public static function all(): array
+    {
+        $events = array();
+        foreach (self::lines() as $line)
+            if (preg_match('/^\[(\d{4}-\d\d-\d\d \d\d:\d\d:\d\d)\] (\w+): (.*)$/u', $line, $m))
+                $events[] = array($m[1], $m[2], $m[3]);
         return $events;
     }
 

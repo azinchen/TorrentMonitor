@@ -8,6 +8,7 @@ const PAGES = [
     { id: 'trackers', title: 'Трекеры' },
     { id: 'settings', title: 'Настройки' },
     { id: 'status', title: 'Состояние' },
+    { id: 'log', title: 'Журнал' },
 ];
 
 document.addEventListener('alpine:init', () => {
@@ -31,7 +32,7 @@ document.addEventListener('alpine:init', () => {
         toasts: [],
 
         // data from the server
-        topics: [], users: [], trackers: [], settings: {}, warnings: [], categories: [], sonarrTitles: [], clients: [], services: [], timezones: [], journal: [],
+        topics: [], users: [], trackers: [], settings: {}, warnings: [], categories: [], sonarrTitles: [], clients: [], services: [], timezones: [],
         status: { version: '', lastRun: '', running: false, client: null, update: null, authRequired: true, wiki: '' },
 
         // forms
@@ -47,11 +48,13 @@ document.addEventListener('alpine:init', () => {
         passwordForm: { current: '', password: '', password2: '' },
         apiKey: '',
         health: null,
-        runLog: '',
-        runLogOpen: false,      // the log of the last run is unfolded
-        runLogs: [],            // the detailed logs kept: [{n, time, timeUtc, size}], the newest first
-        runLogN: 0,             // which of them is shown (0 - the last run)
-        runLogCut: false,       // only the end of it is shown
+        logLines: [],           // the log: [time on the server's clock, kind, text with marks of private values], the oldest first
+        logOffset: 0,           // seconds the server's clock is ahead of UTC
+        logCut: false,          // the oldest detailed lines are left out
+        logDetailed: false,     // detailed lines of check runs are among the events
+        logKnown: [],           // private values that lines written before the marks existed may name: [kind, value]
+        logSearch: '',          // text the shown lines must contain
+        hidePrivate: localStorage.getItem('tm-hide-private') === '1',   // the log is shown with private values replaced
         logTimer: null,
 
         // ---- startup
@@ -91,7 +94,7 @@ document.addEventListener('alpine:init', () => {
 
         // distributes the server response into fields
         apply(data) {
-            for (const key of ['topics', 'users', 'trackers', 'warnings', 'categories', 'sonarrTitles', 'clients', 'services', 'timezones', 'journal', 'status']) {
+            for (const key of ['topics', 'users', 'trackers', 'warnings', 'categories', 'sonarrTitles', 'clients', 'services', 'timezones', 'status']) {
                 if (data[key] !== undefined) this[key] = data[key];
             }
             if (data.settings !== undefined) {
@@ -160,10 +163,8 @@ document.addEventListener('alpine:init', () => {
         open(id) {
             this.page = id;
             if (location.hash.slice(1) !== id) history.replaceState(null, '', '#' + id);
-            if (id === 'status') {
-                this.loadLog();
-                if (!this.health) this.checkHealth();
-            }
+            if (id === 'status' && !this.health) this.checkHealth();
+            if (id === 'log') this.loadLog(true);
         },
         badge(id) {
             if (id === 'status') return this.status.update ? 1 : 0;
@@ -384,16 +385,15 @@ document.addEventListener('alpine:init', () => {
                 this.watchRun();
             } else {
                 this.apply(data);
-                this.loadLog();
+                if (this.page === 'log') this.loadLog();
             }
         },
         // while a check is running, refreshes the log; when it finishes, reloads the data
         watchRun() {
             clearInterval(this.logTimer);
             this.logTimer = setInterval(async () => {
-                const data = await this.call('run.log', {}, { silent: true });
+                const data = await this.call('journal', {}, { silent: true });
                 if (!data) return;
-                this.runLogN = 0;
                 this.showLog(data);
                 if (!data.running) {
                     clearInterval(this.logTimer);
@@ -401,28 +401,78 @@ document.addEventListener('alpine:init', () => {
                     await this.act('overview', {}, { silent: true });
                     this.toast('Проверка завершена.');
                 }
-            }, 1500);
+            }, 2000);
         },
-        async loadLog() {
-            const data = await this.call('run.log', { n: this.runLogN }, { silent: true });
-            if (data) this.showLog(data);
+        // $bottom - show the newest lines, whatever was looked at before
+        async loadLog(bottom) {
+            const data = await this.call('journal', {}, { silent: true });
+            if (data) this.showLog(data, bottom);
         },
-        showLog(data) {
-            this.runLogs = data.runs || [];
-            //the log that was shown may have been rotated away
-            if (!this.runLogs.some(r => r.n === this.runLogN)) this.runLogN = 0;
-            this.runLogCut = !!data.cut;
-            this.runLog = this.logLocal(data.log, data.offset);
+        showLog(data, bottom) {
+            const box = this.$refs.logbox;
+            //new lines are followed only while the reader is at the end of the log
+            const atEnd = !box || box.scrollHeight - box.scrollTop - box.clientHeight < 40;
+            this.logLines = data.lines || [];
+            this.logOffset = data.offset;
+            this.logCut = !!data.cut;
+            this.logDetailed = !!data.detailed;
+            this.logKnown = data.known || [];
+            if (!this.logDetailed && this.journalKind === 'detail') this.journalKind = '';
+            if (bottom || atEnd) this.$nextTick(() => { if (this.$refs.logbox) this.$refs.logbox.scrollTop = this.$refs.logbox.scrollHeight; });
         },
-        kb(bytes) { return bytes >= 1048576 ? (bytes / 1048576).toFixed(1) + ' МБ' : Math.max(1, Math.round(bytes / 1024)) + ' КБ'; },
-        // saves the whole log that is shown as a file: the page itself shows only its end when it is long
-        async saveLog() {
-            const data = await this.call('run.log', { n: this.runLogN, full: true }, { silent: true });
-            if (!data) return;
-            const run = this.runLogs.find(r => r.n === this.runLogN);
+        saveHidePrivate() { localStorage.setItem('tm-hide-private', this.hidePrivate ? '1' : '0'); },
+        // the detailed log is switched right on the page of the log: it is the setting of the settings page
+        async saveDebug() {
+            await this.act('settings.save', { debug: !!this.settingsForm.debug });
+            this.loadLog();
+        },
+
+        // ---- private values in the log (see Privacy in the program): {{a:value}} marks an address,
+        // d - a folder, u - a user of a tracker, i - an IP address, h - a host name in an error
+        privateText(text, seen) {
+            const names = { a: 'адрес', d: 'каталог', u: 'пользователь', i: 'IP-адрес', h: 'узел' };
+            const mark = /\{\{([adiuh]):(.*?)\}\}/g;
+            if (!this.hidePrivate) return text.indexOf('{{') < 0 ? text : text.replace(mark, '$2');
+            const standIn = (kind, value) => {
+                const known = seen[kind] = seen[kind] || {};
+                if (!(value in known)) known[value] = Object.keys(known).length + 1;
+                return names[kind] + ' ' + known[value];
+            };
+            let out = text.indexOf('{{') < 0 ? text : text.replace(mark, (all, kind, value) => standIn(kind, value));
+            //lines written before the marks existed name the values as they are
+            for (const [kind, value] of this.logKnown) {
+                if (value && out.indexOf(value) >= 0) out = out.split(value).join(standIn(kind, value));
+            }
+            return out;
+        },
+        // the lines of the log as they are shown now: the chosen kind, the text searched for, private values shown or not
+        get shownLog() {
+            const seen = {};
+            const search = this.logSearch.trim().toLowerCase();
+            const lines = [];
+            for (const [time, kind, raw] of this.logLines) {
+                //every line is read, shown or not: one value keeps one number whatever is filtered
+                const text = this.privateText(raw, seen);
+                if (this.journalKind && kind !== this.journalKind) continue;
+                if (search && text.toLowerCase().indexOf(search) < 0) continue;
+                lines.push({ time: this.logLocal('[' + time + ']', this.logOffset).slice(1, -1), kind, text });
+            }
+            return lines;
+        },
+        get logHtml() {
+            const esc = text => String(text).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+            return this.shownLog.map(l => '<div class="logline logline--' + l.kind + '"><span class="logline__time">' + l.time + '</span>'
+                + (l.kind === 'detail' ? '' : '<span class="tag' + (l.kind === 'error' ? ' tag--bad' : '') + '">' + esc(this.journalTitle(l.kind)) + '</span> ')
+                + '<span class="logline__text">' + esc(l.text) + '</span></div>').join('');
+        },
+        // saves what is shown: the same lines, with private values shown or not, as text
+        downloadLog() {
+            const text = this.shownLog.map(l => '[' + l.time + '] ' + (l.kind === 'detail' ? '    ' : this.journalTitle(l.kind) + ': ') + l.text).join('\n') + '\n';
+            const pad = n => String(n).padStart(2, '0');
+            const now = new Date();
             const link = document.createElement('a');
-            link.href = URL.createObjectURL(new Blob([data.log], { type: 'text/plain;charset=utf-8' }));
-            link.download = 'torrentmonitor-' + (run ? run.time.replace(/[: ]/g, '-') : 'log') + '.log';
+            link.href = URL.createObjectURL(new Blob([text], { type: 'text/plain;charset=utf-8' }));
+            link.download = 'torrentmonitor-' + now.getFullYear() + '-' + pad(now.getMonth() + 1) + '-' + pad(now.getDate()) + '-' + pad(now.getHours()) + pad(now.getMinutes()) + '.log';
             link.click();
             URL.revokeObjectURL(link.href);
         },
@@ -440,14 +490,15 @@ document.addEventListener('alpine:init', () => {
         journalKinds: [
             { id: 'run', title: 'Проверки' }, { id: 'error', title: 'Ошибки' }, { id: 'update', title: 'Обновления' }, { id: 'settings', title: 'Настройки' },
             { id: 'tracker', title: 'Трекеры' }, { id: 'topic', title: 'Темы' }, { id: 'access', title: 'Вход' },
-            { id: 'service', title: 'Подключения' }, { id: 'data', title: 'Данные' },
+            { id: 'service', title: 'Подключения' }, { id: 'data', title: 'Данные' }, { id: 'detail', title: 'Подробно' },
         ],
         journalTitle(kind) { return (this.journalKinds.find(k => k.id === kind) || { title: kind }).title; },
-        get shownJournal() { return this.journal.filter(e => !this.journalKind || e.kind === this.journalKind).slice(0, 100); },
         // what TorrentMonitor runs with, to the clipboard: for a bug report
         async copyAbout() {
             const data = await this.call('about', {}, { silent: true });
             if (!data) return;
+            //private values are copied as the log shows them: hidden when the log hides them
+            data.text = this.privateText(data.text, {});
             try {
                 await navigator.clipboard.writeText(data.text);
                 this.toast('Сведения скопированы.');
@@ -460,6 +511,7 @@ document.addEventListener('alpine:init', () => {
             const data = await this.call('health', {}, { silent: true });
             if (data) this.health = data.groups;
         },
+        checkUpdate() { return this.act('update.check'); },
         async installUpdate() {
             if (!confirm('Установить версию ' + this.status.update.version + '?')) return;
             const data = await this.call('update.install');

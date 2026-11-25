@@ -240,7 +240,6 @@ final class Ui
             'categories' => Topics::categories(), 'sonarrTitles' => Topics::sonarrTitles(), 'clients' => array_keys(Clients::CLASSES),
             'services' => array_values(array_unique(array_column(Settings::notificationServices(), 'service'))),
             'timezones' => Time::names(),
-            'journal' => array_map(function ($e) { return $e + array('timeUtc' => Time::serverUtc($e['time'])); }, Journal::recent(300)),
             'status' => array(
                 'version' => App::versionLabel(), 'lastRun' => State::lastRun(), 'lastRunUtc' => Time::serverUtc((string)State::lastRun()), 'lastRunSummary' => State::lastRunSummary(), 'running' => Lock::busy(), 'client' => Clients::currentName(),
                 'authRequired' => Auth::required(), 'wiki' => Release::wikiUrl(),
@@ -808,11 +807,63 @@ final class Ui
     }
 
     //log of the last run
+    //how many detailed lines the page gets at most: the newest ones
+    const DETAIL_LINES = 20000;
+
+    // The log as the page shows it: the events of the journal and, while the detailed log is kept,
+    // the lines of the kept check runs among them, everything in the order it happened.
+    // lines - array(time on the clock of the server, kind, text); the kind of a detailed line is "detail".
+    // The text carries the marks of private values (see Privacy): the page shows or hides them.
+    private function doJournal(): array
+    {
+        $detail = array();
+        foreach (array_reverse(Runner::logs()) as $n)
+        {
+            $time = '';
+            foreach (explode("\n", rtrim((string)@file_get_contents(Runner::logFile($n)), "\n")) as $line)
+            {
+                if (preg_match('/^\[(\d{4}-\d\d-\d\d \d\d:\d\d:\d\d)\] (.*)$/su', $line, $m))
+                {
+                    $time = $m[1];
+                    $detail[] = array($time, 'detail', $m[2]);
+                }
+                elseif ($time !== '' && $line !== '')
+                    $detail[] = array($time, 'detail', $line);
+            }
+        }
+        $cut = count($detail) > self::DETAIL_LINES;
+        if ($cut)
+            $detail = array_slice($detail, -self::DETAIL_LINES);
+
+        //both lists are in the order of time: one pass joins them; of two lines of one second
+        //the detailed one goes first, so that the result of a run follows what the run did
+        $events = Journal::all();
+        $lines = array();
+        $i = 0;
+        foreach ($events as $event)
+        {
+            while ($i < count($detail) && strcmp($detail[$i][0], $event[0]) <= 0)
+                $lines[] = $detail[$i++];
+            $lines[] = $event;
+        }
+        while ($i < count($detail))
+            $lines[] = $detail[$i++];
+
+        //values that lines written before the marks existed may name: the page hides those too
+        $known = array();
+        foreach (array('torrentAddress', 'flaresolverrUrl', 'proxyAddress', 'serverAddress') as $key)
+            if ((string)Settings::get($key) !== '')
+                $known[] = array('a', About::withoutLogin((string)Settings::get($key)));
+        return array('lines' => $lines, 'cut' => $cut, 'detailed' => ! empty($detail), 'known' => $known,
+            //the lines are stamped on the server's clock: with its offset from UTC the page shows them on the browser's
+            'offset' => (int)date('Z'), 'running' => Lock::busy());
+    }
+
     private function doRunLog(): array
     {
         //which of the kept logs: 0 - the last run; 'full' - the whole file, to be saved
         $n = max(0, (int)(isset($this->in['n']) ? $this->in['n'] : 0));
-        $log = (string)@file_get_contents(Runner::logFile($n));
+        $log = \TorrentMonitor\Privacy::plain((string)@file_get_contents(Runner::logFile($n)));
         $runs = array();
         foreach (Runner::logs() as $i)
         {

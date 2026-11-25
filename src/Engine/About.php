@@ -20,13 +20,13 @@ final class About
     {
         $lines = array();
         $lines[] = 'TorrentMonitor '.App::versionLabel().', PHP '.PHP_VERSION.($started !== '' ? ', запуск '.$started : '');
-        $lines[] = 'Часовой пояс сервера: '.date_default_timezone_get().'. Каталог данных: '.\TorrentMonitor\Storage\Files::dir();
+        $lines[] = 'Часовой пояс сервера: '.date_default_timezone_get().'. Каталог данных: '.\TorrentMonitor\Privacy::folder(\TorrentMonitor\Storage\Files::dir());
 
         foreach (self::services() as $line)
             $lines[] = $line;
 
         $channels = array('stable' => 'стабильные версии', 'beta' => 'бета-версии', 'dev' => 'версия в разработке');
-        $lines[] = 'Прокси: '.(Settings::on('proxy') ? 'включён, '.Settings::get('proxyType') : 'выключен')
+        $lines[] = 'Прокси: '.(Settings::on('proxy') ? Settings::get('proxyType').' '.\TorrentMonitor\Privacy::address(self::withoutLogin((string)Settings::get('proxyAddress'))) : 'выключен')
             .'. Обновления: '.(Settings::on('autoUpdate') ? 'автоматически, '.$channels[Release::channel()] : 'вручную');
 
         $counts = array();
@@ -52,16 +52,17 @@ final class About
     }
 
     // A service as it was last seen, or just its name when it never was (or another one is set now).
-    // Its address is not written: it is private and is of no use in a log that is shown to others.
+    // Its address is private: it is written inside a mark (see Privacy), without the login it may carry.
     private static function seen(string $key, string $name, string $address): string
     {
         $address = self::withoutLogin($address);
+        $shown = \TorrentMonitor\Privacy::address($address);
         $seen = State::service($key);
         if ($seen === NULL || self::withoutLogin((string)$seen['address']) != $address || ($name !== '' && $seen['name'] != $name))
-            return ($name !== '' ? $name : 'задан').' (версия неизвестна: связь ещё не проверялась)';
+            return trim($name.' '.$shown).' (версия неизвестна: связь ещё не проверялась)';
         $text = trim($seen['name'].' '.$seen['version']);
         return ($text !== '' ? $text : 'версию не сообщает').($seen['details'] !== '' ? ' ('.$seen['details'].')' : '')
-            .', проверено '.substr((string)$seen['at'], 0, 16);
+            .', '.$shown.', проверено '.substr((string)$seen['at'], 0, 16);
     }
 
     // An address without the login and password it may carry: http://user:pass@host -> http://host
