@@ -31,6 +31,25 @@ final class Repair
                     $d['trackers'][$name][$field] = '';
                 elseif ($field != 'proxy')
                     $d['trackers'][$name][$field] = (string)$value;
+        // torrent clients: a record without a number, a kind or a name cannot be used and is left out
+        $clients = array();
+        $next = 1;
+        foreach (self::section(isset($d['clients']) ? $d['clients'] : array()) as $client)
+        {
+            if ( ! is_array($client) || ! isset($client['id'], $client['type']) || ! is_numeric($client['id']) || ! is_scalar($client['type'])
+                || ! isset(\TorrentMonitor\Client\Clients::CLASSES[(string)$client['type']]) || isset($clients[(int)$client['id']]))
+                continue;
+            $client['id'] = (int)$client['id'];
+            foreach (array('name', 'type', 'address', 'login', 'password', 'path', 'category') as $field)
+                $client[$field] = isset($client[$field]) && is_scalar($client[$field]) ? (string)$client[$field] : '';
+            if ($client['name'] === '')
+                $client['name'] = $client['type'].' '.$client['id'];
+            $clients[$client['id']] = $client;
+            $next = max($next, $client['id'] + 1);
+        }
+        $d['clients'] = array_values($clients);
+        $d['nextClientId'] = max($next, isset($d['nextClientId']) && is_numeric($d['nextClientId']) ? (int)$d['nextClientId'] : 1);
+        $d['defaultClient'] = isset($d['defaultClient']) && is_numeric($d['defaultClient']) && isset($clients[(int)$d['defaultClient']]) ? (int)$d['defaultClient'] : NULL;
         $d['notifications'] = array_filter(self::section(isset($d['notifications']) ? $d['notifications'] : array()), 'is_scalar');
         $d['trackerProxy'] = self::records(isset($d['trackerProxy']) ? $d['trackerProxy'] : array());
         return $d;
@@ -55,7 +74,7 @@ final class Repair
                 $topic['quality'] = 'sd';
             foreach (array('autoRename', 'paused', 'error', 'closed') as $field)
                 $topic[$field] = isset($topic[$field]) && self::truth($topic[$field]);
-            foreach (array('stopAfterDays', 'sonarrSeries') as $field)
+            foreach (array('stopAfterDays', 'sonarrSeries', 'client') as $field)
                 $topic[$field] = isset($topic[$field]) && is_numeric($topic[$field]) ? (int)$topic[$field] : NULL;
             $topic['sonarrSeasons'] = isset($topic['sonarrSeasons']) && is_array($topic['sonarrSeasons'])
                 ? array_values(array_map('intval', array_filter($topic['sonarrSeasons'], 'is_numeric'))) : array();

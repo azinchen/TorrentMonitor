@@ -222,24 +222,26 @@ final class LoggingTest extends IntegrationTestCase
 
     public function testSettingsAndTrackerChangesAreJournalledWithoutSecrets()
     {
-        $this->assertTrue(Env::ui('settings.save', array('useTorrent' => true, 'torrentClient' => 'Transmission', 'torrentAddress' => 'http://user:secret@transmission:9091',
-            'torrentLogin' => 'someone', 'torrentPassword' => 'Client-Secret-1', 'httpTimeout' => '20'))['json']['ok']);
+        $this->assertTrue(Env::ui('settings.save', array('useTorrent' => true, 'httpTimeout' => '20'))['json']['ok']);
         $line = AppState::journal('settings')[0];
         $this->assertStringStartsWith('Настройки (интерфейс): ', $line);
         $this->assertStringContainsString('время ожидания ответа: 15 → 20', $line);
         $this->assertStringContainsString('передача в torrent-клиент: включено', $line);
-        $this->assertStringContainsString('адрес клиента: {{a:127.0.0.1:9091}} → {{a:http://transmission:9091}}', $line, 'an address is private: it is marked, and the login it carried is left out');
-        $this->assertStringContainsString('логин клиента изменён', $line);
-        $this->assertStringContainsString('пароль клиента изменён', $line);
-        foreach (array('Client-Secret-1', 'someone', 'secret@') as $secret)
-            $this->assertStringNotContainsString($secret, implode("\n", AppState::journal()));
 
-        // another client
-        Env::ui('settings.save', array('torrentClient' => 'qBittorrent'));
-        $this->assertStringContainsString('torrent-клиент: Transmission → qBittorrent', AppState::journal('settings')[1]);
+        // a torrent client: its address is private - it is marked, and the login it carried is left out
+        $saved = Env::ui('client.save', array('name' => 'Дом', 'type' => 'Transmission', 'address' => 'http://user:secret@transmission:9091',
+            'login' => 'someone', 'password' => 'Client-Secret-1'))['json']['saved'];
+        $this->assertSame('Torrent-клиент «Дом» добавлен (интерфейс): Transmission, {{a:http://transmission:9091}}', AppState::journal('service')[0]);
+        Env::ui('client.save', array('id' => $saved, 'name' => 'Дом', 'type' => 'qBittorrent', 'address' => 'http://user:secret@other:8080', 'login' => 'another', 'password' => 'Client-Secret-2'));
+        $changed = AppState::journal('service')[1];
+        $this->assertStringContainsString('Torrent-клиент «Дом» (интерфейс): вид: Transmission → qBittorrent', $changed);
+        $this->assertStringContainsString('адрес: {{a:http://transmission:9091}} → {{a:http://other:8080}}', $changed);
+        $this->assertStringContainsString('логин изменён; пароль изменён', $changed);
+        foreach (array('Client-Secret-1', 'Client-Secret-2', 'someone', 'another', 'secret@') as $secret)
+            $this->assertStringNotContainsString($secret, implode("\n", AppState::journal()));
         // saving without a change writes nothing
-        Env::ui('settings.save', array('torrentClient' => 'qBittorrent', 'httpTimeout' => '20'));
-        $this->assertCount(2, AppState::journal('settings'));
+        Env::ui('settings.save', array('useTorrent' => true, 'httpTimeout' => '20'));
+        $this->assertCount(1, AppState::journal('settings'));
 
         // a tracker's account
         Env::ui('tracker.save', array('name' => 'rutracker.org', 'login' => 'tracker-user', 'password' => 'Tracker-Secret-1', 'address' => 'rutracker.example'));
@@ -303,27 +305,27 @@ final class LoggingTest extends IntegrationTestCase
         AppState::useQbittorrent();
         // not asked yet: the log says so and asks nothing
         Env::runEngine();
-        $this->assertStringContainsString('Torrent-клиент: qBittorrent '.Env::qbt().' (версия неизвестна: связь ещё не проверялась)', $this->log());
+        $this->assertStringContainsString('Torrent-клиент «qBittorrent»: qBittorrent '.Env::qbt().' (версия неизвестна: связь ещё не проверялась)', $this->log());
 
-        $checked = Env::ui('client.test');
+        $checked = Env::ui('client.test', array('id' => 1));
         $this->assertTrue($checked['json']['ok'], $checked['body']);
         $this->assertMatchesRegularExpression('/^Подключение к qBittorrent \d+\.\d+[\d.]* работает\.$/u', $checked['json']['message']);
-        $seen = AppState::state()['services']['client'];
+        $seen = AppState::state()['services']['client:1'];
         $this->assertSame('qBittorrent', $seen['name']);
         $this->assertMatchesRegularExpression('/^\d+\.\d+/', $seen['version']);
         $this->assertMatchesRegularExpression('/^libtorrent [\d.]+, web API [\d.]+$/', $seen['details']);
-        $this->assertMatchesRegularExpression('/^Torrent-клиент: qBittorrent \d+\.\d+[\d.]* \(libtorrent [\d.]+, web API [\d.]+\), \{\{a:'.preg_quote(Env::qbt(), '/').'\}\}$/u', AppState::journal('service')[0]);
+        $this->assertMatchesRegularExpression('/^Torrent-клиент «qBittorrent»: qBittorrent \d+\.\d+[\d.]* \(libtorrent [\d.]+, web API [\d.]+\), \{\{a:'.preg_quote(Env::qbt(), '/').'\}\}$/u', AppState::journal('service')[0]);
 
         // the next run prints what is remembered
         Env::runEngine();
-        $this->assertMatchesRegularExpression('/Torrent-клиент: qBittorrent \d+\.\d+[\d.]* \(libtorrent [\d.]+, web API [\d.]+\), '.preg_quote(Env::qbt(), '/').', проверено \d{4}-\d\d-\d\d \d\d:\d\d/u', $this->log());
+        $this->assertMatchesRegularExpression('/Torrent-клиент «qBittorrent»: qBittorrent \d+\.\d+[\d.]* \(libtorrent [\d.]+, web API [\d.]+\), '.preg_quote(Env::qbt(), '/').', проверено \d{4}-\d\d-\d\d \d\d:\d\d/u', $this->log());
         // the same version again is not an event
-        Env::ui('client.test');
+        Env::ui('client.test', array('id' => 1));
         $this->assertCount(1, AppState::journal('service'));
 
-        // the client switched off: what was known about it is forgotten
-        Env::ui('settings.save', array('useTorrent' => false));
-        $this->assertArrayNotHasKey('client', AppState::state()['services']);
+        // the client is removed: what was known about it is forgotten
+        $this->assertTrue(Env::ui('client.delete', array('id' => 1))['json']['ok']);
+        $this->assertArrayNotHasKey('client:1', AppState::state()['services']);
     }
 
     public function testVersionOfTheSolverIsRememberedByTheNetworkCheck()
@@ -389,7 +391,7 @@ final class LoggingTest extends IntegrationTestCase
         $this->assertStringStartsWith('TorrentMonitor '.AppState::version().', PHP ', $text);
         // private values are inside marks: the page shows or hides them as its reader chooses
         $this->assertStringContainsString('Прокси: SOCKS5 {{a:127.0.0.1:1080}}.', $text);
-        $this->assertStringContainsString('Torrent-клиент: qBittorrent {{a:'.Env::qbt().'}}', $text);
+        $this->assertStringContainsString('Torrent-клиент «qBittorrent»: qBittorrent {{a:'.Env::qbt().'}}', $text);
         $this->assertStringContainsString('Каталог данных: {{d:', $text);
         $this->assertStringContainsString('Обновления: вручную', $text);
         foreach (array('Proxy-Secret', Env::CLIENT_PASS) as $secret)

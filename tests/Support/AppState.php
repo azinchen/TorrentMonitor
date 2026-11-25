@@ -32,6 +32,16 @@ class AppState
     public static function setSettings($values)
     {
         self::storage();
+        //what belongs to the torrent client goes to the first client of the list
+        $client = array();
+        foreach (self::CLIENT_KEYS as $key => $field)
+            if (array_key_exists($key, $values))
+            {
+                $client[$field] = (string)$values[$key];
+                unset($values[$key]);
+            }
+        if ( ! empty($client))
+            self::setClient($client + (isset($client['type']) ? array('name' => $client['type']) : array()));
         \TorrentMonitor\Storage\Files::config()->update(function (&$data) use ($values) {
             foreach ($values as $key => $value)
                 $data['settings'][$key] = (string)$value;
@@ -41,6 +51,12 @@ class AppState
     public static function setting($key)
     {
         $config = self::read('config');
+        //what belongs to the torrent client is read from the first client of the list
+        if (isset(self::CLIENT_KEYS[$key]))
+        {
+            $client = self::client();
+            return $client === null ? null : $client[self::CLIENT_KEYS[$key]];
+        }
         return isset($config['settings'][$key]) ? $config['settings'][$key] : null;
     }
 
@@ -55,28 +71,66 @@ class AppState
         });
     }
 
+    // The settings of the torrent client as tests name them, and the fields of a client they stand for.
+    // The application keeps a list of clients; most tests need one, and set it up through these names.
+    const CLIENT_KEYS = array('torrentClient' => 'type', 'torrentAddress' => 'address', 'torrentLogin' => 'login', 'torrentPassword' => 'password',
+        'pathToDownload' => 'path', 'qbitCategory' => 'category');
+
+    // sets fields of the first torrent client (and makes one when there is none)
+    public static function setClient(array $fields, $id = 1)
+    {
+        self::storage();
+        \TorrentMonitor\Storage\Files::config()->update(function (&$data) use ($fields, $id) {
+            $found = FALSE;
+            foreach ($data['clients'] as $i => $client)
+                if ((int)$client['id'] === (int)$id)
+                {
+                    $data['clients'][$i] = $fields + $client;
+                    $found = TRUE;
+                }
+            if ( ! $found)
+            {
+                $record = $fields + array('id' => (int)$id, 'name' => isset($fields['type']) ? $fields['type'] : 'qBittorrent', 'type' => 'qBittorrent',
+                    'address' => '', 'login' => '', 'password' => '', 'path' => '', 'category' => '');
+                $record['id'] = (int)$id;
+                $data['clients'][] = $record;
+                $data['nextClientId'] = max((int)$data['nextClientId'], (int)$id + 1);
+                if ($data['defaultClient'] === NULL)
+                    $data['defaultClient'] = (int)$id;
+            }
+        });
+        \TorrentMonitor\App::resetHttp();
+    }
+
+    // a torrent client as stored, or null
+    public static function client($id = 1)
+    {
+        foreach (self::read('config')['clients'] as $client)
+            if ((int)$client['id'] === (int)$id)
+                return $client;
+        return null;
+    }
+
+    // one torrent client, the only and so the default one
+    public static function useClient($type, $address, $login = '', $password = '', $path = '', $extra = array())
+    {
+        self::storage();
+        \TorrentMonitor\Storage\Files::config()->update(function (&$data) {
+            $data['clients'] = array();
+            $data['defaultClient'] = NULL;
+        });
+        self::setClient(array('name' => $type, 'type' => $type, 'address' => $address, 'login' => $login, 'password' => $password, 'path' => $path));
+        self::setSettings($extra + array('useTorrent' => '1'));
+    }
+
     public static function useQbittorrent($extra = array())
     {
-        self::setSettings($extra + array(
-            'useTorrent'      => '1',
-            'torrentClient'   => 'qBittorrent',
-            'torrentAddress'  => Env::qbt(),
-            'torrentLogin'    => Env::CLIENT_USER,
-            'torrentPassword' => Env::CLIENT_PASS,
-            'pathToDownload'  => Env::DOWNLOADS.'/qbt/',
-        ));
+        self::useClient('qBittorrent', Env::qbt(), Env::CLIENT_USER, Env::CLIENT_PASS, Env::DOWNLOADS.'/qbt/', $extra);
     }
 
     public static function useTransmission($extra = array())
     {
-        self::setSettings($extra + array(
-            'useTorrent'      => '1',
-            'torrentClient'   => 'Transmission',
-            'torrentAddress'  => Env::TRANSMISSION,
-            'torrentLogin'    => Env::CLIENT_USER,
-            'torrentPassword' => Env::CLIENT_PASS,
-            'pathToDownload'  => Env::DOWNLOADS.'/transmission/',
-        ));
+        self::useClient('Transmission', Env::TRANSMISSION, Env::CLIENT_USER, Env::CLIENT_PASS, Env::DOWNLOADS.'/transmission/', $extra);
     }
 
     // changes fields of a stored topic

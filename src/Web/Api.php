@@ -143,6 +143,9 @@ final class Api
             'stopAfterDays' => $t['stopAfterDays'], 'addedAt' => $t['addedAt'], 'lastActivityAt' => $t['lastActivityAt'],
             'stopped' => Topics::expired($t, (int)Settings::get('stopAfterDays')),
             'sonarrTitle' => $t['sonarrTitle'], 'sonarrSeasons' => array_values((array)$t['sonarrSeasons']),
+            //the torrent client the topic is passed to: its own or the default one; NULL - none
+            'client' => ($client = Clients::forTopic($t)) !== NULL ? $client['name'] : NULL,
+            'clientId' => $client !== NULL ? (int)$client['id'] : NULL,
         );
     }
 
@@ -176,6 +179,14 @@ final class Api
         $common = array('path' => trim((string)(isset($b['path']) ? $b['path'] : '')), 'category' => trim((string)(isset($b['category']) ? $b['category'] : '')));
         if (isset($b['stopAfterDays']) && $b['stopAfterDays'] !== '')
             $common['stopAfterDays'] = max(0, (int)$b['stopAfterDays']);
+        //the torrent client, by its name or its number; without it the default one is used
+        if (isset($b['client']) && trim((string)$b['client']) !== '')
+        {
+            $client = Clients::resolve($b['client']);
+            if ($client === NULL)
+                self::respond(FALSE, 'Нет torrent-клиента «'.trim((string)$b['client']).'». Есть: '.(implode(', ', array_column(Clients::all(), 'name')) ?: 'ни одного').'.', NULL, 422);
+            $common['client'] = (int)$client['id'];
+        }
 
         if ($url !== '')
         {
@@ -232,7 +243,7 @@ final class Api
         if ($topic === NULL)
             self::respond(FALSE, 'Тема не найдена.', NULL, 404);
 
-        $removed = self::flag('removeFromClient') && $topic['hash'] !== '' && Delivery::removeFromClient($topic['hash'], self::flag('deleteData'));
+        $removed = self::flag('removeFromClient') && $topic['hash'] !== '' && Delivery::removeFromClient($topic['hash'], self::flag('deleteData'), $topic);
         Topics::delete($id);
         self::respond(TRUE, $removed ? 'Тема удалена, раздача удалена из торрент-клиента.' : 'Тема удалена.');
     }
@@ -291,7 +302,7 @@ final class Api
                 if ($topic['sonarrSeries'] === NULL || $topic['sonarrSeries'] != $seriesId)
                     continue;
                 if ($topic['hash'] !== '')
-                    Delivery::removeFromClient($topic['hash'], $deleteData);
+                    Delivery::removeFromClient($topic['hash'], $deleteData, $topic);
                 Topics::delete($topic['id']);
                 $count++;
             }
@@ -306,10 +317,15 @@ final class Api
             Problems::report('api', 'api_no_download_id');
             self::respond(FALSE, 'Нет downloadId в запросе.', NULL, 422);
         }
-        if (Clients::currentName() === NULL)
+        // Sonarr sent the release to a torrent client of its own choice: TorrentMonitor looks for it in
+        // the default client, or in the one the address of the webhook names (...&client=NAS)
+        $named = isset($_GET['client']) ? trim((string)$_GET['client']) : '';
+        $client = ! Clients::enabled() ? NULL : ($named !== '' ? Clients::resolve($named) : Clients::fallback());
+        if ($client === NULL)
         {
             Problems::report('api', 'api_client_fail');
-            self::respond(FALSE, 'В настройках TorrentMonitor не включён torrent-клиент.', NULL, 422);
+            self::respond(FALSE, $named !== '' && Clients::enabled() ? 'Нет torrent-клиента «'.$named.'», названного в адресе webhook.'
+                : 'В настройках TorrentMonitor не включён torrent-клиент.', NULL, 422);
         }
 
         $title = isset($body['series']['title']) ? (string)$body['series']['title'] : '';
@@ -331,17 +347,18 @@ final class Api
             $pack = count($episodes) > 1 || (bool)preg_match('/(?<![A-Za-z0-9])S\d{1,3}(?![0-9]|\s*\.?\s*E\d)/i', $release);
 
         self::respondAndContinue('Принято.');
-        self::grab($hash, $title, $seriesId, $category, $seasons, $pack);
+        self::grab($client, $hash, $title, $seriesId, $category, $seasons, $pack);
         exit;
     }
 
-    private static function grab(string $hash, string $title, ?int $seriesId, ?string $category, array $seasons = array(), bool $pack = FALSE): void
+    //$record - the torrent client the release is looked for in
+    private static function grab(array $record, string $hash, string $title, ?int $seriesId, ?string $category, array $seasons = array(), bool $pack = FALSE): void
     {
         //the torrent may not appear in the client right after the event
         $info = NULL;
         try
         {
-            $client = Clients::current();
+            $client = Clients::open($record);
             for ($attempt = 0; $attempt < 5 && empty($info['comment']); $attempt++)
             {
                 if ($attempt > 0)
@@ -375,7 +392,8 @@ final class Api
         $known = Topics::find($parsed['tracker'], $parsed['topicId']);
         if ($known !== NULL)
         {
-            $fields = array('hash' => strtolower($hash));
+            //the torrent is in this client now, wherever the topic was passed before
+            $fields = array('hash' => strtolower($hash), 'client' => (int)$record['id']);
             if ($seriesId !== NULL)
             {
                 $fields['sonarrSeries'] = $seriesId;
@@ -394,7 +412,7 @@ final class Api
         //the torrent's directory and category are saved in the topic: the updated torrent will go to the same place
         $id = Topics::add(array(
             'tracker' => $parsed['tracker'], 'topicId' => $parsed['topicId'], 'name' => $title, 'autoRename' => TRUE,
-            'hash' => strtolower($hash), 'path' => $info['path'], 'sonarrSeries' => $seriesId, 'sonarrTitle' => $seriesId !== NULL ? $title : '',
+            'client' => (int)$record['id'], 'hash' => strtolower($hash), 'path' => $info['path'], 'sonarrSeries' => $seriesId, 'sonarrTitle' => $seriesId !== NULL ? $title : '',
             'sonarrSeasons' => $seriesId !== NULL ? $seasons : array(),
             'category' => $category !== NULL && $category !== '' ? $category : $info['category'],
         ));
@@ -419,7 +437,7 @@ final class Api
                 continue;
             $removed = FALSE;
             if (Settings::on('sonarrReplaceTorrent') && $old['hash'] !== '' && strcasecmp($old['hash'], $newHash) != 0)
-                $removed = Delivery::removeFromClient($old['hash'], Settings::on('deleteFilesOnRemove') && ! self::sharedContent($old['hash'], $newHash));
+                $removed = Delivery::removeFromClient($old['hash'], Settings::on('deleteFilesOnRemove') && ! self::sharedContent($old, $newId, $newHash), $old);
             Topics::delete($old['id']);
             $name = $old['name'] !== '' ? $old['name'] : 'Тема '.$old['topicId'];
             Notifications::info('api', 'Тема «'.$name.'» ('.$old['tracker'].') удалена: Sonarr загрузил другую раздачу этого сезона.'
@@ -429,11 +447,18 @@ final class Api
 
     //Whether deleting the files of the old torrent could delete files of the new one: both are downloaded
     //to the same place. Unknown counts as shared, so that files are kept when in doubt.
-    private static function sharedContent(string $oldHash, string $newHash): bool
+    private static function sharedContent(array $oldTopic, int $newId, string $newHash): bool
     {
+        $oldHash = (string)$oldTopic['hash'];
+        $newTopic = Topics::get($newId);
+        $record = Clients::forTopic($oldTopic);
+        $other = $newTopic !== NULL ? Clients::forTopic($newTopic) : NULL;
+        //two clients may write to one folder, and that cannot be found out: the files are kept
+        if ($record === NULL || $other === NULL || (int)$record['id'] !== (int)$other['id'])
+            return TRUE;
         try
         {
-            $client = Clients::current();
+            $client = Clients::open($record);
             $old = $client->info($oldHash);
             $new = $client->info($newHash);
         }

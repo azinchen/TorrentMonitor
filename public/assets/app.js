@@ -35,7 +35,7 @@ document.addEventListener('alpine:init', () => {
         toasts: [],
 
         // data from the server
-        topics: [], users: [], trackers: [], settings: {}, warnings: [], categories: [], sonarrTitles: [], clients: [], services: [], timezones: [],
+        topics: [], users: [], trackers: [], settings: {}, warnings: [], categories: [], sonarrTitles: [], clients: [], clientTypes: [], services: [], timezones: [],
         status: { version: '', lastRun: '', running: false, client: null, update: null, authRequired: true, wiki: '' },
 
         // forms
@@ -51,7 +51,9 @@ document.addEventListener('alpine:init', () => {
         passwordForm: { current: '', password: '', password2: '' },
         apiKey: '',
         health: null,
-        clientStatus: { loaded: false, supported: false, answered: false, error: '', client: null, time: '', timeUtc: '', torrents: {} },   // what the torrent client says about the torrents of the topics
+        clientStatus: {},       // what each torrent client says about the torrents of its topics: client id => { supported, answered, error, client, time, timeUtc, torrents }
+        openClient: null,       // the torrent client being edited (its id; 0 - a new one; null - none)
+        clientForm: {},
         logLines: [],           // the log: [time on the server's clock, kind, text with marks of private values], the oldest first
         logOffset: 0,           // seconds the server's clock is ahead of UTC
         logCut: false,          // the oldest detailed lines are left out
@@ -98,7 +100,7 @@ document.addEventListener('alpine:init', () => {
 
         // distributes the server response into fields
         apply(data) {
-            for (const key of ['topics', 'users', 'trackers', 'warnings', 'categories', 'sonarrTitles', 'clients', 'services', 'timezones', 'status']) {
+            for (const key of ['topics', 'users', 'trackers', 'warnings', 'categories', 'sonarrTitles', 'clients', 'clientTypes', 'services', 'timezones', 'status']) {
                 if (data[key] !== undefined) this[key] = data[key];
             }
             if (data.settings !== undefined) {
@@ -262,16 +264,26 @@ document.addEventListener('alpine:init', () => {
         // ---- what the torrent client says about the torrents
         // asked once when the page of topics is opened: a client that is down must not hold the list back
         async loadClientStatus() {
-            const data = await this.call('client.status', {}, { silent: true });
-            if (data) this.clientStatus = { ...data, loaded: true, torrents: data.torrents || {} };
+            //every client is asked in a request of its own, all at once: one that is down does not hold back the others
+            await Promise.all(this.clients.filter(c => c.statuses && c.topics).map(async c => {
+                const data = await this.call('client.status', { id: c.id }, { silent: true });
+                if (data) this.clientStatus = { ...this.clientStatus, [c.id]: { ...data, torrents: data.torrents || {} } };
+            }));
         },
-        clientOf(topic) { return this.clientStatus.answered ? this.clientStatus.torrents[topic.id] : null; },
+        // the answer of the client a topic is passed to
+        answerFor(topic) { return topic.clientId !== null ? this.clientStatus[topic.clientId] : null; },
+        clientOf(topic) { const a = this.answerFor(topic); return a && a.answered ? a.torrents[topic.id] : null; },
+        // the clients that were asked and did not answer: said once each, above the list
+        get clientsDown() { return Object.values(this.clientStatus).filter(a => a.supported && !a.answered); },
+        get clientsAnswered() { return Object.values(this.clientStatus).some(a => a.answered); },
+        get defaultClient() { return this.clients.find(c => c.default) || null; },
         // the tag of a topic: { text, kind, title } or null when there is nothing to say
         clientTag(topic) {
             const s = this.clientOf(topic);
             if (!s) return null;
             const percent = s.progress >= 100 ? '' : ' ' + Math.floor(s.progress) + ' %';
-            const asOf = 'по ответу ' + this.clientStatus.client + ' на ' + this.local(this.clientStatus.timeUtc, this.clientStatus.time);
+            const answer = this.answerFor(topic);
+            const asOf = 'по ответу «' + answer.client + '» на ' + this.local(answer.timeUtc, answer.time);
             const details = [s.size ? this.bytes(s.size) : '', s.speed ? this.bytes(s.speed) + '/с' : '', s.ratio ? 'рейтинг ' + s.ratio : '', s.message || '', asOf].filter(Boolean).join(' · ');
             //short - what the compact list shows: a sign and the percent, in a column of one width
             const short = (sign, done) => sign + (s.progress >= 100 && done ? '' : ' ' + Math.floor(s.progress || 0) + ' %');
@@ -283,7 +295,7 @@ document.addEventListener('alpine:init', () => {
                 case 'queued': return tag('в очереди' + percent, short('…'), '');
                 case 'checking': return tag('проверка' + percent, short('⟳'), '');
                 case 'error': return tag('ошибка в клиенте', '! клиент', 'bad');
-                case 'missing': return tag('нет в клиенте', '✕ нет', 'warn', 'Тема была передана в ' + this.clientStatus.client + ', но такой раздачи там больше нет · ' + asOf);
+                case 'missing': return tag('нет в клиенте', '✕ нет', 'warn', 'Тема была передана в «' + answer.client + '», но такой раздачи там больше нет · ' + asOf);
                 default: return null;
             }
         },
@@ -340,7 +352,7 @@ document.addEventListener('alpine:init', () => {
             this.topicForm = {
                 id: 0, kind, url: '', tracker: this.seriesTrackers.length ? this.seriesTrackers[0].name : '', name: '', quality: 'sd',
                 autoRename: true, path: '', category: '', script: '', stopAfterDays: '', paused: false, reset: false, more: false,
-                sonarrTitle: '', sonarrSeasons: '',
+                sonarrTitle: '', sonarrSeasons: '', client: '', wasClientId: null, inClient: false, moveRemove: false, moveDeleteData: false,
             };
         },
         editTopic(topic) {
@@ -349,8 +361,21 @@ document.addEventListener('alpine:init', () => {
                 quality: topic.quality, autoRename: topic.autoRename, path: topic.path, category: topic.category, script: topic.script,
                 stopAfterDays: topic.stopAfterDays === null ? '' : topic.stopAfterDays, paused: topic.paused, reset: false,
                 sonarrTitle: topic.sonarrTitle || '', sonarrSeasons: (topic.sonarrSeasons || []).join(', '),
-                more: !!(topic.path || topic.category || topic.script || topic.stopAfterDays !== null || topic.sonarrTitle),
+                //'' - the default client; wasClientId - the client the topic is passed to now
+                client: topic.client === null ? '' : String(topic.client), wasClientId: topic.clientId, inClient: topic.inClient,
+                moveRemove: false, moveDeleteData: this.settings.deleteFilesOnRemove === '1',
+                more: !!(topic.path || topic.category || topic.script || topic.stopAfterDays !== null || topic.sonarrTitle || topic.client !== null),
             };
+        },
+        // the client the topic in the form would be passed to
+        get topicClient() {
+            if (!this.topicForm) return null;
+            return this.topicForm.client === '' ? this.defaultClient : (this.clients.find(c => String(c.id) === this.topicForm.client) || null);
+        },
+        // the form sends a topic that is in one client to another one
+        get topicMoves() {
+            const f = this.topicForm;
+            return !!(f && f.id && f.inClient && f.wasClientId !== null && this.topicClient && this.topicClient.id !== f.wasClientId);
         },
         async saveTopic() {
             const data = await this.act(this.topicForm.id ? 'topic.save' : 'topic.add', this.topicForm);
@@ -410,7 +435,7 @@ document.addEventListener('alpine:init', () => {
 
         // ---- settings
         editableSettings(s) {
-            const form = Object.assign({}, s, { torrentPassword: '', clearTorrentPassword: false });
+            const form = Object.assign({}, s);
             for (const key of ['auth', 'rss', 'debug', 'autoUpdate', 'proxy', 'useTorrent', 'deleteDistribution', 'deleteOldFiles',
                 'deleteFilesOnRemove', 'removeOnSeriesDelete', 'sonarrReplaceTopic', 'sonarrReplaceTorrent', 'send', 'sendUpdate', 'sendWarning']) {
                 form[key] = s[key] === '1';
@@ -421,8 +446,54 @@ document.addEventListener('alpine:init', () => {
         async testNetwork() {
             if (await this.saveSettings()) await this.call('network.test');
         },
-        async testClient() {
-            if (await this.saveSettings()) await this.call('client.test');
+        // ---- torrent clients
+        newClient() {
+            const type = this.clientTypes[0] || 'qBittorrent';
+            this.openClient = 0;
+            this.clientForm = { id: null, was: '', type, name: this.suggestClientName(type), named: false, address: '', login: '', password: '', hasPassword: false,
+                clearPassword: false, path: '', category: '', default: false, makeDefault: false };
+        },
+        editClient(c) {
+            this.openClient = c.id;
+            this.clientForm = { id: c.id, was: c.name, type: c.type, name: c.name, named: true, address: c.address, login: c.login, password: '', hasPassword: c.hasPassword,
+                clearPassword: false, path: c.path, category: c.category, default: c.default, makeDefault: false };
+        },
+        // a name no client has yet: "qBittorrent", "qBittorrent 2", ...
+        suggestClientName(type) {
+            const base = type === 'SynologyDS' ? 'Synology' : type;
+            const taken = this.clients.map(c => c.name.toLowerCase());
+            for (let n = 1; ; n++) {
+                const name = base + (n > 1 ? ' ' + n : '');
+                if (!taken.includes(name.toLowerCase())) return name;
+            }
+        },
+        //the proposed name follows the kind until the user writes one of their own
+        clientTypeChanged() { if (!this.clientForm.named) this.clientForm.name = this.suggestClientName(this.clientForm.type); },
+        async saveClient(check) {
+            const f = this.clientForm;
+            const data = await this.act('client.save', { id: f.id, name: f.name, type: f.type, address: f.address, login: f.login, password: f.password,
+                clearPassword: f.clearPassword, path: f.path, category: f.category, default: f.makeDefault, check: !!check });
+            if (!data) return;
+            if (data.failed) this.editClient(this.clients.find(c => c.id === data.saved) || f);
+            else this.openClient = null;
+        },
+        async deleteClient() {
+            const c = this.clients.find(x => x.id === this.clientForm.id);
+            if (!c) return;
+            const others = this.clients.filter(x => x.id !== c.id);
+            let moveTo = '';
+            if (c.own) {
+                //topics name this client as their own: they are given to another one first
+                if (!others.length) { this.toast('К клиенту «' + c.name + '» привязаны темы (' + c.own + '), а другого клиента нет. Сначала добавьте клиент или удалите темы.', true); return; }
+                const names = others.map((x, i) => (i + 1) + ' — ' + x.name).join('\n');
+                const answer = prompt('К клиенту «' + c.name + '» привязаны темы: ' + c.own + '. Какому клиенту их передать? Введите номер:\n' + names, '1');
+                if (answer === null) return;
+                const chosen = others[Number(answer) - 1];
+                if (!chosen) { this.toast('Нет клиента с таким номером.', true); return; }
+                moveTo = chosen.id;
+            } else if (!confirm('Удалить torrent-клиент «' + c.name + '»? Раздачи в самом клиенте останутся.')) return;
+            const data = await this.act('client.delete', { id: c.id, moveTo });
+            if (data) this.openClient = null;
         },
         async testNotifications() {
             if (await this.saveSettings()) await this.call('notify.check');

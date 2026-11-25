@@ -45,8 +45,10 @@ final class WebInterfaceTest extends IntegrationTestCase
         $this->assertSame('1', AppState::setting('auth'));
         $this->assertStringStartsWith('$2y$', AppState::setting('password'));
         $this->assertMatchesRegularExpression('/^[0-9a-f]{64}$/', AppState::setting('ApiKey'), 'an API key is created');
-        $this->assertSame(array('1', 'qBittorrent', Env::QBT), array(AppState::setting('useTorrent'), AppState::setting('torrentClient'), AppState::setting('torrentAddress')));
-        $this->assertTrue(Env::ui('client.test')['json']['ok']);
+        // the client of the setup is the first of the list, and so the default one
+        $clients = $done['json']['clients'];
+        $this->assertSame(array('1', 'qBittorrent', 'qBittorrent', Env::QBT, true), array(AppState::setting('useTorrent'), $clients[0]['name'], $clients[0]['type'], $clients[0]['address'], $clients[0]['default']));
+        $this->assertTrue(Env::ui('client.test', array('id' => 1))['json']['ok']);
 
         $this->assertFalse(Env::ui('setup', array('password' => 'Another-One'))['json']['ok'], 'the setup runs once');
         Env::uiClose();

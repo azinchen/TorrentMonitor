@@ -5,8 +5,7 @@ final class ServicesTest extends IntegrationTestCase
 {
     private function useClient($name, $address, $password = '', $path = '')
     {
-        AppState::setSettings(array('useTorrent' => '1', 'torrentClient' => $name, 'torrentAddress' => $address,
-            'torrentLogin' => '', 'torrentPassword' => $password, 'pathToDownload' => $path));
+        AppState::useClient($name, $address, '', $password, $path);
     }
 
     // the application's own client object, to ask the client what it has
@@ -14,7 +13,7 @@ final class ServicesTest extends IntegrationTestCase
     {
         require_once TM_ROOT.'/src/bootstrap.php';
         \TorrentMonitor\App::resetHttp();
-        return \TorrentMonitor\Client\Clients::current();
+        return \TorrentMonitor\Client\Clients::open(\TorrentMonitor\Client\Clients::fallback());
     }
 
     // ---- Deluge
@@ -38,7 +37,7 @@ final class ServicesTest extends IntegrationTestCase
         $this->assertSame(Env::DOWNLOADS.'/deluge', rtrim($info['path'], '/'));
 
         // the page of topics is told what the client is doing with the torrent
-        $status = Env::ui('client.status')['json'];
+        $status = Env::ui('client.status', array('id' => 1))['json'];
         $this->assertTrue($status['supported'] && $status['answered'], json_encode($status));
         $torrent = $status['torrents'][(string)$id];
         $this->assertContains($torrent['state'], array('downloading', 'seeding', 'stopped', 'queued', 'checking', 'error'), json_encode($torrent));
@@ -107,14 +106,14 @@ final class ServicesTest extends IntegrationTestCase
     public function testClientsWithoutAListOfTorrentsHaveNoStatus()
     {
         $this->useClient('TorrServer', Env::TORRSERVER, '', '');
-        $status = Env::ui('client.status')['json'];
+        $status = Env::ui('client.status', array('id' => 1))['json'];
         $this->assertFalse($status['supported']);
         $this->assertFalse($status['answered']);
         $this->assertSame('', $status['error']);
 
         // no client at all
         AppState::setSettings(array('useTorrent' => '0'));
-        $none = Env::ui('client.status')['json'];
+        $none = Env::ui('client.status', array('id' => 1))['json'];
         $this->assertNull($none['client']);
         $this->assertFalse($none['supported']);
     }
@@ -122,19 +121,19 @@ final class ServicesTest extends IntegrationTestCase
     public function testClientCheckTellsAWorkingTorrServerFromAWrongAddress()
     {
         $this->useClient('TorrServer', Env::TORRSERVER);
-        $this->assertTrue(Env::ui('client.test')['json']['ok']);
+        $this->assertTrue(Env::ui('client.test', array('id' => 1))['json']['ok']);
 
         $this->useClient('TorrServer', 'http://torrserver:1');
-        $this->assertFalse(Env::ui('client.test')['json']['ok'], 'a wrong address is not reported as working');
+        $this->assertFalse(Env::ui('client.test', array('id' => 1))['json']['ok'], 'a wrong address is not reported as working');
 
         // some other web server answers at the address
         $this->useClient('TorrServer', Env::GOTIFY.'/nothing-here');
-        $this->assertFalse(Env::ui('client.test')['json']['ok'], 'another service is not taken for TorrServer');
+        $this->assertFalse(Env::ui('client.test', array('id' => 1))['json']['ok'], 'another service is not taken for TorrServer');
 
         $this->useClient('Deluge', Env::DELUGE, Env::DELUGE_PASS);
-        $this->assertTrue(Env::ui('client.test')['json']['ok']);
+        $this->assertTrue(Env::ui('client.test', array('id' => 1))['json']['ok']);
         $this->useClient('Deluge', Env::DELUGE, 'wrong');
-        $this->assertFalse(Env::ui('client.test')['json']['ok']);
+        $this->assertFalse(Env::ui('client.test', array('id' => 1))['json']['ok']);
     }
 
     // ---- Gotify

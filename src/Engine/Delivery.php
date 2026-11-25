@@ -57,7 +57,7 @@ final class Delivery
             $fields['episode'] = $found->episode;
 
         $message = $found->message;
-        if (Clients::currentName() === NULL)
+        if (Clients::forTopic($topic) === NULL)
             $message .= ' И сохранён.';
         else
         {
@@ -83,14 +83,18 @@ final class Delivery
     // Returns the torrent's identifier in the client or NULL (then the file is put in the retry queue).
     public static function toClient(array $topic, string $name, string $file, string $dateText): ?string
     {
-        $clientName = Clients::currentName();
+        //the topic's own client, or the default one
+        $record = Clients::forTopic($topic);
+        if ($record === NULL)
+            return NULL;
+        $clientName = $record['name'];
         // The same torrent is already in the client (for example, added by Sonarr): no need to touch it
         $known = Bencode::infoHash((string)@file_get_contents(App::torrentsDir().'/'.$file));
         if ($known !== NULL && $topic['hash'] !== '' && strcasecmp($known, $topic['hash']) == 0)
             return $topic['hash'];
         try
         {
-            $client = Clients::current();
+            $client = Clients::open($record);
             if ($topic['hash'] !== '')
             {
                 // For series every episode is a separate torrent: the previous one is removed only if configured so
@@ -101,8 +105,8 @@ final class Delivery
                     $client->remove($topic['hash'], Settings::on('deleteOldFiles'));
             }
             $hash = $client->add(App::torrentsDir().'/'.$file, array(
-                'path'     => $topic['path'] !== '' ? $topic['path'] : (string)Settings::get('pathToDownload'),
-                'category' => $topic['category'] !== '' ? $topic['category'] : (string)Settings::get('qbitCategory'),
+                'path'     => $topic['path'] !== '' ? $topic['path'] : (string)$record['path'],
+                'category' => $topic['category'] !== '' ? $topic['category'] : (string)$record['category'],
                 'name'     => $name,
                 'url'      => self::fileUrl($file),
             ));
@@ -121,14 +125,16 @@ final class Delivery
 
     // Removes the topic's torrent from the torrent client (when the topic is deleted).
     // $deleteData: TRUE/FALSE - whether to delete the downloaded files, NULL - as set in the deleteFilesOnRemove setting.
-    public static function removeFromClient(string $hash, ?bool $deleteData = NULL): bool
+    // $topic - the topic the torrent belongs to: it tells which client has it.
+    public static function removeFromClient(string $hash, ?bool $deleteData = NULL, array $topic = array()): bool
     {
-        $clientName = Clients::currentName();
-        if ($hash === '' || $clientName === NULL)
+        $record = Clients::forTopic($topic);
+        if ($hash === '' || $record === NULL)
             return FALSE;
+        $clientName = $record['name'];
         try
         {
-            Clients::current()->remove($hash, $deleteData === NULL ? Settings::on('deleteFilesOnRemove') : $deleteData);
+            Clients::open($record)->remove($hash, $deleteData === NULL ? Settings::on('deleteFilesOnRemove') : $deleteData);
             Warnings::clear($clientName);
             return TRUE;
         }
@@ -153,8 +159,9 @@ final class Delivery
     // Retries handing to the torrent client the files that could not be handed over earlier
     public static function retryPending(callable $out): void
     {
-        if (Clients::currentName() === NULL)
+        if ( ! Clients::enabled())
             return;
+        //every file is retried on the client of its topic: one client that is down does not hold back the others
         foreach (Pending::all() as $topicId => $item)
         {
             $topic = Topics::get($topicId);

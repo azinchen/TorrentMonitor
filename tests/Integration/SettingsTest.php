@@ -10,25 +10,74 @@ final class SettingsTest extends IntegrationTestCase
         $this->assertSame('0', AppState::setting('useTorrent'));
     }
 
-    public function testTorrentClientSettingsAreSaved()
+    public function testTorrentClientsAreAddedChangedAndRemoved()
     {
-        $response = Env::ui('settings.save', array(
-            'useTorrent' => true, 'torrentClient' => 'qBittorrent',
-            'torrentAddress' => Env::QBT.'/', 'torrentLogin' => 'someone', 'torrentPassword' => 'pa$$ word',
-            'pathToDownload' => '/downloads/x', 'deleteDistribution' => false, 'deleteOldFiles' => true,
-            'deleteFilesOnRemove' => true, 'qbitCategory' => 'tv',
-        ));
+        // the first client: its proposed name can be kept, and it becomes the default one
+        $added = Env::ui('client.save', array('name' => 'qBittorrent', 'type' => 'qBittorrent', 'address' => Env::QBT.'/', 'login' => 'someone',
+            'password' => 'pa$$ word', 'path' => '/downloads/x', 'category' => 'tv'));
+        $this->assertTrue($added['json']['ok'], $added['body']);
+        $first = $added['json']['saved'];
+        $client = AppState::client($first);
+        $this->assertSame(Env::QBT, $client['address'], 'trailing slash is removed');
+        $this->assertSame('/downloads/x/', $client['path'], 'trailing slash is added');
+        $this->assertSame(array('pa$$ word', 'tv', 'someone'), array($client['password'], $client['category'], $client['login']));
+        $listed = $added['json']['clients'];
+        $this->assertCount(1, $listed);
+        $this->assertTrue($listed[0]['default']);
+        $this->assertTrue($listed[0]['hasPassword']);
+        $this->assertArrayNotHasKey('password', $listed[0], 'the password is not sent to the browser');
 
-        $this->assertTrue($response['json']['ok'], $response['body']);
-        $this->assertSame('1', AppState::setting('useTorrent'));
-        $this->assertSame(Env::QBT, AppState::setting('torrentAddress'), 'trailing slash is removed');
-        $this->assertSame('/downloads/x/', AppState::setting('pathToDownload'), 'trailing slash is added');
-        $this->assertSame('pa$$ word', AppState::setting('torrentPassword'));
-        $this->assertSame('1', AppState::setting('deleteOldFiles'));
-        $this->assertSame('0', AppState::setting('deleteDistribution'));
-        $this->assertSame('1', AppState::setting('deleteFilesOnRemove'));
-        $this->assertSame('tv', AppState::setting('qbitCategory'));
-        $this->assertTrue($response['json']['settings']['hasTorrentPassword']);
+        // a second one of the same kind, on another server; names do not repeat and are not empty
+        $same = Env::ui('client.save', array('name' => 'QBITTORRENT', 'type' => 'qBittorrent', 'address' => 'http://other:8080'));
+        $this->assertFalse($same['json']['ok']);
+        $this->assertStringContainsString('уже есть', $same['json']['message']);
+        $this->assertFalse(Env::ui('client.save', array('name' => ' ', 'type' => 'qBittorrent', 'address' => 'http://other:8080'))['json']['ok']);
+        $this->assertFalse(Env::ui('client.save', array('name' => 'X', 'type' => 'Nope', 'address' => 'http://other:8080'))['json']['ok']);
+        $this->assertFalse(Env::ui('client.save', array('name' => 'X', 'type' => 'qBittorrent', 'address' => ''))['json']['ok']);
+        $second = Env::ui('client.save', array('name' => 'NAS', 'type' => 'qBittorrent', 'address' => 'http://other:8080'))['json']['saved'];
+        $this->assertNotSame($first, $second);
+        $clients = Env::ui('overview')['json']['clients'];
+        $this->assertSame(array(true, false), array_column($clients, 'default'), 'the first one stays the default');
+
+        // an empty password field keeps the saved password; the box removes it
+        Env::ui('client.save', array('id' => $first, 'name' => 'Дом', 'type' => 'qBittorrent', 'address' => Env::QBT, 'password' => ''));
+        $this->assertSame('pa$$ word', AppState::client($first)['password']);
+        $this->assertSame('Дом', AppState::client($first)['name']);
+        Env::ui('client.save', array('id' => $first, 'name' => 'Дом', 'type' => 'qBittorrent', 'address' => Env::QBT, 'password' => '', 'clearPassword' => true));
+        $this->assertSame('', AppState::client($first)['password']);
+
+        // another default
+        $this->assertTrue(Env::ui('client.default', array('id' => $second))['json']['ok']);
+        $this->assertSame(array(false, true), array_column(Env::ui('overview')['json']['clients'], 'default'));
+        $this->assertFalse(Env::ui('client.default', array('id' => 999))['json']['ok']);
+
+        // the journal: added, renamed, made the default - with the address inside a mark and no password
+        $journal = implode("\n", AppState::journal('service'));
+        $this->assertStringContainsString('Torrent-клиент «qBittorrent» добавлен (интерфейс): qBittorrent, {{a:'.Env::QBT.'}}', $journal);
+        $this->assertStringContainsString('Torrent-клиент «qBittorrent» (интерфейс): название: qBittorrent → Дом', $journal);
+        $this->assertStringContainsString('пароль удалён', $journal);
+        $this->assertStringContainsString('Основной torrent-клиент (интерфейс): «NAS»', $journal);
+        $this->assertStringNotContainsString('pa$$ word', $journal);
+
+        // a client that topics name cannot go until they are given to another one
+        $this->loginToTracker();
+        AppState::setSettings(array('useTorrent' => '1'));
+        $id = $this->trackTopic(120);
+        AppState::setTopic($id, array('client' => $first));
+        $refused = Env::ui('client.delete', array('id' => $first));
+        $this->assertSame(409, $refused['status']);
+        $this->assertStringContainsString('привязаны темы: 1', $refused['json']['message']);
+        $this->assertTrue(Env::ui('client.delete', array('id' => $first, 'moveTo' => $second))['json']['ok']);
+        $this->assertNull(AppState::client($first));
+        $this->assertSame($second, AppState::topic($id)['client']);
+        // the last one goes without questions: its topics followed the default
+        AppState::setTopic($id, array('client' => null));
+        $this->assertTrue(Env::ui('client.delete', array('id' => $second))['json']['ok']);
+        $this->assertSame(array(), Env::ui('overview')['json']['clients']);
+
+        // what applies to every client is still a setting
+        Env::ui('settings.save', array('useTorrent' => true, 'deleteDistribution' => false, 'deleteOldFiles' => true, 'deleteFilesOnRemove' => true));
+        $this->assertSame(array('1', '0', '1', '1'), array(AppState::setting('useTorrent'), AppState::setting('deleteDistribution'), AppState::setting('deleteOldFiles'), AppState::setting('deleteFilesOnRemove')));
     }
 
     public function testTrackerTimeZoneIsSavedAndUsedForTheTimesShown()
@@ -147,17 +196,17 @@ final class SettingsTest extends IntegrationTestCase
     public function testClientConnectionCheck()
     {
         AppState::useQbittorrent();
-        $this->assertTrue(Env::ui('client.test')['json']['ok']);
+        $this->assertTrue(Env::ui('client.test', array('id' => 1))['json']['ok']);
 
         AppState::useQbittorrent(array('torrentPassword' => 'wrong'));
-        $bad = Env::ui('client.test')['json'];
+        $bad = Env::ui('client.test', array('id' => 1))['json'];
         $this->assertFalse($bad['ok']);
         $this->assertStringContainsString('логин или пароль', $bad['message']);
 
         AppState::useTransmission();
-        $this->assertTrue(Env::ui('client.test')['json']['ok']);
+        $this->assertTrue(Env::ui('client.test', array('id' => 1))['json']['ok']);
         AppState::useTransmission(array('torrentAddress' => 'http://127.0.0.1:1'));
-        $this->assertFalse(Env::ui('client.test')['json']['ok']);
+        $this->assertFalse(Env::ui('client.test', array('id' => 1))['json']['ok']);
     }
 
     public function testApiKeyIsShownOnlyOnRequestAndCanBeReplaced()

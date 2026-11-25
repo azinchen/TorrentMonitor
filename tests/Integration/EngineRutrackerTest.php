@@ -21,7 +21,7 @@ final class EngineRutrackerTest extends IntegrationTestCase
         $this->assertTrue(Qbt::has($hash), 'torrent is in qBittorrent');
 
         // the page of topics is told what the client is doing with the torrent
-        $status = Env::ui('client.status')['json'];
+        $status = Env::ui('client.status', array('id' => 1))['json'];
         $this->assertTrue($status['supported'] && $status['answered'], json_encode($status));
         $torrent = $status['torrents'][(string)$id];
         $this->assertContains($torrent['state'], array('downloading', 'seeding', 'stopped', 'queued', 'checking', 'error'), json_encode($torrent));
@@ -32,7 +32,7 @@ final class EngineRutrackerTest extends IntegrationTestCase
         // a topic whose torrent the client no longer has is told apart; a topic never passed to it is not listed
         AppState::setTopic($id, array('hash' => str_repeat('ab', 20)));
         $never = $this->trackTopic(102);
-        $status = Env::ui('client.status')['json'];
+        $status = Env::ui('client.status', array('id' => 1))['json'];
         $this->assertSame(array('state' => 'missing'), $status['torrents'][(string)$id]);
         $this->assertArrayNotHasKey((string)$never, $status['torrents']);
         AppState::setTopic($id, array('hash' => $hash));
@@ -42,11 +42,11 @@ final class EngineRutrackerTest extends IntegrationTestCase
         $address = AppState::setting('torrentAddress');
         AppState::setSettings(array('torrentAddress' => 'http://127.0.0.1:9'));
         $started = microtime(true);
-        $down = Env::ui('client.status')['json'];
+        $down = Env::ui('client.status', array('id' => 1))['json'];
         $this->assertLessThan(10, microtime(true) - $started);
         $this->assertTrue($down['supported']);
         $this->assertFalse($down['answered']);
-        $this->assertSame('qBittorrent не отвечает: состояние раздач неизвестно.', $down['error']);
+        $this->assertSame('«qBittorrent» не отвечает: состояние раздач неизвестно.', $down['error']);
         $this->assertSame(array(), (array)$down['torrents']);
         $this->assertSame(array(), AppState::journal('error'));
         AppState::setSettings(array('torrentAddress' => $address));

@@ -38,7 +38,7 @@ final class State implements ClearanceStore
 
     // Remembers what a service said about itself. A version that is new or different goes to the
     // journal: that is how an upgrade of the client shows up there.
-    public static function sawService(string $key, string $name, string $version, string $details, string $address): void
+    public static function sawService(string $key, string $name, string $version, string $details, string $address, string $title = ''): void
     {
         $before = self::service($key);
         $now = array('name' => $name, 'version' => $version, 'details' => $details, 'address' => $address, 'at' => date('Y-m-d H:i:s'));
@@ -47,7 +47,8 @@ final class State implements ClearanceStore
                 $data['services'] = array();
             $data['services'][$key] = $now;
         });
-        $title = $key == 'client' ? 'Torrent-клиент' : 'Решатель Cloudflare';
+        if ($title === '')
+            $title = $key == 'solver' ? 'Решатель Cloudflare' : 'Torrent-клиент';
         $text = function (array $s) { return trim($s['name'].' '.$s['version']).($s['details'] !== '' ? ' ('.$s['details'].')' : ''); };
         if ($before === NULL || $before['name'] != $name || $before['address'] != $address)
             Journal::add('service', $title.': '.$text($now).', '.\TorrentMonitor\Privacy::address($address));
